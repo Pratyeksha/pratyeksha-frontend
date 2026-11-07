@@ -20,7 +20,7 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import { OPERATOR_AUTH_EVENT, setKitchenToken, getOperatorToken } from './operatorAuth.js';
 import { playAlertSound } from './alertSounds.js';
 import PwaInstallButton from './PwaInstallButton.jsx';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
   ChefHat, Timer, StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Activity, Coffee,
   Layers, Flame, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown,
@@ -87,6 +87,13 @@ const fmt = s => {
   const p = n => n.toString().padStart(2, '0');
   return h > 0 ? `${h}h ${p(m)}m` : `${p(m)}:${p(sec)}`;
 };
+// Durations written out ("3m 12s"): once it reaches 60 minutes it switches to hours ("1h 05m"). Used for averages and finished-dish times.
+const fmtSpan = s => {
+  s = Math.max(0, Math.round(Number(s) || 0));
+  if (s >= 3600) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h}h ${pad2(m)}m`; }
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+};
+const createdMs = o => new Date(o?.createdAt).getTime() || 0;
 const pad2 = n => (n < 10 ? `0${n}` : String(n));
 
 const REASON_OPTIONS = ['Spoiled / Expired', 'Overcooked', 'Dropped / Spilled', 'Excess Prep', 'Customer Return', 'Other'];
@@ -107,7 +114,7 @@ const EIGHTY_SIX_REASONS = [
    VOICE — output only. A small queue so tickets that arrive together are read one after another, never over each other.
 ═══════════════════════════════════════════════════════════════════ */
 const VOICE_PREF_KEY = 'kds_voice_prefs_v2';
-const DEFAULT_VOICE_PREFS = { voice: true, chime: true, repeat: 1, rate: 'normal' };
+const DEFAULT_VOICE_PREFS = { voice: true, chime: true, dispatchSound: true, repeat: 1, rate: 'normal' };
 const RATE_VALUE = { slow: 0.8, normal: 0.92, fast: 1.06 };
 const loadVoicePrefs = () => {
   try { return { ...DEFAULT_VOICE_PREFS, ...JSON.parse(localStorage.getItem(VOICE_PREF_KEY) || '{}') }; } catch { return { ...DEFAULT_VOICE_PREFS }; }
@@ -169,7 +176,7 @@ const spokenWho = order => {
   return otype === 'swiggy' ? 'Swiggy delivery order'
     : otype === 'zomato' ? 'Zomato delivery order'
       : otype === 'parcel' ? 'Pickup order'
-        : `Table ${spokenTable(order.tableNumber)}`;
+        : (String(order.tableNumber ?? '').trim() ? `Table ${spokenTable(order.tableNumber)}` : 'Dine in order');
 };
 
 // Everything the cook needs to hear: where it is going, then every dish with quantity, portion and notes.
@@ -186,15 +193,41 @@ const buildTicketSpeech = (order, { replay = false } = {}) => {
     if (i.suggestion && String(i.suggestion).trim()) d += `. Note: ${String(i.suggestion).trim()}`;
     return d;
   });
-  const head = replay ? `${who}.` : (otype === 'dine-in' ? `New ticket for ${who}.` : `New ${who}.`);
+  const head = replay ? `${who}.` : (otype === 'dine-in' && who.startsWith('Table') ? `New ticket for ${who}.` : `New ${who}.`);
   const count = items.length === 1 ? '1 dish' : `${items.length} dishes`;
   return `${head} ${count}, ${mode}. ${dishes.join('. ')}.`;
+};
+
+// What changed in a modified order, and nothing else: { added:[{name,quantity}], qty:[{name,from,to}], removed:[{name,quantity}] }.
+const extractModification = data => {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    added: items.filter(i => i.modChange === 'new').map(i => ({ name: i.name, quantity: Number(i.quantity) || 1 })),
+    qty: items.filter(i => i.modChange === 'qty').map(i => ({ name: i.name, from: Number(i.modPrevQty) || 0, to: Number(i.quantity) || 0 })),
+    removed: (data?.replacedInfo?.removed || []).map(i => ({ name: i.name, quantity: Number(i.quantity) || 1 })),
+  };
+};
+const modIsEmpty = m => !m || (!m.added.length && !m.qty.length && !m.removed.length);
+// "ADDED: 1× Naan · QTY: Dal Fry 1→2 · REMOVED: 1× Roti" — shown on the alert banner and the toast.
+const modSummary = m => [
+  m.added.length ? `ADDED: ${m.added.map(i => `${i.quantity}× ${i.name}`).join(', ')}` : '',
+  m.qty.length ? `QTY: ${m.qty.map(i => `${i.name} ${i.from}→${i.to}`).join(', ')}` : '',
+  m.removed.length ? `REMOVED: ${m.removed.map(i => `${i.quantity}× ${i.name}`).join(', ')}` : '',
+].filter(Boolean).join(' · ');
+// Spoken: "Order modified. Table 5. Added 1 Naan. Dal Fry quantity changed from 1 to 2. Removed 1 Roti."  Only what changed.
+const buildModSpeech = (who, m, fallbackNote) => {
+  const parts = [];
+  if (m.added.length) parts.push(`Added ${m.added.map(i => `${i.quantity} ${i.name}`).join(', ')}`);
+  m.qty.forEach(i => parts.push(`${i.name} quantity changed from ${i.from} to ${i.to}`));
+  if (m.removed.length) parts.push(`Removed ${m.removed.map(i => `${i.quantity} ${i.name}`).join(', ')}`);
+  if (!parts.length && fallbackNote) parts.push(String(fallbackNote));
+  return `Order modified. ${who}. ${parts.join('. ')}${parts.length ? '.' : ''}`;
 };
 
 // Short label for the arrival toast.
 const ticketLabel = order => {
   const t = getOrderType(order);
-  return t === 'swiggy' ? 'SWIGGY' : t === 'zomato' ? 'ZOMATO' : t === 'parcel' ? 'PARCEL' : `TABLE ${order.tableNumber}`;
+  return t === 'swiggy' ? 'SWIGGY' : t === 'zomato' ? 'ZOMATO' : t === 'parcel' ? 'PARCEL' : (String(order.tableNumber ?? '').trim() ? `TABLE ${order.tableNumber}` : 'DINE-IN');
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -219,37 +252,37 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx :focus-visible{outline:2px solid rgba(211,191,162,.65);outline-offset:2px}
 
 /* ── header ── */
-.kx-top{display:flex;align-items:center;gap:12px;margin:10px 10px 0;padding:9px 12px;border-radius:20px;flex-shrink:0;z-index:70;position:relative;
+.kx-top{display:flex;align-items:center;gap:10px;margin:8px 8px 0;padding:6px 10px;border-radius:16px;flex-shrink:0;z-index:70;position:relative;
   background:var(--glass),#0d0d0e;border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 40px -22px rgba(0,0,0,.85)}
 .kx-brand{display:flex;align-items:center;gap:10px;min-width:0;flex-shrink:0}
-.kx-logo{background:var(--cream);border-radius:11px;padding:4px 9px;border:1px solid rgba(211,191,162,.5);box-shadow:0 8px 22px -10px rgba(211,191,162,.45);flex-shrink:0}
-.kx-logo img{display:block;width:112px;height:auto}
+.kx-logo{background:var(--cream);border-radius:9px;padding:3px 8px;border:1px solid rgba(211,191,162,.5);box-shadow:0 8px 22px -10px rgba(211,191,162,.45);flex-shrink:0}
+.kx-logo img{display:block;width:88px;height:auto}
 .kx-brand-t{display:flex;flex-direction:column;gap:3px;min-width:0}
-.kx-kds{display:inline-flex;align-items:center;gap:6px;font-size:.58rem;font-weight:700;letter-spacing:.26em;color:var(--gold);text-transform:uppercase;white-space:nowrap}
-.kx-live{display:inline-flex;align-items:center;gap:7px;font-size:.58rem;font-weight:600;letter-spacing:.14em;color:var(--mute);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.kx-kds{display:inline-flex;align-items:center;gap:6px;font-size:.52rem;font-weight:700;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;white-space:nowrap}
+.kx-live{display:inline-flex;align-items:center;gap:6px;font-size:.52rem;font-weight:600;letter-spacing:.12em;color:var(--mute);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 .kx-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;animation:kxPing 2.2s ease-out infinite}
 .kx-live.off{color:var(--amber)} .kx-live.off .kx-dot{background:var(--amber);animation:none}
-.kx-seg{display:flex;padding:3px;gap:2px;border-radius:14px;background:#070708;border:1px solid var(--line);flex-shrink:0}
-.kx-seg button{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border:0;border-radius:11px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;letter-spacing:.1em;white-space:nowrap;min-height:36px;transition:all .18s var(--ease)}
+.kx-seg{display:flex;padding:2px;gap:2px;border-radius:12px;background:#070708;border:1px solid var(--line);flex-shrink:0}
+.kx-seg button{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:.58rem;font-weight:700;letter-spacing:.08em;white-space:nowrap;min-height:30px;transition:all .18s var(--ease)}
 .kx-seg button:hover{color:var(--cream)}
 .kx-seg button.on{background:linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78);color:#14110c;box-shadow:0 8px 20px -10px rgba(211,191,162,.6)}
 .kx-seg button .n{font:700 .62rem 'JetBrains Mono',monospace;opacity:.8}
 .kx-stats{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
-.kx-stat{min-width:78px;padding:6px 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.03);text-align:center}
-.kx-stat b{display:block;font:700 1.2rem/1.05 'JetBrains Mono',monospace;color:var(--cream)}
-.kx-stat span{display:block;margin-top:3px;font-size:.48rem;letter-spacing:.18em;color:var(--mute);text-transform:uppercase;font-weight:600}
+.kx-stat{min-width:60px;padding:3px 9px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);text-align:center}
+.kx-stat b{display:block;font:700 .98rem/1.1 'JetBrains Mono',monospace;color:var(--cream)}
+.kx-stat span{display:block;margin-top:1px;font-size:.44rem;letter-spacing:.14em;color:var(--mute);text-transform:uppercase;font-weight:600}
 .kx-stat.hot{border-color:var(--line2);background:rgba(211,191,162,.1)} .kx-stat.hot b{color:var(--gold)}
 .kx-acts{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.kx-ib{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;min-width:42px;padding:0 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cfc7b8;font-size:.6rem;font-weight:700;letter-spacing:.1em;transition:all .18s var(--ease);flex-shrink:0}
+.kx-ib{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;min-width:34px;padding:0 9px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cfc7b8;font-size:.56rem;font-weight:700;letter-spacing:.1em;transition:all .18s var(--ease);flex-shrink:0}
 .kx-ib:not(:disabled):hover{border-color:var(--line2);color:var(--cream);background:rgba(255,255,255,.06)}
 .kx-ib:not(:disabled):active{transform:scale(.96)}
 .kx-ib.on{border-color:var(--line2);background:rgba(211,191,162,.13);color:var(--gold)}
 .kx-ib.mute{color:var(--dim)}
-.kx-badge{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:linear-gradient(135deg,#e6d6b8,#b99f78);color:#14110c;font:700 .58rem/19px 'JetBrains Mono',monospace;text-align:center;font-style:normal}
+.kx-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:linear-gradient(135deg,#e6d6b8,#b99f78);color:#14110c;font:700 .54rem/17px 'JetBrains Mono',monospace;text-align:center;font-style:normal}
 .kx-eq{display:inline-flex;align-items:flex-end;gap:2px;height:14px}
 .kx-eq i{width:3px;border-radius:2px;background:var(--gold);animation:kxEq .9s ease-in-out infinite}
 .kx-eq i:nth-child(2){animation-delay:.18s} .kx-eq i:nth-child(3){animation-delay:.36s}
-.kx-pop{position:absolute;right:0;top:calc(100% + 10px);width:310px;z-index:70;padding:16px;border-radius:20px;background:var(--glass),#101011;border:1px solid var(--line2);box-shadow:0 30px 70px -20px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:14px}
+.kx-pop{position:absolute;right:0;top:calc(100% + 10px);width:292px;z-index:70;padding:14px;border-radius:16px;background:var(--glass),#101011;border:1px solid var(--line2);box-shadow:0 30px 70px -20px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:14px}
 .kx-pop h4{margin:0;font-size:.62rem;font-weight:700;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
 .kx-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.74rem;font-weight:500;color:#d8d1c3}
 .kx-row small{display:block;margin-top:2px;font-size:.6rem;color:var(--mute);font-weight:400}
@@ -259,37 +292,42 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-mini{display:flex;padding:2px;gap:2px;border-radius:10px;background:#070708;border:1px solid var(--line)}
 .kx-mini button{padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:30px}
 .kx-mini button.on{background:rgba(211,191,162,.2);color:var(--gold)}
-.kx-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:13px;border:1px solid var(--line2);background:rgba(211,191,162,.1);color:var(--gold);font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;transition:all .18s var(--ease)}
+.kx-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 14px;border-radius:11px;border:1px solid var(--line2);background:rgba(211,191,162,.1);color:var(--gold);font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .18s var(--ease)}
 .kx-btn:not(:disabled):hover{background:rgba(211,191,162,.18)} .kx-btn:disabled{opacity:.4}
 .kx-btn.solid{border:0;background:linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78);color:#14110c;box-shadow:0 12px 28px -12px rgba(211,191,162,.55)}
 .kx-btn.warn{border-color:rgba(226,154,88,.5);background:rgba(226,154,88,.12);color:#f0b87c}
 .kx-btn.block{width:100%}
 
 /* ── banners: arrivals, alerts, sound unlock ── */
-.kx-toasts{position:fixed;top:calc(env(safe-area-inset-top) + 82px);left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;width:min(580px,calc(100vw - 24px));pointer-events:none}
-.kx-toast{pointer-events:auto;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:var(--glass),#121110;border:1px solid var(--line2);box-shadow:0 24px 60px -18px rgba(0,0,0,.9),0 0 0 1px rgba(211,191,162,.06);cursor:pointer}
-.kx-toast .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;background:rgba(211,191,162,.14);border:1px solid var(--line2);color:var(--gold)}
+.kx-toasts{position:fixed;top:calc(env(safe-area-inset-top) + 62px);left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;width:min(580px,calc(100vw - 24px));pointer-events:none}
+.kx-toast{pointer-events:auto;display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:14px;background:var(--glass),#121110;border:1px solid var(--line2);box-shadow:0 24px 60px -18px rgba(0,0,0,.9),0 0 0 1px rgba(211,191,162,.06);cursor:pointer}
+.kx-toast .ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;background:rgba(211,191,162,.14);border:1px solid var(--line2);color:var(--gold)}
 .kx-toast.cancel{border-color:rgba(226,154,88,.55)} .kx-toast.cancel .ic{background:rgba(226,154,88,.14);border-color:rgba(226,154,88,.45);color:var(--amber)}
-.kx-toast b{display:block;font-size:.78rem;font-weight:700;letter-spacing:.06em}
-.kx-toast p{margin:2px 0 0;font-size:.68rem;color:var(--mute);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.kx-alerts{display:flex;flex-direction:column;gap:8px;margin:10px 10px 0;flex-shrink:0}
-.kx-alert{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:16px;background:linear-gradient(160deg,rgba(226,154,88,.14),rgba(226,154,88,.05)),#16120e;border:1px solid rgba(226,154,88,.4)}
+.kx-toast b{display:block;font-size:.7rem;font-weight:700;letter-spacing:.06em}
+.kx-toast p{margin:1px 0 0;font-size:.64rem;color:var(--mute);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.kx-feed{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.kx-toast.compact{padding:6px 8px;gap:8px;border-radius:11px;box-shadow:none}
+.kx-toast.compact .ic{width:26px;height:26px;border-radius:8px}
+.kx-toast.compact b{font-size:.6rem;letter-spacing:.04em}
+.kx-toast.compact p{font-size:.58rem}
+.kx-alerts{display:flex;flex-direction:column;gap:6px;margin:8px 8px 0;flex-shrink:0}
+.kx-alert{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 11px;border-radius:13px;background:linear-gradient(160deg,rgba(226,154,88,.14),rgba(226,154,88,.05)),#16120e;border:1px solid rgba(226,154,88,.4)}
 .kx-alert .l{display:flex;align-items:center;gap:12px;min-width:0}
-.kx-alert .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:rgba(226,154,88,.14);color:var(--amber);flex-shrink:0}
-.kx-alert h3{margin:0;font-size:.82rem;font-weight:700;letter-spacing:.04em}
-.kx-alert p{margin:3px 0 0;font-size:.7rem;color:#e8b98a;line-height:1.4}
+.kx-alert .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(226,154,88,.14);color:var(--amber);flex-shrink:0}
+.kx-alert h3{margin:0;font-size:.72rem;font-weight:700;letter-spacing:.04em}
+.kx-alert p{margin:2px 0 0;font-size:.64rem;color:#e8b98a;line-height:1.4}
 .kx-unlock{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 16px);transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:#15120d;border:1px solid var(--line2);color:var(--gold);font-size:.66rem;font-weight:700;letter-spacing:.12em;box-shadow:0 18px 44px rgba(0,0,0,.6);pointer-events:none;animation:kxBreath 2.4s ease-in-out infinite;white-space:nowrap;text-transform:uppercase}
 
 /* ── layout ── */
-.kx-body{flex:1;display:flex;gap:10px;padding:10px;min-height:0}
-.kx-rail{width:240px;flex-shrink:0;display:flex;flex-direction:column;min-height:0;padding:14px 12px;border-radius:20px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
+.kx-body{flex:1;display:flex;gap:8px;padding:8px;min-height:0}
+.kx-rail{width:200px;flex-shrink:0;display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:10px 8px;border-radius:16px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
 .kx-rail.drawer{position:fixed;left:0;top:0;bottom:0;z-index:100;width:290px;max-width:88vw;border-radius:0 22px 22px 0;padding-top:calc(env(safe-area-inset-top) + 16px)}
-.kx-rail-h{display:flex;align-items:center;gap:9px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line);flex-shrink:0}
-.kx-rail-h .ic{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
+.kx-rail-h{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line);flex-shrink:0}
+.kx-rail-h .ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
 .kx-eyebrow{flex:1;font-size:.58rem;letter-spacing:.26em;font-weight:700;color:var(--gold);opacity:.8;text-transform:uppercase}
 .kx-rail-list{display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;min-height:0}
-.kx-rail-f{flex-shrink:0;display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:12px;border-top:1px solid var(--line)}
-.kx-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;padding:9px 11px;border-radius:13px;border:1px solid transparent;background:transparent;color:#bdb6a8;font-size:.7rem;font-weight:600;letter-spacing:.04em;text-align:left;transition:all .16s var(--ease)}
+.kx-rail-f{flex-shrink:0;display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.kx-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:34px;padding:6px 8px;border-radius:10px;border:1px solid transparent;background:transparent;color:#bdb6a8;font-size:.64rem;font-weight:600;letter-spacing:.04em;text-align:left;transition:all .16s var(--ease)}
 .kx-nav:hover{background:rgba(255,255,255,.04);color:var(--cream)}
 .kx-nav.on{background:rgba(211,191,162,.12);border-color:var(--line2);color:var(--cream);box-shadow:inset 3px 0 0 var(--gold)}
 .kx-nav .t{display:flex;align-items:center;gap:9px;min-width:0}
@@ -297,30 +335,30 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-nav .r{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .kx-ct{min-width:28px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.07);color:var(--mute);font:700 .64rem/1.5 'JetBrains Mono',monospace;text-align:center}
 .kx-ct.hot{background:rgba(211,191,162,.2);color:var(--gold)}
-.kx-86{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;border:1px solid var(--line);color:var(--dim);transition:all .16s}
+.kx-86{width:20px;height:20px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line);color:var(--dim);transition:all .16s}
 .kx-86:hover{border-color:rgba(226,154,88,.55);color:var(--amber)}
 .kx-vegseg{display:flex;padding:3px;gap:2px;border-radius:13px;background:#070708;border:1px solid var(--line);margin-bottom:10px;flex-shrink:0}
-.kx-vegseg button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:8px 4px;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;letter-spacing:.08em;min-height:36px}
+.kx-vegseg button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:6px 4px;border:0;border-radius:9px;background:transparent;color:var(--mute);font-size:.58rem;font-weight:700;letter-spacing:.06em;min-height:30px}
 .kx-vegseg button.on.v{background:rgba(93,154,78,.18);color:#9fcb90} .kx-vegseg button.on.n{background:rgba(192,74,74,.18);color:#e29a9a}
-.kx-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px}
-.kx-ribbon{display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:38px}
+.kx-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:8px}
+.kx-ribbon{display:flex;align-items:center;gap:8px;flex-shrink:0;min-height:30px}
 .kx-prep{display:flex;align-items:center;gap:8px;overflow-x:auto;min-width:0;flex:1}
 .kx-prep-l{display:flex;align-items:center;gap:6px;font-size:.55rem;letter-spacing:.2em;font-weight:700;color:var(--gold);flex-shrink:0;text-transform:uppercase}
-.kx-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:.68rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6}
-.kx-chip b{font:700 .78rem 'JetBrains Mono',monospace;color:var(--gold)}
-.kx-sortbtn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.58rem;font-weight:700;letter-spacing:.12em;color:var(--mute);flex-shrink:0;text-transform:uppercase}
+.kx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:.62rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6}
+.kx-chip b{font:700 .7rem 'JetBrains Mono',monospace;color:var(--gold)}
+.kx-sortbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.54rem;font-weight:700;letter-spacing:.12em;color:var(--mute);flex-shrink:0;text-transform:uppercase}
 .kx-sortbtn:hover{color:var(--cream);border-color:var(--line2)}
-.kx-search{display:flex;align-items:center;gap:10px;margin:10px 10px 0;padding:10px 14px;border-radius:15px;background:var(--glass),#0d0d0e;border:1px solid var(--line2);flex-shrink:0}
-.kx-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--cream);font-size:.86rem}
+.kx-search{display:flex;align-items:center;gap:8px;margin:8px 8px 0;padding:7px 12px;border-radius:12px;background:var(--glass),#0d0d0e;border:1px solid var(--line2);flex-shrink:0}
+.kx-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--cream);font-size:.8rem}
 .kx-search input::placeholder{color:var(--dim)}
-.kx-recall{display:flex;align-items:center;gap:9px;padding:7px 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.025);flex-shrink:0;overflow:hidden}
+.kx-recall{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.025);flex-shrink:0;overflow:hidden}
 .kx-recall .l{display:flex;align-items:center;gap:6px;font-size:.54rem;letter-spacing:.18em;font-weight:700;color:var(--mute);flex-shrink:0;text-transform:uppercase}
-.kx-health{border-radius:16px;border:1px solid var(--line);background:var(--glass),#0d0d0e;flex-shrink:0;overflow:hidden}
-.kx-health-h{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;background:transparent;text-align:left}
+.kx-health{border-radius:12px;border:1px solid var(--line);background:var(--glass),#0d0d0e;flex-shrink:0;overflow:hidden}
+.kx-health-h{display:flex;align-items:center;gap:8px;width:100%;padding:6px 12px;border:0;background:transparent;text-align:left}
 .kx-health-h .tt{font-size:.58rem;letter-spacing:.22em;font-weight:700;color:var(--gold);text-transform:uppercase}
 .kx-health-h .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.6rem;font-weight:700;letter-spacing:.08em;color:var(--gold)}
 .kx-health-h .st.warn{color:var(--amber)}
-.kx-health-b{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.kx-health-b{padding:0 12px 10px;display:flex;flex-direction:column;gap:10px}
 .kx-stg{display:grid;gap:8px}
 .kx-stg>div{padding:9px 10px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.025)}
 .kx-stg>div.bn{border-color:rgba(226,154,88,.4)}
@@ -329,90 +367,102 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-bar.bn i{background:var(--amber)}
 
 /* ── board ── */
-.kx-grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--kx-col,320px),1fr));gap:14px;align-content:start;align-items:start;padding:2px 2px 18px}
+/* grid-auto-rows:max-content is what stops tickets overlapping: with the default auto rows a ticket (overflow:hidden + max-height) contributed almost no
+   height to its row, so the rows collapsed and the next row slid over the ticket above it. */
+.kx-grid{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(var(--kx-col,262px),100%),1fr));grid-auto-rows:max-content;gap:10px;align-content:start;align-items:start;padding:2px 2px 14px}
+.kx-grid>*{min-width:0}
 .kx-center{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:70px 20px}
 .kx-center .ic{width:72px;height:72px;border-radius:22px;display:grid;place-items:center;background:var(--glass),#0d0d0e;border:1px solid var(--line);color:var(--dim)}
 .kx-center h3{margin:0;font-size:.9rem;font-weight:700;letter-spacing:.26em;color:var(--mute);text-transform:uppercase}
 .kx-center p{margin:0;font-size:.7rem;color:var(--dim);font-weight:500;max-width:420px;line-height:1.55;word-break:break-word}
-.kx-tk{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:22px;border:1px solid var(--line);background:var(--glass),#0f0e0d;box-shadow:0 22px 44px -28px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.05);max-height:min(640px,calc(100dvh - 200px));transition:border-color .3s}
-.kx-tk::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,rgba(211,191,162,.35));z-index:2}
+.kx-tk{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:var(--glass),#0f0e0d;box-shadow:0 16px 32px -24px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.05);height:var(--kx-h,auto);max-height:var(--kx-maxh,min(460px,max(230px,calc(100dvh - 175px))));transition:border-color .3s}
+.kx-tk::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--rail,rgba(211,191,162,.35));z-index:2}
 .kx-tk.med{--rail:var(--gold)}
-.kx-tk.high{--rail:var(--amber);border-color:rgba(226,154,88,.55);animation:kxUrgent 1.9s ease-in-out infinite}
+.kx-tk.high{--rail:var(--amber);border-color:rgba(226,154,88,.55)}
 .kx-tk.swiggy{--rail:var(--swiggy)} .kx-tk.zomato{--rail:var(--zomato)}
-.kx-tk.fresh{border-color:rgba(230,214,184,.85);animation:kxFresh 1.6s ease-in-out 5}
+.kx-tk.fresh{border-color:rgba(230,214,184,.85)}
+/* glow = an overlay whose OPACITY pulses (cheap on tablets); animating box-shadow on every ticket repainted the whole board each frame */
+.kx-tk::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;z-index:3}
+.kx-tk.high::after{box-shadow:inset 0 0 0 1px rgba(226,154,88,.55),inset 0 0 24px rgba(226,154,88,.26);animation:kxGlow 1.9s ease-in-out infinite}
+.kx-tk.fresh::after{box-shadow:inset 0 0 0 1px rgba(230,214,184,.9),inset 0 0 28px rgba(230,214,184,.3);animation:kxGlow 1.6s ease-in-out 5}
 .kx-tk.fill{max-height:none;height:100%}
-.kx-tk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:14px 14px 8px 20px}
-.kx-tk-type{display:inline-flex;align-items:center;gap:7px;font-size:.55rem;font-weight:700;letter-spacing:.2em;color:var(--gold);text-transform:uppercase}
-.kx-tk-num{margin:5px 0 7px;font-size:2.2rem;font-weight:800;line-height:1;letter-spacing:-.02em}
+.kx-tk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 10px 5px 13px}
+.kx-tk-type{display:inline-flex;align-items:center;gap:6px;font-size:.5rem;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+.kx-tk-num{margin:2px 0 4px;font-size:1.5rem;font-weight:800;line-height:1;letter-spacing:-.02em}
 .kx-tk-num.sw{color:var(--swiggy)} .kx-tk-num.zo{color:var(--zomato)}
-.kx-tk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.kx-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.52rem;font-weight:700;letter-spacing:.1em;color:#cfc7b8;text-transform:uppercase;white-space:nowrap}
+.kx-tk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.kx-tag{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.48rem;font-weight:700;letter-spacing:.1em;color:#cfc7b8;text-transform:uppercase;white-space:nowrap}
 .kx-tag.gold{background:rgba(211,191,162,.16);border-color:var(--line2);color:var(--gold)}
 .kx-tag.amber{background:rgba(226,154,88,.16);border-color:rgba(226,154,88,.45);color:#f0b87c}
 .kx-tag.sw{color:var(--swiggy);border-color:rgba(252,128,25,.4);background:rgba(252,128,25,.1)}
 .kx-tag.zo{color:#ef6a73;border-color:rgba(224,52,63,.4);background:rgba(224,52,63,.1)}
 .kx-tag.id{font-family:'JetBrains Mono',monospace;color:var(--mute);letter-spacing:.04em}
-.kx-time{position:relative;width:66px;height:66px;flex-shrink:0;display:grid;place-items:center}
+.kx-time{position:relative;width:50px;height:50px;flex-shrink:0;display:grid;place-items:center}
 .kx-time svg{position:absolute;inset:0;transform:rotate(-90deg)}
-.kx-time .tv{position:relative;font:700 .8rem 'JetBrains Mono',monospace;letter-spacing:-.02em}
+.kx-time .tv{position:relative;font:700 .66rem 'JetBrains Mono',monospace;letter-spacing:-.02em}
 .kx-time.high .tv{color:var(--amber)} .kx-time.med .tv{color:var(--gold)}
-.kx-late{margin-top:4px;display:block;text-align:center;font-size:.46rem;font-weight:800;letter-spacing:.16em;color:var(--amber)}
-.kx-strip{margin:0 12px 8px 18px;padding:7px 10px;border-radius:11px;font-size:.62rem;font-weight:600;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.kx-late{margin-top:2px;display:block;text-align:center;font-size:.42rem;font-weight:800;letter-spacing:.16em;color:var(--amber)}
+.kx-strip{margin:0 8px 5px 12px;padding:4px 8px;border-radius:9px;font-size:.56rem;font-weight:600;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .kx-strip.sw{background:rgba(252,128,25,.08);border:1px solid rgba(252,128,25,.28);color:#ffa760}
 .kx-strip.zo{background:rgba(224,52,63,.08);border:1px solid rgba(224,52,63,.28);color:#f2848b}
 .kx-strip.mod{display:block;background:rgba(226,154,88,.1);border:1px solid rgba(226,154,88,.4);color:#f0b87c}
-.kx-prog{display:flex;align-items:center;gap:10px;margin:0 14px 8px 20px}
-.kx-prog .bar{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+.kx-prog{display:flex;align-items:center;gap:8px;margin:0 10px 5px 13px}
+.kx-prog .bar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
 .kx-prog .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#b99f78,#e6d6b8);transition:width .4s var(--ease)}
-.kx-prog span{font:700 .62rem 'JetBrains Mono',monospace;color:var(--mute)}
+.kx-prog span{font:700 .56rem 'JetBrains Mono',monospace;color:var(--mute)}
 .kx-prog span.ok{color:var(--gold)}
-.kx-items{display:flex;flex-direction:column;gap:7px;padding:4px 12px 8px 16px;overflow-y:auto;flex:1;min-height:0}
-.kx-it{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;padding:11px 12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(211,191,162,.12);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:all .16s var(--ease)}
+.kx-items{display:flex;flex-direction:column;gap:5px;padding:2px 6px 6px 11px;overflow-y:auto;flex:1 1 auto;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(211,191,162,.35) transparent}
+.kx-items::-webkit-scrollbar{width:4px}.kx-items::-webkit-scrollbar-thumb{background:rgba(211,191,162,.35);border-radius:2px}
+.kx-it{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;padding:6px 8px;border-radius:11px;flex-shrink:0;background:rgba(255,255,255,.035);border:1px solid rgba(211,191,162,.12);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:all .16s var(--ease)}
 .kx-it:hover{border-color:var(--line2)} .kx-it:active{transform:scale(.99)}
 .kx-it.run{background:rgba(211,191,162,.06);border-color:rgba(211,191,162,.3)}
+/* a dish the customer added or changed: the only highlighted row on a modified ticket */
+.kx-it.mod{background:linear-gradient(160deg,rgba(226,154,88,.2),rgba(226,154,88,.07));border-color:rgba(226,154,88,.75);box-shadow:0 0 0 1px rgba(226,154,88,.25),0 0 18px -6px rgba(226,154,88,.55)}
+.kx-it.mod .kx-qty{background:rgba(226,154,88,.2);border-color:rgba(226,154,88,.6);color:#f0b87c}
+.kx-it.mod .kx-nm{color:#ffe2c0}
 .kx-it.done{background:transparent;opacity:.45}
-.kx-qty{min-width:40px;height:40px;padding:0 6px;border-radius:12px;display:grid;place-items:center;font:700 1.15rem 'JetBrains Mono',monospace;background:rgba(211,191,162,.14);border:1px solid rgba(211,191,162,.3);color:var(--gold)}
+.kx-qty{min-width:30px;height:30px;padding:0 5px;border-radius:9px;display:grid;place-items:center;font:700 .88rem 'JetBrains Mono',monospace;background:rgba(211,191,162,.14);border:1px solid rgba(211,191,162,.3);color:var(--gold)}
 .kx-it.done .kx-qty{background:rgba(255,255,255,.04);border-color:var(--line);color:var(--dim)}
 .kx-it-b{min-width:0}
-.kx-nm{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:1.02rem;font-weight:600;line-height:1.28;color:var(--cream)}
+.kx-nm{display:flex;align-items:center;flex-wrap:wrap;gap:5px;font-size:.84rem;font-weight:600;line-height:1.25;color:var(--cream)}
 .kx-it.done .kx-nm{text-decoration:line-through;color:var(--mute)}
 .kx-nm .sp{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:7px;background:rgba(211,191,162,.18);color:var(--gold)}
-.kx-sub{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:5px;font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.kx-sub{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px;font-size:.54rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 .kx-sub .half{color:var(--gold)}
-.kx-tm{display:inline-flex;align-items:center;gap:4px;font:700 .62rem 'JetBrains Mono',monospace;color:var(--gold2);letter-spacing:0}
+.kx-tm{display:inline-flex;align-items:center;gap:3px;font:700 .56rem 'JetBrains Mono',monospace;color:var(--gold2);letter-spacing:0}
 .kx-tm.slow{padding:2px 7px;border-radius:7px;background:rgba(226,154,88,.16);border:1px solid rgba(226,154,88,.45);color:#f0b87c}
-.kx-hint{margin-top:5px;font-size:.54rem;color:var(--dim);font-style:italic}
-.kx-note{display:flex;align-items:flex-start;gap:8px;margin-top:8px;padding:8px 10px;border-radius:11px;background:rgba(226,154,88,.12);border:1px solid rgba(226,154,88,.42);color:#f2bd88;font-size:.76rem;font-weight:600;line-height:1.38}
+.kx-hint{margin-top:3px;font-size:.5rem;color:var(--dim);font-style:italic}
+.kx-note{display:flex;align-items:flex-start;gap:6px;margin-top:5px;padding:4px 7px;border-radius:8px;background:rgba(226,154,88,.12);border:1px solid rgba(226,154,88,.42);color:#f2bd88;font-size:.66rem;font-weight:600;line-height:1.38}
 .kx-note svg{flex-shrink:0;margin-top:2px}
-.kx-chk{width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(211,191,162,.42);display:grid;place-items:center;color:#14110c;flex-shrink:0;margin-top:5px;transition:all .16s var(--ease)}
+.kx-chk{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(211,191,162,.42);display:grid;place-items:center;color:#14110c;flex-shrink:0;margin-top:3px;transition:all .16s var(--ease)}
 .kx-it.done .kx-chk{background:var(--gold);border-color:var(--gold)}
 .kx-vd{width:13px;height:13px;border-radius:3px;border:1.6px solid var(--veg);display:inline-grid;place-items:center;flex-shrink:0}
 .kx-vd i{width:5px;height:5px;border-radius:50%;background:var(--veg)}
 .kx-vd.n{border-color:var(--nonveg)} .kx-vd.n i{border-radius:0;background:transparent;width:0;height:0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:6px solid var(--nonveg)}
-.kx-tk-f{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px 16px;border-top:1px solid rgba(211,191,162,.1);flex-shrink:0}
-.kx-tk-f .row{display:flex;gap:8px}
-.kx-notebox{display:flex;gap:8px;align-items:flex-start;margin:0 12px 0 16px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
-.kx-notebox textarea{flex:1;background:transparent;border:0;outline:0;resize:none;color:var(--cream);font-size:.78rem;line-height:1.5;min-height:52px}
-.kx-sq{width:50px;min-height:50px;border-radius:15px;border:1px solid var(--line);background:rgba(255,255,255,.04);display:grid;place-items:center;color:#cfc7b8;flex-shrink:0;transition:all .16s var(--ease)}
+.kx-tk-f{display:flex;flex-direction:column;gap:6px;padding:7px 8px 8px 12px;border-top:1px solid rgba(211,191,162,.1);flex-shrink:0}
+.kx-tk-f .row{display:flex;gap:6px}
+.kx-notebox{display:flex;gap:6px;align-items:flex-start;margin:0 8px 0 12px;padding:6px 9px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.kx-notebox textarea{flex:1;background:transparent;border:0;outline:0;resize:none;color:var(--cream);font-size:.7rem;line-height:1.4;min-height:40px}
+.kx-sq{width:38px;min-height:38px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.04);display:grid;place-items:center;color:#cfc7b8;flex-shrink:0;transition:all .16s var(--ease)}
 .kx-sq:not(:disabled):hover{border-color:var(--line2);color:var(--gold)} .kx-sq:not(:disabled):active{transform:scale(.95)}
 .kx-sq.on{border-color:var(--line2);color:var(--gold);background:rgba(211,191,162,.12)}
-.kx-go{flex:1;min-height:50px;padding:0 14px;border-radius:15px;border:0;display:flex;align-items:center;justify-content:center;gap:9px;font-size:.78rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#14110c;background:linear-gradient(135deg,#e6d6b8 0%,#d3bfa2 45%,#b99f78 100%);box-shadow:0 14px 30px -14px rgba(211,191,162,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .16s var(--ease),filter .16s}
+.kx-go{flex:1;min-height:38px;padding:0 10px;border-radius:11px;border:0;display:flex;align-items:center;justify-content:center;gap:7px;font-size:.66rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#14110c;background:linear-gradient(135deg,#e6d6b8 0%,#d3bfa2 45%,#b99f78 100%);box-shadow:0 14px 30px -14px rgba(211,191,162,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .16s var(--ease),filter .16s}
 .kx-go:not(:disabled):hover{filter:brightness(1.06)} .kx-go:not(:disabled):active{transform:scale(.98)}
 .kx-go.late{background:linear-gradient(135deg,#f3c18a,#e29a58 55%,#c97a35);box-shadow:0 14px 30px -14px rgba(226,154,88,.6),inset 0 1px 0 rgba(255,255,255,.4)}
 
 /* ── summary + metrics ── */
-.kx-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px}
-.kx-sumc{padding:18px 12px 14px;border-radius:18px;text-align:center;background:var(--glass),#0e0e0f;border:1px solid var(--line);border-top:2px solid var(--line2)}
+.kx-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:9px}
+.kx-sumc{padding:12px 9px 10px;border-radius:14px;text-align:center;background:var(--glass),#0e0e0f;border:1px solid var(--line);border-top:2px solid var(--line2)}
 .kx-sumc.p{border-color:var(--line2);border-top-color:var(--gold)}
-.kx-sumc b{display:block;font:700 2.6rem/1 'JetBrains Mono',monospace;color:var(--gold);margin-bottom:9px}
-.kx-sumc .n{font-size:.7rem;font-weight:600;color:#d8d1c3;line-height:1.35;margin-bottom:9px;text-transform:uppercase;letter-spacing:.03em}
+.kx-sumc b{display:block;font:700 1.8rem/1 'JetBrains Mono',monospace;color:var(--gold);margin-bottom:6px}
+.kx-sumc .n{font-size:.64rem;font-weight:600;color:#d8d1c3;line-height:1.3;margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
 .kx-metrics{flex:1;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;border-radius:24px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
-.kx-metrics h2{margin:0;font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;font-weight:700;letter-spacing:.04em}
+.kx-metrics h2{margin:0;font-family:'Playfair Display',Georgia,serif;font-size:1.25rem;font-weight:700;letter-spacing:.04em}
 .kx-metrics>p{margin:0 0 20px;font-size:.66rem;color:var(--mute);letter-spacing:.06em}
 .kx-mtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:640px;margin-bottom:22px}
-.kx-mt{padding:22px 14px;border-radius:18px;text-align:center;background:#0b0b0c;border:1px solid var(--line);border-top:2px solid var(--gold)}
+.kx-mt{padding:16px 10px;border-radius:14px;text-align:center;background:#0b0b0c;border:1px solid var(--line);border-top:2px solid var(--gold)}
 .kx-mt span{display:block;font-size:.5rem;letter-spacing:.2em;font-weight:700;color:var(--mute);text-transform:uppercase;margin-bottom:10px}
-.kx-mt b{display:block;font:700 2.4rem/1 'JetBrains Mono',monospace;color:var(--gold)} .kx-mt b.sm{font-size:1.6rem;padding:.3rem 0}
+.kx-mt b{display:block;font:700 1.8rem/1 'JetBrains Mono',monospace;color:var(--gold)} .kx-mt b.sm{font-size:1.3rem;padding:.3rem 0}
 .kx-mt small{display:block;margin-top:8px;font-size:.6rem;color:var(--dim)}
 
 /* ── mobile ── */
@@ -420,36 +470,36 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-dots i{height:6px;width:6px;border-radius:3px;background:#262626;transition:all .25s;cursor:pointer}
 .kx-dots i.on{width:22px;background:var(--gold)}
 .kx-pager{display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
-.kx-pager button{display:inline-flex;align-items:center;gap:6px;min-height:46px;padding:0 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.7rem;font-weight:700;letter-spacing:.1em}
+.kx-pager button{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.7rem;font-weight:700;letter-spacing:.1em}
 .kx-pager button:disabled{opacity:.25}
 .kx-bnav{display:flex;gap:3px;margin:0 10px 10px;padding:4px;border-radius:20px;background:var(--glass),#0d0d0e;border:1px solid var(--line);flex-shrink:0}
-.kx-bnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:54px;padding:7px 2px;border:0;border-radius:16px;background:transparent;color:var(--mute);font-size:.5rem;font-weight:700;letter-spacing:.08em}
+.kx-bnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:46px;padding:7px 2px;border:0;border-radius:16px;background:transparent;color:var(--mute);font-size:.5rem;font-weight:700;letter-spacing:.08em}
 .kx-bnav button.on{background:rgba(211,191,162,.16);color:var(--gold)}
 .kx-bnav button .n{font:700 .5rem 'JetBrains Mono',monospace;color:var(--gold)}
 
 /* ── side sheet (wastage) + modal (86) ── */
 .kx-scrim{position:fixed;inset:0;background:rgba(4,4,4,.62);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .kx-sheet{position:fixed;right:0;top:0;bottom:0;z-index:3001;display:flex;flex-direction:column;overflow:hidden;background:var(--glass),#0d0d0e;border-left:1px solid var(--line2);border-radius:24px 0 0 24px}
-.kx-sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);flex-shrink:0}
+.kx-sheet-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
 .kx-sheet-h .t{display:flex;align-items:center;gap:12px}
-.kx-sheet-h .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
-.kx-sheet-h h3{margin:0;font-size:.9rem;font-weight:700;letter-spacing:.08em}
+.kx-sheet-h .ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
+.kx-sheet-h h3{margin:0;font-size:.8rem;font-weight:700;letter-spacing:.08em}
 .kx-sheet-h small{display:block;margin-top:3px;font-size:.52rem;letter-spacing:.18em;color:var(--mute);text-transform:uppercase;font-weight:600}
 .kx-tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
-.kx-tabs button{flex:1;padding:14px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mute);font-size:.6rem;font-weight:700;letter-spacing:.16em}
+.kx-tabs button{flex:1;padding:10px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mute);font-size:.6rem;font-weight:700;letter-spacing:.16em}
 .kx-tabs button.on{color:var(--gold);border-bottom-color:var(--gold)}
-.kx-card{padding:16px;border-radius:18px;background:#0a0a0b;border:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.kx-card{padding:12px;border-radius:14px;background:#0a0a0b;border:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .kx-card>.hd{font-size:.56rem;letter-spacing:.22em;font-weight:700;color:var(--mute);text-transform:uppercase;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .kx-lbl{display:block;margin-bottom:6px;font-size:.54rem;font-weight:700;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
-.kx-in{width:100%;padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:#070708;color:var(--cream);font-size:.84rem;outline:0;transition:border-color .16s,box-shadow .16s}
+.kx-in{width:100%;padding:8px 11px;border-radius:10px;border:1px solid var(--line);background:#070708;color:var(--cream);font-size:.76rem;outline:0;transition:border-color .16s,box-shadow .16s}
 .kx-in:focus{border-color:var(--line2);box-shadow:0 0 0 4px rgba(211,191,162,.08)}
 .kx-in option{background:#0d0d0e;color:var(--cream)}
 .kx-pill{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:34px}
 .kx-pill.on{border-color:var(--line2);background:rgba(211,191,162,.16);color:var(--gold)}
-.kx-ent{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:#0a0a0b;border:1px solid var(--line);border-left:3px solid var(--gold2)}
+.kx-ent{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 11px;border-radius:12px;background:#0a0a0b;border:1px solid var(--line);border-left:3px solid var(--gold2)}
 .kx-modalwrap{position:fixed;inset:0;z-index:3101;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
 .kx-modal{margin:auto;display:flex;flex-direction:column;overflow:hidden;border-radius:24px;background:var(--glass),#0f0f10;border:1px solid var(--line2);box-shadow:0 40px 90px -20px rgba(0,0,0,.95)}
-.kx-opt{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-radius:13px;border:1px solid var(--line);background:transparent;color:#cfc7b8;font-size:.78rem;font-weight:600;text-align:left;min-height:46px;transition:all .15s}
+.kx-opt{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border-radius:11px;border:1px solid var(--line);background:transparent;color:#cfc7b8;font-size:.72rem;font-weight:600;text-align:left;min-height:38px;transition:all .15s}
 .kx-opt.on{border-color:var(--line2);background:rgba(211,191,162,.14);color:var(--gold)}
 .kx-err{font-size:.7rem;color:#e9a57a;font-weight:600}
 
@@ -461,27 +511,29 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 @keyframes kxPing{0%{box-shadow:0 0 0 0 rgba(211,191,162,.55)}70%,100%{box-shadow:0 0 0 8px rgba(211,191,162,0)}}
 @keyframes kxEq{0%,100%{height:3px}50%{height:14px}}
 @keyframes kxBreath{0%,100%{opacity:.75}50%{opacity:1}}
-@keyframes kxUrgent{0%,100%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 0 0 rgba(226,154,88,0)}50%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 26px 0 rgba(226,154,88,.3)}}
-@keyframes kxFresh{0%,100%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 0 0 rgba(230,214,184,0)}50%{box-shadow:0 22px 44px -28px rgba(0,0,0,.95),0 0 32px 2px rgba(230,214,184,.38)}}
+@keyframes kxGlow{0%,100%{opacity:.2}50%{opacity:1}}
 @keyframes kxSweep{to{transform:translateX(100%)}}
 @keyframes kxSpin{to{transform:rotate(360deg)}}
 .kx .spin{animation:kxSpin 1s linear infinite}
 
 /* ── responsive ── */
 .kx-mdot{display:none}
-@media (max-width:1180px){.kx-stat.opt{display:none}.kx-logo img{width:96px}}
-@media (max-width:1100px){.kx-stats{display:none}.kx-acts{margin-left:auto}.kx-seg button span.lb{display:none}.kx-seg button{padding:8px 11px}}
-@media (max-width:980px){.kx-brand-t{display:none}.kx-hide-md{display:none!important}.kx-toasts{top:calc(env(safe-area-inset-top) + 76px)}}
+@media (max-width:1180px){.kx-stat.opt{display:none}}
+@media (max-width:1100px){.kx-stats{display:none}.kx-acts{margin-left:auto}.kx-seg button span.lb{display:none}.kx-seg button{padding:5px 9px}}
+@media (max-width:980px){.kx-brand-t{display:none}.kx-hide-md{display:none!important}.kx-toasts{top:calc(env(safe-area-inset-top) + 62px)}}
+@media (max-height:520px){.kx-health,.kx-ribbon{display:none}.kx-tk{--kx-maxh:max(230px,calc(100dvh - 112px))}.kx-top{padding-top:4px;padding-bottom:4px}}
+.kx-ib.attn{border-color:rgba(226,154,88,.6);color:var(--amber);background:rgba(226,154,88,.1);animation:kxBreath 2s ease-in-out infinite}
 @media (max-width:599px){
-  .kx-top{margin:8px 8px 0;padding:8px 9px;gap:8px;border-radius:18px}
-  .kx-logo img{width:84px} .kx-acts{gap:5px} .kx-mdot{display:inline-block}
-  .kx-ib{height:40px;min-width:40px;padding:0 10px}
-  .kx-body{padding:8px;gap:8px} .kx-main{gap:8px}
-  .kx-tk-num{font-size:2.3rem} .kx-nm{font-size:1.08rem}
-  .kx-go{min-height:54px;font-size:.84rem}
-  .kx-mtiles{grid-template-columns:1fr} .kx-pop{position:fixed;left:10px;right:10px;top:68px;width:auto}
-  .kx-toasts{top:calc(env(safe-area-inset-top) + 68px)}
-  .kx-bnav{margin:0 8px 8px} .kx-bnav button{font-size:.46rem;letter-spacing:.04em}
+  .kx-top{margin:6px 6px 0;padding:5px 7px;gap:6px;border-radius:14px}
+  .kx-logo img{width:76px} .kx-acts{gap:4px} .kx-mdot{display:inline-block}
+  .kx-ib{height:36px;min-width:36px;padding:0 8px}
+  .kx-body{padding:6px;gap:6px} .kx-main{gap:6px}
+  .kx-tk{--kx-maxh:none} .kx-tk-num{font-size:1.7rem} .kx-nm{font-size:.94rem} .kx-qty{min-width:34px;height:34px;font-size:1rem} .kx-it{padding:8px 9px} .kx-chk{width:24px;height:24px}
+  .kx-go{min-height:44px;font-size:.74rem} .kx-sq{width:44px;min-height:44px}
+  .kx-mtiles{grid-template-columns:1fr} .kx-pop{position:fixed;left:8px;right:8px;top:56px;width:auto}
+  .kx-toasts{top:calc(env(safe-area-inset-top) + 56px)}
+  .kx-unlock{bottom:calc(env(safe-area-inset-bottom) + 76px);white-space:normal;text-align:center;width:calc(100vw - 24px);justify-content:center;border-radius:14px}
+  .kx-bnav{margin:0 6px 6px} .kx-bnav button{font-size:.46rem;letter-spacing:.04em}
 }
 @media (prefers-reduced-motion:reduce){.kx *,.kx *::before,.kx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `;
@@ -555,8 +607,10 @@ const KitchenViewInner = () => {
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [soundMissed, setSoundMissed] = useState(false); // a ticket arrived (or speech was refused) before the browser allowed sound
   const [freshIds, setFreshIds] = useState(() => new Set()); // tickets that arrived in the last few seconds
-  const [toasts, setToasts] = useState([]);                   // "new ticket" / "cancelled" call-outs
+  const [toasts, setToasts] = useState([]);
+  const [modInfo, setModInfo] = useState({});                // orderId -> what the customer changed (highlighted on the ticket until the dish is done)                   // "new ticket" / "cancelled" call-outs
 
   /* ── refs ── */
   const socketRef = useRef(null);
@@ -570,8 +624,12 @@ const KitchenViewInner = () => {
   const reconcileRef = useRef(null);
   const timersRef = useRef([]);
   const confirm86Busy = useRef(false);
+  const recentSocketRef = useRef(new Map()); // id -> { order, ts }: tickets the socket delivered in the last 20 s (a slower fetch must not drop them)
+  const sortOldestRef = useRef(false);
+  const audioUnlockedRef = useRef(false);
   const metaLoadedRef = useRef(false);      // categories / menu / tenant have been loaded at least once
   useEffect(() => { ordersRef.current = orders; }, [orders]);
+  useEffect(() => { sortOldestRef.current = sortOldest; }, [sortOldest]);
   useEffect(() => () => { timersRef.current.forEach(clearTimeout); clearTimeout(reconcileRef.current); }, []);
   const later = (fn, ms) => {
     const h = setTimeout(() => { timersRef.current = timersRef.current.filter(x => x !== h); fn(); }, ms);
@@ -583,10 +641,11 @@ const KitchenViewInner = () => {
      Browsers refuse all audio and speech until the page has had one user gesture. On a kiosk/tablet that reloads without a tap
      the announcements would be silently swallowed, so a banner stays up until the first touch; it is the browser's rule, not a mode. */
   const [audioUnlocked, setAudioUnlocked] = useState(() => { try { return navigator.userActivation ? !!navigator.userActivation.hasBeenActive : false; } catch { return false; } });
+  useEffect(() => { audioUnlockedRef.current = audioUnlocked; }, [audioUnlocked]);
   useEffect(() => {
     if (audioUnlocked) return undefined;
     const unlock = () => {
-      setAudioUnlocked(true);
+      setAudioUnlocked(true); setSoundMissed(false);
       const waiting = ordersRef.current.filter(o => (o.items || []).some(isKitchenItem)).length;
       const p = voicePrefsRef.current;
       if (waiting > 0 && p.voice) speechEngine.say(`Kitchen connected. ${waiting} ${waiting === 1 ? 'ticket' : 'tickets'} waiting.`, { rate: p.rate });
@@ -598,7 +657,7 @@ const KitchenViewInner = () => {
 
   useEffect(() => {
     speechEngine.onState = setSpeaking;
-    speechEngine.onBlocked = () => setAudioUnlocked(false); // the browser refused to speak: ask for a tap again
+    speechEngine.onBlocked = () => { setAudioUnlocked(false); setSoundMissed(true); }; // the browser refused to speak: ask for a tap again
     speechEngine.refreshVoices();
     try { if (speechEngine.supported()) window.speechSynthesis.onvoiceschanged = () => speechEngine.refreshVoices(); } catch { /* ignore */ }
     return () => {
@@ -634,15 +693,17 @@ const KitchenViewInner = () => {
   };
 
   // One place for "a ticket just reached the kitchen": highlight, call-out card, chime, then the spoken details.
-  const arriveTicket = order => {
+  const arriveTicket = (order, { chime = true } = {}) => {
+    if (!audioUnlockedRef.current) setSoundMissed(true);
     markFresh(order._id);
     const kitchenItems = (order.items || []).filter(isKitchenItem);
     pushToast({ kind: 'new', title: `NEW TICKET · ${ticketLabel(order)}`, body: kitchenItems.map(i => `${Number(i.quantity) || 1}× ${i.name}`).join(', ') });
     const otype = getOrderType(order);
     const agg = otype === 'swiggy' || otype === 'zomato';
     const p = voicePrefsRef.current;
-    if (p.chime) playAlertSound(agg ? 'aggregator' : 'order');
-    later(() => announce(buildTicketSpeech(order)), p.chime ? (agg ? 1600 : 1100) : 0);
+    const ring = p.chime && chime;
+    if (ring) playAlertSound(agg ? 'aggregator' : 'order');
+    later(() => announce(buildTicketSpeech(order)), ring ? (agg ? 1600 : 1100) : 0);
   };
 
   const fetchHealth = async () => {
@@ -683,11 +744,19 @@ const KitchenViewInner = () => {
       if (!firstLoad) {
         unseen
           .filter(o => (!o.status || o.status === 'pending') && (o.items || []).some(isKitchenItem))
-          .slice(0, 5).reverse().forEach(arriveTicket);
+          .slice(0, 5).reverse().forEach((o, i) => arriveTicket(o, { chime: i === 0 })); // one chime for a whole batch
       }
 
+      // A socket ticket that is newer than this response's snapshot would vanish for a moment: keep it (max 20 s) until the server lists it.
+      const incomingIds = new Set(incoming.map(o => String(o._id)));
+      const nowMs = Date.now();
+      const kept = [];
+      recentSocketRef.current.forEach((v, id) => {
+        if (nowMs - v.ts > 20000) { recentSocketRef.current.delete(id); return; }
+        if (!incomingIds.has(id) && !dispatchedRef.current.has(id)) kept.push(v.order);
+      });
       setBoardState('ready'); setBoardError(''); setLastLoadedAt(Date.now());
-      setOrders(incoming);
+      setOrders(kept.length ? [...kept, ...incoming].sort((a, b) => createdMs(b) - createdMs(a)) : incoming);
       if (!ordersOnly) metaLoadedRef.current = true;
       if (catRes) setCategories(catRes.data || []);
       if (menuRes) setMenuItems(menuRes.data || []);
@@ -772,9 +841,10 @@ const KitchenViewInner = () => {
       const id = String(cleanOrder._id);
       const alreadySeen = seenIdsRef.current.has(id);
       seenIdsRef.current.add(id);
+      recentSocketRef.current.set(id, { order: cleanOrder, ts: Date.now() });
       setOrders(prev => prev.some(o => String(o._id) === id) ? prev : [cleanOrder, ...prev]);
       if (alreadySeen) return; // a poll already showed and announced it
-      setMobileCardIndex(0);
+      setMobileCardIndex(sortOldestRef.current ? 9999 : 0); // jump to the new ticket (clamped to the last one when sorted oldest-first)
       arriveTicket(cleanOrder);
       scheduleReconcile();
     });
@@ -807,36 +877,33 @@ const KitchenViewInner = () => {
     socket.on('order_modification_detected', data => {
       if (!data || data.tenantId !== tenantId) return;
       const p = voicePrefsRef.current;
-      if (p.chime) playAlertSound('waiter');
-      let note = data.modificationNote;
-      let spoken = note ? String(note) : 'The order was changed';
-      if (data.replaced) {
-        // Customer changed the order inside the 2-minute window: spell out what changed for the chef.
-        const added = (data.items || []).filter(i => i.modChange === 'new');
-        const qtyChanged = (data.items || []).filter(i => i.modChange === 'qty');
-        const removed = data.replacedInfo?.removed || [];
-        const parts = [];
-        const sp = [];
-        if (added.length) { parts.push(`ADDED: ${added.map(i => `${i.quantity}× ${i.name}`).join(', ')}`); sp.push(`Added ${added.map(i => `${i.quantity} ${i.name}`).join(', ')}`); }
-        if (qtyChanged.length) { parts.push(`QTY: ${qtyChanged.map(i => `${i.name} ${i.modPrevQty}→${i.quantity}`).join(', ')}`); sp.push(`Quantity changed. ${qtyChanged.map(i => `${i.name} from ${i.modPrevQty} to ${i.quantity}`).join(', ')}`); }
-        if (removed.length) { parts.push(`REMOVED: ${removed.map(i => `${i.quantity}× ${i.name}`).join(', ')}`); sp.push(`Removed ${removed.map(i => `${i.quantity} ${i.name}`).join(', ')}`); }
-        note = `Customer REPLACED the order${parts.length ? ' — ' + parts.join(' · ') : ''}`;
-        spoken = `The customer replaced the order. ${sp.join('. ')}`;
-        if (data.orderId) {
-          const prefix = `${data.orderId}-`;
-          setItemFinalTimes(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(prefix))));
-        }
+      // Only what changed: new dishes, changed quantities, removed dishes. Nothing from the unchanged part of the order.
+      const mod = extractModification(data);
+      const orderId = data.orderId ? String(data.orderId) : '';
+      if (orderId) {
+        if (!modIsEmpty(mod)) setModInfo(prev => ({ ...prev, [orderId]: mod }));
+        markFresh(orderId); // the ticket glows so the cook finds it
+        // Per-dish timers belong to the old line items: restart them for the changed ticket.
+        const prefix = `${orderId}-`;
+        setItemFinalTimes(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(prefix))));
       }
-      const where = data.tableNumber != null && String(data.tableNumber) !== '' ? `Table ${spokenTable(data.tableNumber)}` : 'An order';
-      later(() => announce(`Order change. ${where}. ${spoken}.`), p.chime ? 900 : 0);
+      const summary = modIsEmpty(mod) ? (data.modificationNote ? String(data.modificationNote) : 'Order changed') : modSummary(mod);
+      const known = orderId ? ordersRef.current.find(o => String(o._id) === orderId) : null;
+      const who = spokenWho(known || { tableNumber: data.tableNumber, source: data.source });
+      if (p.chime) playAlertSound('waiter');
+      later(() => announce(buildModSpeech(who, mod, data.modificationNote)), p.chime ? 900 : 0);
       // Date.now() alone collided for two alerts in the same millisecond (duplicate React keys), and the list grew without bound.
-      setInterceptedAlerts(prev => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...data, modificationNote: note }, ...prev].slice(0, 25));
-      fetchActiveOrders({ ordersOnly: true });
+      setInterceptedAlerts(prev => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...data, modificationNote: summary }, ...prev].slice(0, 25));
+      fetchActiveOrders({ ordersOnly: metaLoadedRef.current });
     });
 
     // A ticket that disappears because the order was cancelled / voided must be said out loud: otherwise the cook keeps making it.
     const removeAndNotify = (orderId, withNotice) => {
       const gone = ordersRef.current.find(o => String(o._id) === String(orderId));
+      recentSocketRef.current.delete(String(orderId));
+      dispatchedRef.current.add(String(orderId)); // a fetch that was already in flight must not bring it back
+      later(() => dispatchedRef.current.delete(String(orderId)), 90000);
+      setModInfo(prev => { const k = String(orderId); if (!(k in prev)) return prev; const n = { ...prev }; delete n[k]; return n; });
       setOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
       if (gone && withNotice) {
         const p = voicePrefsRef.current;
@@ -852,6 +919,7 @@ const KitchenViewInner = () => {
       if (!data || (data.tenantId && data.tenantId !== tenantId)) return;
       const orderId = data._id || data.orderId;
       if (!orderId) return;
+      if (data.status === 'pending') { dispatchedRef.current.delete(String(orderId)); scheduleReconcile(); return; } // recalled on another device: show it again
       if (data.status && data.status !== 'pending') removeAndNotify(orderId, ['cancelled', 'rejected', 'voided'].includes(String(data.status).toLowerCase()));
     });
     socket.on('order_voided', data => {
@@ -917,8 +985,11 @@ const KitchenViewInner = () => {
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
     const idKey = String(orderId);
+    if (voicePrefsRef.current.dispatchSound) playAlertSound('pickupReady'); // instant feedback on the tap, before the server answers
     setProcessingOrderIds(prev => new Set(prev).add(orderId));
     setRecallQueue(prev => [order, ...prev].slice(0, 10));
+    recentSocketRef.current.delete(idKey);
+    setModInfo(prev => { if (!(idKey in prev)) return prev; const n = { ...prev }; delete n[idKey]; return n; });
     dispatchedRef.current.add(idKey); // a fetch that was already in flight must not bring this ticket back
     // Do not count client-side ticket age as kitchen prep time. Server timing is
     // authoritative and is what Owner/Operator analytics consume.
@@ -1096,7 +1167,8 @@ const KitchenViewInner = () => {
       }
       return true;
     });
-    return sortOldest ? [...list].reverse() : list; // `orders` is kept newest-first
+    // Always sort by creation time: a recalled ticket is put back at the front and would otherwise sit in the wrong place.
+    return [...list].sort((a, b) => sortOldest ? createdMs(a) - createdMs(b) : createdMs(b) - createdMs(a));
   }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery, sortOldest]);
 
   const aggregatedTotals = useMemo(() => {
@@ -1108,9 +1180,9 @@ const KitchenViewInner = () => {
       if (!isDishVisible(i, vis)) return;
       if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
       const otype = getOrderType(o);
-      const isP = otype === 'parcel';
+      const kind = otype === 'parcel' ? 'P' : (otype === 'swiggy' || otype === 'zomato') ? 'S' : 'D';
       const portion = (i.portion && String(i.portion).toLowerCase() !== 'single') ? ` (${i.portion})` : '';
-      const key = `${i.name}${portion}__${isP ? 'P' : 'D'}`;
+      const key = `${i.name}${portion}__${kind}`;
       totals[key] = (totals[key] || 0) + (Number(i.quantity) || 1);
     }));
     return totals;
@@ -1135,8 +1207,7 @@ const KitchenViewInner = () => {
       ? serverKdsToday.avgSeconds
       : (completedTicketsCount ? Math.floor(totalProcessingTime / completedTicketsCount) : 0);
     if (!avg) return '—';
-    const a = Math.round(Number(avg));
-    return `${Math.floor(a / 60)}m ${a % 60}s`; // avgSeconds can be fractional: "3m 12.4285s" was shown
+    return fmtSpan(avg); // avgSeconds can be fractional (was "3m 12.4285s"); from 60 min it reads in hours ("1h 11m")
   }, [totalProcessingTime, completedTicketsCount, serverKdsToday]);
 
   const visibleCategories = useMemo(() => {
@@ -1191,7 +1262,7 @@ const KitchenViewInner = () => {
     catch (err) { setWastageError(err?.response?.data?.error || 'Could not remove the entry. Try again.'); }
   };
 
-  const toggleSort = () => setSortOldest(v => { const n = !v; try { localStorage.setItem('kds_sort_oldest', n ? '1' : '0'); } catch { /* ignore */ } return n; });
+  const toggleSort = () => setSortOldest(v => { const n = !v; sortOldestRef.current = n; try { localStorage.setItem('kds_sort_oldest', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const todayWastageCount = wastageLog.filter(e => new Date(e.loggedAt || e.createdAt).toDateString() === new Date().toDateString()).length;
 
   /* ── breakpoint helpers ── */
@@ -1203,10 +1274,10 @@ const KitchenViewInner = () => {
     () => setMobileCardIndex(i => Math.min(i + 1, filteredOrders.length - 1)),
     () => setMobileCardIndex(i => Math.max(i - 1, 0))
   );
-  const gridCol = isSmallTablet ? 280 : 320;
+  const gridCol = isSmallTablet ? 250 : 262;
   const cardProps = {
     onReady: markAsReady, dishToCategoryMap, dishToVegMap, selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
-    socketInstance: socketRef.current, isNonVegMode, tenantOnlyVeg, itemFinalTimes, setItemFinalTimes, onItemSynced: mergeServerItem, onSpeak: speakTicket,
+    socketRef, isNonVegMode, tenantOnlyVeg, itemFinalTimes, setItemFinalTimes, onItemSynced: mergeServerItem, onSpeak: speakTicket,
   };
 
   /* ─── SECTIONS RAIL (permanent on wide screens, drawer on phones / small tablets) ─── */
@@ -1256,6 +1327,12 @@ const KitchenViewInner = () => {
                 </button>
               );
             })}
+            {!inDrawer && showPermanentSide && toasts.length > 0 && (
+              <div className="kx-feed" aria-live="assertive">
+                <span className="kx-eyebrow" style={{ display: 'block', marginBottom: 6 }}>Live</span>
+                <AnimatePresence>{toasts.slice(0, 3).map(t => renderToast(t, true))}</AnimatePresence>
+              </div>
+            )}
           </div>
         )}
 
@@ -1278,6 +1355,15 @@ const KitchenViewInner = () => {
     );
   };
 
+  const renderToast = (t, compact = false) => (
+    <Motion.div key={t.id} layout initial={{ opacity: 0, y: compact ? 8 : -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+      className={`kx-toast${compact ? ' compact' : ''}${t.kind === 'cancel' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
+      <div className="ic">{t.kind === 'cancel' ? <AlertTriangle size={15} /> : <BellRing size={16} color="#d3bfa2" />}</div>
+      <div style={{ minWidth: 0 }}><b>{t.title}</b><p>{t.body}</p></div>
+    </Motion.div>
+  );
+
   const wastageDisabled = wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim();
   const dishesFor86 = eightySixModal ? menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false) : [];
 
@@ -1289,32 +1375,25 @@ const KitchenViewInner = () => {
       <style>{KX_CSS}</style>
       {boardState === 'loading' && <span role="status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Loading kitchen tickets…</span>}
 
-      {!audioUnlocked && (
+      {!audioUnlocked && soundMissed && (
         <div className="kx-unlock" role="status"><Volume2 size={15} /> Touch the screen once to switch on ticket sounds &amp; voice</div>
       )}
 
-      {/* ── NEW TICKET / CANCELLED CALL-OUTS ── */}
-      <div className="kx-toasts" aria-live="assertive">
-        <AnimatePresence>
-          {toasts.map(t => (
-            <motion.div key={t.id} layout initial={{ opacity: 0, y: -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -12, scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className={`kx-toast${t.kind === 'cancel' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
-              <div className="ic">{t.kind === 'cancel' ? <AlertTriangle size={19} /> : <BellRing size={20} color="#d3bfa2" />}</div>
-              <div style={{ minWidth: 0 }}><b>{t.title}</b><p>{t.body}</p></div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      {/* ── NEW TICKET / CANCELLED CALL-OUTS: floating only on narrow screens; on wide screens they live in the sections rail so they never cover a ticket ── */}
+      {!showPermanentSide && (
+        <div className="kx-toasts" aria-live="assertive">
+          <AnimatePresence>{toasts.slice(0, 2).map(t => renderToast(t))}</AnimatePresence>
+        </div>
+      )}
 
       {/* ── SECTIONS DRAWER ── */}
       <AnimatePresence>
         {sidebarOpen && showDrawerToggle && (
           <>
-            <motion.div className="kx-scrim" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSidebarOpen(false)} />
-            <motion.aside className="kx-rail drawer" initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
+            <Motion.div className="kx-scrim" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSidebarOpen(false)} />
+            <Motion.aside className="kx-rail drawer" initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
               {renderRail(true)}
-            </motion.aside>
+            </Motion.aside>
           </>
         )}
       </AnimatePresence>
@@ -1336,7 +1415,7 @@ const KitchenViewInner = () => {
         {!isMobile && (
           <div className="kx-seg" role="tablist" aria-label="Station">
             {STATIONS.map(s => (
-              <button type="button" key={s.val} role="tab" aria-selected={stationFilter === s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => setStationFilter(s.val)}>
+              <button type="button" key={s.val} role="tab" aria-label={s.lbl} aria-selected={stationFilter === s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => setStationFilter(s.val)}>
                 <s.Icon size={13} /><span className="lb">{s.lbl}</span>{stationCounts[s.val] > 0 && <span className="n">{stationCounts[s.val]}</span>}
               </button>
             ))}
@@ -1359,7 +1438,7 @@ const KitchenViewInner = () => {
           )}
           <button type="button" aria-label="Search" className={`kx-ib${showSearch ? ' on' : ''}`} onClick={() => setShowSearch(v => !v)}><Search size={16} /></button>
           {!isMobile && (
-            <button type="button" className={`kx-ib${isAggregateView ? ' on' : ''}`} onClick={() => setIsAggregateView(v => !v)}>
+            <button type="button" aria-label={isAggregateView ? 'Show tickets' : 'Show batch summary'} className={`kx-ib${isAggregateView ? ' on' : ''}`} onClick={() => setIsAggregateView(v => !v)}>
               {isAggregateView ? <LayoutGrid size={16} /> : <BarChart3 size={16} />}{!isTablet && <span>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
             </button>
           )}
@@ -1376,21 +1455,23 @@ const KitchenViewInner = () => {
 
           {/* Voice announcements: output only, automatic. This is where they are tuned. */}
           <div style={{ position: 'relative' }}>
-            <button type="button" aria-label="Voice announcements" aria-expanded={showVoiceMenu} className={`kx-ib${voicePrefs.voice ? ' on' : ' mute'}`} onClick={() => setShowVoiceMenu(v => !v)}>
+            <button type="button" aria-label="Voice announcements" aria-expanded={showVoiceMenu} className={`kx-ib${!audioUnlocked ? ' attn' : voicePrefs.voice ? ' on' : ' mute'}`} onClick={() => setShowVoiceMenu(v => !v)}>
               {speaking ? <span className="kx-eq"><i /><i /><i /></span> : voicePrefs.voice ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              {!isMobile && !isTablet && <span>{voicePrefs.voice ? 'VOICE ON' : 'VOICE OFF'}</span>}
+              {!isMobile && !isTablet && <span>{!audioUnlocked ? 'TAP FOR SOUND' : voicePrefs.voice ? 'VOICE ON' : 'VOICE OFF'}</span>}
             </button>
             <AnimatePresence>
               {showVoiceMenu && (
                 <>
                   <div style={{ position: 'fixed', inset: 0, zIndex: 65 }} onClick={() => setShowVoiceMenu(false)} />
-                  <motion.div className="kx-pop" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.97 }} transition={{ duration: 0.16 }}>
+                  <Motion.div className="kx-pop" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.97 }} transition={{ duration: 0.16 }}>
                     <h4>Ticket announcements</h4>
                     {!speechEngine.supported() && <div className="kx-err">This browser cannot speak. Chime and cards still work.</div>}
                     <div className="kx-row"><div>Speak ticket details<small>Table or source, every dish, portion and notes</small></div>
                       <button type="button" role="switch" aria-checked={voicePrefs.voice} className={`kx-sw${voicePrefs.voice ? ' on' : ''}`} onClick={() => updateVoicePrefs({ voice: !voicePrefs.voice })} /></div>
                     <div className="kx-row"><div>New-ticket chime<small>Different tune for dine-in and delivery</small></div>
                       <button type="button" role="switch" aria-checked={voicePrefs.chime} className={`kx-sw${voicePrefs.chime ? ' on' : ''}`} onClick={() => updateVoicePrefs({ chime: !voicePrefs.chime })} /></div>
+                    <div className="kx-row"><div>Dispatch sound<small>A soft ding when you complete a ticket</small></div>
+                      <button type="button" role="switch" aria-checked={voicePrefs.dispatchSound} className={`kx-sw${voicePrefs.dispatchSound ? ' on' : ''}`} onClick={() => { const on = !voicePrefs.dispatchSound; updateVoicePrefs({ dispatchSound: on }); if (on) playAlertSound('pickupReady'); }} /></div>
                     <div className="kx-row"><span>Repeat</span>
                       <div className="kx-mini">{[1, 2].map(n => <button type="button" key={n} className={voicePrefs.repeat === n ? 'on' : ''} onClick={() => updateVoicePrefs({ repeat: n })}>{n}×</button>)}</div></div>
                     <div className="kx-row"><span>Speed</span>
@@ -1398,7 +1479,7 @@ const KitchenViewInner = () => {
                     <button type="button" className="kx-btn block" onClick={() => { if (voicePrefsRef.current.chime) playAlertSound('order'); later(() => announce('New ticket. Table 5. 2 dishes, dine in. 2 Paneer Tikka. 1 half Dal Fry. Note: less spicy.', { force: true, interrupt: true }), 900); }}>
                       <Volume2 size={14} /> Test announcement
                     </button>
-                  </motion.div>
+                  </Motion.div>
                 </>
               )}
             </AnimatePresence>
@@ -1410,12 +1491,12 @@ const KitchenViewInner = () => {
       {/* ── SEARCH ── */}
       <AnimatePresence>
         {showSearch && (
-          <motion.div className="kx-search" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+          <Motion.div className="kx-search" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
             <Search size={15} color="#b99f78" />
             <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source or dish name…" />
             {searchQuery && <button type="button" className="kx-pill" onClick={() => setSearchQuery('')}>CLEAR</button>}
             <button type="button" aria-label="Close search" onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background: 'transparent', border: 0, color: '#9b978d', display: 'flex' }}><X size={16} /></button>
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
 
@@ -1425,22 +1506,22 @@ const KitchenViewInner = () => {
           <AnimatePresence>
             {/* Only the latest few: an unbounded stack pushed the actual tickets off the screen during a rush. */}
             {interceptedAlerts.slice(0, 3).map(alert => (
-              <motion.div key={alert.id} className="kx-alert" initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} style={isMobile ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
+              <Motion.div key={alert.id} className="kx-alert" initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} style={isMobile ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
                 <div className="l">
                   <div className="ic"><BellRing size={18} color="#e29a58" /></div>
                   <div style={{ minWidth: 0 }}>
-                    <h3>ORDER CHANGE{alert.tableNumber != null && String(alert.tableNumber) !== '' ? ` — TABLE ${alert.tableNumber}` : ''}</h3>
+                    <h3>ORDER MODIFIED{alert.tableNumber != null && String(alert.tableNumber) !== '' ? ` — TABLE ${alert.tableNumber}` : ''}</h3>
                     <p>{alert.modificationNote}</p>
                   </div>
                 </div>
                 <button type="button" className="kx-btn warn" onClick={() => setInterceptedAlerts(prev => prev.filter(a => a.id !== alert.id))}>Acknowledge</button>
-              </motion.div>
+              </Motion.div>
             ))}
             {interceptedAlerts.length > 3 && (
-              <motion.div key="alerts-more" className="kx-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ padding: '8px 14px' }}>
-                <span style={{ fontSize: '.68rem', fontWeight: 700, color: '#f0b87c' }}>+{interceptedAlerts.length - 3} MORE ORDER CHANGES</span>
+              <Motion.div key="alerts-more" className="kx-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ padding: '8px 14px' }}>
+                <span style={{ fontSize: '.68rem', fontWeight: 700, color: '#f0b87c' }}>+{interceptedAlerts.length - 3} MORE MODIFIED ORDERS</span>
                 <button type="button" className="kx-btn warn" style={{ minHeight: 36 }} onClick={() => setInterceptedAlerts([])}>Acknowledge all</button>
-              </motion.div>
+              </Motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -1448,7 +1529,7 @@ const KitchenViewInner = () => {
 
       {/* ══════════════ BODY ══════════════ */}
       <div className="kx-body">
-        {showPermanentSide && <aside className="kx-rail" style={{ width: isLargeTablet ? 214 : 240 }}>{renderRail(false)}</aside>}
+        {showPermanentSide && <aside className="kx-rail" style={{ width: isLargeTablet ? 188 : 204 }}>{renderRail(false)}</aside>}
 
         <main className="kx-main">
           {/* prep queue + sort */}
@@ -1508,7 +1589,7 @@ const KitchenViewInner = () => {
 
           {/* SPEED METRICS */}
           {showMetricsDashboard && (
-            <motion.div className="kx-metrics" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+            <Motion.div className="kx-metrics" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
               <TrendingUp size={24} color="#d3bfa2" />
               <h2>Speed metrics</h2>
               <p>Session performance — resets at midnight IST</p>
@@ -1518,7 +1599,7 @@ const KitchenViewInner = () => {
                 <div className="kx-mt"><span>Currently pending</span><b>{pendingCount}</b><small>active tickets</small></div>
               </div>
               <button type="button" className="kx-btn" onClick={() => setShowMetricsDashboard(false)}><ChevronLeft size={15} /> Back to kitchen</button>
-            </motion.div>
+            </Motion.div>
           )}
 
           {/* BATCH PREP SUMMARY */}
@@ -1536,11 +1617,12 @@ const KitchenViewInner = () => {
                   {Object.entries(aggregatedTotals).map(([key, qty]) => {
                     const [namePart, typePart] = key.split('__');
                     const isParcel = typePart === 'P';
+                    const isDelivery = typePart === 'S';
                     return (
                       <div key={key} className={`kx-sumc${isParcel ? ' p' : ''}`}>
                         <b>{pad2(qty)}</b>
                         <div className="n">{namePart}</div>
-                        <span className={`kx-tag${isParcel ? ' gold' : ''}`}>{isParcel ? <Package size={10} /> : <UtensilsCrossed size={10} />}{isParcel ? 'PARCEL' : 'DINE-IN'}</span>
+                        <span className={`kx-tag${isParcel ? ' gold' : isDelivery ? ' amber' : ''}`}>{isParcel ? <Package size={10} /> : isDelivery ? <Bike size={10} /> : <UtensilsCrossed size={10} />}{isParcel ? 'PARCEL' : isDelivery ? 'DELIVERY' : 'DINE-IN'}</span>
                       </div>
                     );
                   })}
@@ -1568,9 +1650,9 @@ const KitchenViewInner = () => {
                 <div className="kx-dots">{filteredOrders.map((o, i) => <i key={o._id} className={i === safeCardIndex ? 'on' : ''} onClick={() => setMobileCardIndex(i)} />)}</div>
                 <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }} {...swipeHandlers}>
                   <AnimatePresence mode="wait">
-                    <motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} style={{ height: '100%' }}>
-                      {filteredOrders[safeCardIndex] && <KDSOrderCard order={filteredOrders[safeCardIndex]} fresh={freshIds.has(String(filteredOrders[safeCardIndex]._id))} fill isMobile {...cardProps} />}
-                    </motion.div>
+                    <Motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} style={{ height: '100%' }}>
+                      {filteredOrders[safeCardIndex] && <KDSOrderCard order={filteredOrders[safeCardIndex]} modInfo={modInfo[String(filteredOrders[safeCardIndex]._id)]} fresh={freshIds.has(String(filteredOrders[safeCardIndex]._id))} fill isMobile {...cardProps} />}
+                    </Motion.div>
                   </AnimatePresence>
                 </div>
                 <div className="kx-pager">
@@ -1588,7 +1670,7 @@ const KitchenViewInner = () => {
               {boardState === 'loading' && orders.length === 0 && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} />)}
               {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
               <AnimatePresence mode="popLayout">
-                {filteredOrders.map(order => <KDSOrderCard key={order._id} order={order} fresh={freshIds.has(String(order._id))} isMobile={false} {...cardProps} />)}
+                {filteredOrders.map(order => <KDSOrderCard key={order._id} order={order} modInfo={modInfo[String(order._id)]} fresh={freshIds.has(String(order._id))} isMobile={false} {...cardProps} />)}
               </AnimatePresence>
               {boardState === 'ready' && filteredOrders.length === 0 && (
                 <div className="kx-center">
@@ -1619,9 +1701,9 @@ const KitchenViewInner = () => {
       <AnimatePresence>
         {showWastagePanel && (
           <>
-            <motion.div className="kx-scrim" style={{ zIndex: 3000 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWastagePanel(false)} />
-            <motion.div className="kx-sheet" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-              style={{ width: isMobile ? '100vw' : isTablet ? 430 : 500, borderRadius: isMobile ? 0 : undefined }}>
+            <Motion.div className="kx-scrim" style={{ zIndex: 3000 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWastagePanel(false)} />
+            <Motion.div className="kx-sheet" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 32 }}
+              style={{ width: isMobile ? '100vw' : isTablet ? 390 : 430, borderRadius: isMobile ? 0 : undefined }}>
               <div className="kx-sheet-h">
                 <div className="t"><div className="ic"><Trash2 size={17} /></div><div><h3>WASTAGE LOG</h3><small>Spoilage · Overcooked · Dropped · Excess</small></div></div>
                 <button type="button" className="kx-ib" aria-label="Close" style={{ height: 38, minWidth: 38, padding: 0 }} onClick={() => setShowWastagePanel(false)}><X size={16} /></button>
@@ -1629,7 +1711,7 @@ const KitchenViewInner = () => {
               <div className="kx-tabs">
                 {[['log', 'LOG ENTRY'], ['report', 'MONTHLY REPORT']].map(([t, lbl]) => <button type="button" key={t} className={wastageTab === t ? 'on' : ''} onClick={() => setWastageTab(t)}>{lbl}</button>)}
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 24px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 18px' }}>
                 {wastageTab === 'log' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div className="kx-card">
@@ -1755,7 +1837,7 @@ const KitchenViewInner = () => {
                   </div>
                 )}
               </div>
-            </motion.div>
+            </Motion.div>
           </>
         )}
       </AnimatePresence>
@@ -1764,16 +1846,16 @@ const KitchenViewInner = () => {
       <AnimatePresence>
         {eightySixModal && (
           <>
-            <motion.div className="kx-scrim" style={{ zIndex: 3100 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEightySixModal(null)} />
+            <Motion.div className="kx-scrim" style={{ zIndex: 3100 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEightySixModal(null)} />
             {/* Centering wrapper must stay transform-free: framer-motion owns the transform on the modal below. */}
             <div className="kx-modalwrap" onClick={() => setEightySixModal(null)}>
-              <motion.div className="kx-modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
-                transition={{ type: 'spring', stiffness: 320, damping: 30 }} style={{ width: isMobile ? '92vw' : 440, maxHeight: 'calc(88vh - 40px)' }}>
+              <Motion.div className="kx-modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 30 }} style={{ width: isMobile ? '92vw' : 380, maxHeight: 'calc(88vh - 40px)' }}>
                 <div className="kx-sheet-h">
                   <div className="t"><div className="ic" style={{ background: 'rgba(226,154,88,.12)', borderColor: 'rgba(226,154,88,.4)', color: '#e29a58' }}><PackageX size={17} /></div><div><h3>86 A DISH</h3><small>{eightySixModal.categoryName}</small></div></div>
                   <button type="button" className="kx-ib" aria-label="Close" style={{ height: 38, minWidth: 38, padding: 0 }} onClick={() => setEightySixModal(null)}><X size={16} /></button>
                 </div>
-                <div style={{ padding: '16px 20px 20px', overflowY: 'auto' }}>
+                <div style={{ padding: '12px 14px 14px', overflowY: 'auto' }}>
                   <div className="kx-lbl">Which dish?</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18, maxHeight: 220, overflowY: 'auto' }}>
                     {dishesFor86.map(dish => <button type="button" key={dish._id} className={`kx-opt${selectedDish86?._id === dish._id ? ' on' : ''}`} onClick={() => setSelectedDish86(dish)}>{dish.name}</button>)}
@@ -1789,7 +1871,7 @@ const KitchenViewInner = () => {
                     </>
                   )}
                 </div>
-              </motion.div>
+              </Motion.div>
             </div>
           </>
         )}
@@ -1804,10 +1886,10 @@ const KitchenViewInner = () => {
 // forwardRef: <AnimatePresence mode="popLayout"> hands every child a ref to measure it. A plain function component cannot take one
 // ("Function components cannot be given refs"), so an exiting ticket could not be measured and the grid jumped when a ticket was dispatched.
 const KDSOrderCard = React.forwardRef(({
-  order, onReady, fresh, fill,
+  order, onReady, fresh, fill, modInfo,
   dishToCategoryMap, dishToVegMap,
   selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
-  socketInstance, isNonVegMode, tenantOnlyVeg, isMobile,
+  socketRef, isNonVegMode, tenantOnlyVeg, isMobile,
   itemFinalTimes, setItemFinalTimes, onItemSynced, onSpeak,
 }, ref) => {
   // KDSOrderCard is defined outside KitchenView, so the route's tenantId is not in scope here.
@@ -1887,7 +1969,7 @@ const KDSOrderCard = React.forwardRef(({
     const startMs = itemStartTimes[idx] || new Date(order.items?.[idx]?.kdsStartedAt || order.kdsStartedAt || order.createdAt).getTime();
     setItemStartTimes(prev => ({ ...prev, [idx]: startMs }));
     setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
-    socketInstance?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: next });
+    socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: next });
     try {
       const currentItem = order.items?.[idx] || {};
       const r = await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
@@ -1909,10 +1991,10 @@ const KDSOrderCard = React.forwardRef(({
         }
         setItemStartTimes(prev => ({ ...prev, [idx]: authoritative.kdsStartedAt ? new Date(authoritative.kdsStartedAt).getTime() : startMs }));
         // Other screens were told `next` before the save; tell them what the server really holds.
-        socketInstance?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal });
+        socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal });
       } else {
         setCheckedItemsGlobal(prev => ({ ...prev, [key]: !next }));
-        socketInstance?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !next });
+        socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !next });
       }
       console.error('KDS item timing save failed:', err?.message || err);
     } finally { pendingToggleKeys.delete(key); }
@@ -1948,18 +2030,30 @@ const KDSOrderCard = React.forwardRef(({
     }
   };
 
+  // Which dishes did the customer change? The server flags them (item.modChange); the socket event is the fallback by dish name.
+  const sameDish = (a, b) => String(a || '').toLowerCase().trim() === String(b || '').toLowerCase().trim();
+  const modOf = item => {
+    if (item.modChange === 'new' || item.modChange === 'qty') return { kind: item.modChange, from: item.modPrevQty, to: item.quantity };
+    const q = modInfo?.qty?.find(m => sameDish(m.name, item.name));
+    if (q) return { kind: 'qty', from: q.from, to: q.to };
+    if (modInfo?.added?.some(m => sameDish(m.name, item.name))) return { kind: 'new' };
+    return null;
+  };
+  const removedDishes = modInfo?.removed?.length ? modInfo.removed : (order.replacedInfo?.removed || []);
+  const isMod = !!order.isModified || !!modInfo;
+
   const sourceLabel = {
     waitlist: 'WAITLIST', reservation: 'RESERVATION', 'counter-pickup': 'PICKUP', takeaway: 'TAKEAWAY', direct: 'DINE-IN', swiggy: 'SWIGGY', zomato: 'ZOMATO',
   }[order.source] || 'DINE-IN';
   const TypeIcon = isAggOrder ? Bike : isParcelOrder ? Package : UtensilsCrossed;
   const typeLabel = isAggOrder ? 'DELIVERY' : isParcelOrder ? 'PARCEL' : 'DINE-IN';
   const numClass = otype === 'swiggy' ? ' sw' : otype === 'zomato' ? ' zo' : '';
-  const tableLabel = otype === 'swiggy' ? 'SWIGGY' : otype === 'zomato' ? 'ZOMATO' : isParcelOrder ? 'PARCEL' : `T-${order.tableNumber}`;
+  const tableLabel = otype === 'swiggy' ? 'SWIGGY' : otype === 'zomato' ? 'ZOMATO' : isParcelOrder ? 'PARCEL' : `T-${String(order.tableNumber ?? '').trim() || '?'}`;
   const firstOpenIdx = (order.items || []).findIndex((it, i) => isKitchenItem(it) && !checkedItemsGlobal[`${order._id}-${i}`]);
   const circ = 2 * Math.PI * 19;
 
   return (
-    <motion.article
+    <Motion.article
       ref={ref}
       layout
       initial={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -1973,19 +2067,19 @@ const KDSOrderCard = React.forwardRef(({
           <span className="kx-tk-type"><TypeIcon size={13} /> {typeLabel}</span>
           <div className={`kx-tk-num${numClass}`}>{tableLabel}</div>
           <div className="kx-tk-meta">
-            {fresh && <span className="kx-tag gold">NEW</span>}
-            {order.isModified && <span className="kx-tag amber">REPLACED</span>}
+            {fresh && !isMod && <span className="kx-tag gold">NEW</span>}
+            {isMod && <span className="kx-tag amber">MODIFIED</span>}
             <span className={`kx-tag${otype === 'swiggy' ? ' sw' : otype === 'zomato' ? ' zo' : ''}`}>{sourceLabel}</span>
             <span className="kx-tag id">#{String(order._id).slice(-4).toUpperCase()}{order.aggregatorOrderId ? ` · ${order.aggregatorOrderId.toString().slice(-6)}` : ''}</span>
           </div>
         </div>
         <div>
           <div className={`kx-time ${urgency}`} aria-label={`Ticket age ${fmt(seconds)}`}>
-            <svg viewBox="0 0 44 44" width="66" height="66" aria-hidden="true">
+            <svg viewBox="0 0 44 44" width="50" height="50" aria-hidden="true">
               <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3.5" />
               <circle cx="22" cy="22" r="19" fill="none" stroke={ringColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.min(1, seconds / 900) * circ} ${circ}`} />
             </svg>
-            <span className="tv">{fmt(seconds)}</span>
+            <span className="tv" style={seconds >= 3600 ? { fontSize: '.54rem' } : undefined}>{fmt(seconds)}</span>
           </div>
           {urgency !== 'low' && <span className="kx-late">{urgency === 'high' ? 'OVERDUE' : 'DELAYED'}</span>}
         </div>
@@ -2000,12 +2094,11 @@ const KDSOrderCard = React.forwardRef(({
         </div>
       )}
 
-      {/* REPLACED STRIP — what the customer changed */}
-      {order.isModified && (
+      {/* MODIFIED STRIP — only what was taken off; added / changed dishes are highlighted in the list below */}
+      {isMod && (
         <div className="kx-strip mod">
-          <div style={{ fontWeight: 800, letterSpacing: '.08em' }}>⚠ ORDER REPLACED BY CUSTOMER</div>
-          {(order.replacedInfo?.previousItems || []).length > 0 && <div style={{ fontWeight: 500 }}>Was: {order.replacedInfo.previousItems.map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>}
-          {(order.replacedInfo?.removed || []).length > 0 && <div style={{ fontWeight: 700 }}>Removed: {order.replacedInfo.removed.map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>}
+          <div style={{ fontWeight: 800, letterSpacing: '.08em' }}>⚠ ORDER MODIFIED — CHANGED DISHES ARE MARKED</div>
+          {removedDishes.length > 0 && <div style={{ fontWeight: 700, marginTop: 2 }}>Removed: {removedDishes.map(p => `${p.quantity}× ${p.name}`).join(', ')}</div>}
         </div>
       )}
 
@@ -2035,12 +2128,13 @@ const KDSOrderCard = React.forwardRef(({
           const isSlow = hasStarted && !crossed && elapsedSecs >= 300;
           const finalSecs = Math.max(0, Math.round(Number(itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs) || 0)); // fractional server seconds rendered as "3m 12.4285s"
           const portionTxt = item.portion?.toUpperCase() || 'STANDARD';
+          const mod = !crossed ? modOf(item) : null;
 
           return (
             <div
               key={idx}
               role="button" tabIndex={0} aria-pressed={crossed}
-              className={`kx-it${crossed ? ' done' : hasStarted ? ' run' : ''}`}
+              className={`kx-it${crossed ? ' done' : mod ? ' mod' : hasStarted ? ' run' : ''}`}
               onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } toggleItemCrossed(idx); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleItemCrossed(idx); } }}
               onContextMenu={e => startItemTimer(idx, e)}
@@ -2056,20 +2150,20 @@ const KDSOrderCard = React.forwardRef(({
                   <span className={item.isChefSpecial && !crossed ? 'sp' : undefined} style={item.isChefSpecial && !crossed ? undefined : { display: 'contents' }}>
                     {item.isChefSpecial && !crossed && <Sparkles size={12} />}{item.name}
                   </span>
-                  {item.modChange && !crossed && <span className="kx-tag amber">{item.modChange === 'new' ? 'NEW' : `QTY ${item.modPrevQty}→${item.quantity}`}</span>}
+                  {mod && <span className="kx-tag amber">{mod.kind === 'new' ? 'ADDED' : `QTY ${mod.from ?? '?'}→${mod.to ?? item.quantity}`}</span>}
                 </div>
                 {!crossed && (
                   <div className="kx-sub">
                     <span className={item.portion?.toLowerCase() === 'half' ? 'half' : undefined}>{portionTxt}</span>
                     {hasStarted && (
                       <span className={`kx-tm${isSlow ? ' slow' : ''}`}>
-                        <Timer size={11} />{`${Math.floor(elapsedSecs / 60)}:${(elapsedSecs % 60).toString().padStart(2, '0')}`}
+                        <Timer size={10} />{fmt(elapsedSecs)}
                         {isSlow && <><AlertTriangle size={10} strokeWidth={2.5} /> SLOW</>}
                       </span>
                     )}
                   </div>
                 )}
-                {crossed && hasStarted && <div className="kx-sub"><span className="kx-tm" style={{ color: '#9b978d' }}><Timer size={11} /> Done {Math.floor(finalSecs / 60)}m {finalSecs % 60}s</span></div>}
+                {crossed && hasStarted && <div className="kx-sub"><span className="kx-tm" style={{ color: '#9b978d' }}><Timer size={10} /> Done {fmtSpan(finalSecs)}</span></div>}
                 {!hasStarted && !crossed && idx === firstOpenIdx && <div className="kx-hint">Hold to start cook timer</div>}
                 {item.suggestion && !crossed && <div className="kx-note"><StickyNote size={14} /><span>{item.suggestion}</span></div>}
               </div>
@@ -2090,15 +2184,15 @@ const KDSOrderCard = React.forwardRef(({
       {/* ── ACTIONS ── */}
       <div className="kx-tk-f">
         <div className="row">
-          <button type="button" className={`kx-sq${showNote || localNote ? ' on' : ''}`} aria-label={showNote ? 'Hide note' : 'Add note'} title="Note" onClick={() => setShowNote(v => !v)}><StickyNote size={18} /></button>
-          <button type="button" className="kx-sq" aria-label="Read this ticket aloud" title="Read aloud" onClick={() => onSpeak?.(order)}><Volume2 size={19} /></button>
-          <button type="button" className={`kx-go${urgency === 'high' ? ' late' : ''}`} onClick={() => onReady(order._id)} style={isMobile ? { minHeight: 54 } : undefined}>
+          <button type="button" className={`kx-sq${showNote || localNote ? ' on' : ''}`} aria-label={showNote ? 'Hide note' : 'Add note'} title="Note" onClick={() => setShowNote(v => !v)}><StickyNote size={16} /></button>
+          <button type="button" className="kx-sq" aria-label="Read this ticket aloud" title="Read aloud" onClick={() => onSpeak?.(order)}><Volume2 size={17} /></button>
+          <button type="button" className={`kx-go${urgency === 'high' ? ' late' : ''}`} onClick={() => onReady(order._id)} style={isMobile ? { minHeight: 46 } : undefined}>
             {urgency === 'high' && <Flame size={15} strokeWidth={2.5} />}
             {urgency === 'high' ? 'Overdue — dispatch' : allDone ? <><CheckCircle2 size={15} /> All ready — dispatch</> : <>Complete ticket <ArrowRight size={14} /></>}
           </button>
         </div>
       </div>
-    </motion.article>
+    </Motion.article>
   );
 });
 KDSOrderCard.displayName = 'KDSOrderCard';
@@ -2110,25 +2204,25 @@ const Sk = ({ w, h, r = 7, style }) => <div className="kx-sk" style={{ width: w,
 
 /* Same shell as a ticket (header + ring, progress, dish rows, action row) so nothing shifts when data arrives. */
 const KdsCardSkeleton = ({ index = 0, fill = false }) => (
-  <div aria-hidden="true" className={`kx-tk${fill ? ' fill' : ''}`} style={{ '--d': `${index * 0.14}s`, minHeight: fill ? undefined : 360 }}>
+  <div aria-hidden="true" className={`kx-tk${fill ? ' fill' : ''}`} style={{ '--d': `${index * 0.14}s`, minHeight: fill ? undefined : 250 }}>
     <div className="kx-tk-h">
       <div style={{ flex: 1 }}>
         <Sk w={64} h={10} r={4} />
-        <Sk w={110} h={34} r={9} style={{ margin: '8px 0' }} />
+        <Sk w={90} h={24} r={7} style={{ margin: '6px 0' }} />
         <div style={{ display: 'flex', gap: 6 }}><Sk w={52} h={16} r={6} /><Sk w={44} h={16} r={6} /></div>
       </div>
-      <Sk w={66} h={66} r={33} />
+      <Sk w={50} h={50} r={25} />
     </div>
     <div style={{ padding: '4px 12px 8px 16px', display: 'flex', flexDirection: 'column', gap: 7, flex: 1 }}>
       {[0, 1, 2].map(i => (
         <div key={i} className="kx-it" style={{ cursor: 'default' }}>
-          <Sk w={40} h={40} r={12} />
+          <Sk w={30} h={30} r={9} />
           <div style={{ paddingTop: 3 }}><Sk w={`${58 + ((i * 17 + index * 9) % 30)}%`} h={14} r={4} style={{ marginBottom: 8 }} /><Sk w={`${26 + ((i * 11 + index * 7) % 20)}%`} h={9} r={3} /></div>
-          <Sk w={28} h={28} r={14} />
+          <Sk w={22} h={22} r={11} />
         </div>
       ))}
     </div>
-    <div className="kx-tk-f"><div className="row"><Sk w={50} h={50} r={15} /><Sk w={50} h={50} r={15} /><Sk w="100%" h={50} r={15} style={{ flex: 1 }} /></div></div>
+    <div className="kx-tk-f"><div className="row"><Sk w={40} h={40} r={12} /><Sk w={40} h={40} r={12} /><Sk w="100%" h={40} r={12} style={{ flex: 1 }} /></div></div>
   </div>
 );
 

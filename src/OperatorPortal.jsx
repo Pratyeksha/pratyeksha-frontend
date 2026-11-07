@@ -459,6 +459,9 @@ const [monthlySalaryRecords, setMonthlySalaryRecords] = useState([]); // per-mon
 const [salaryEditModal, setSalaryEditModal] = useState(null); // { staffId, name, currentSalary }
 const [salaryEditValue, setSalaryEditValue] = useState('');
 const [salaryEditPassword, setSalaryEditPassword] = useState('');
+const [payPrompt, setPayPrompt] = useState(null);      // staff salary payment waiting for the operator password
+const [payPassword, setPayPassword] = useState('');
+const [payBusy, setPayBusy] = useState(false);
 const storedTableCount = parseInt(localStorage.getItem('table_count'), 10) || 12; // value captured at login
 // The floor map, table pickers and staffing maths used ONLY the login-time value, so changing the number of tables (master admin /
 // onboarding) left every operator screen on the old count until they logged out and in. The live tenant config wins when loaded.
@@ -5665,7 +5668,7 @@ const renderMonthHeatmap = () => {
           style={{ width:'26px', height:'26px', borderRadius:'5px', border:'none', background:'transparent', color:'#d3bfa2', fontSize:'1rem', fontWeight:'900', cursor:'pointer', opacity:tablesBusy ? 0.4 : 1 }}>+</button>
       </div>
       <button type="button" onClick={releaseTableLock} title="Free a table whose ordering guest can no longer order"
-        style={{ padding:'7px 10px', borderRadius:'7px', border:'1px solid rgba(211,191,162,0.2)', background:'transparent', color:'#d3bfa2', fontSize:'0.52rem', fontWeight:'900', cursor:'pointer', letterSpacing:'0.5px' }}>UNLOCK TABLE</button>
+        style={{ padding:'7px 10px', borderRadius:'7px', border:'1px solid rgba(211,191,162,0.2)', background:'transparent', color:'#d3bfa2', fontSize:'0.59rem', fontWeight:'900', cursor:'pointer', letterSpacing:'0.5px' }}>UNLOCK TABLE</button>
       {joinMode && (
         <button type="button" onClick={confirmJoinTables}
           style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 12px', borderRadius:'7px', border:'1px solid rgba(236,220,185,0.35)', background:'rgba(236,220,185,0.1)', color:'#ecdcb9', fontSize:'0.58rem', fontWeight:'900', cursor:'pointer' }}>
@@ -5690,12 +5693,12 @@ const renderMonthHeatmap = () => {
   </div>
 
   {floorEditMode && (
-    <div style={{ fontSize:'0.55rem', color:'#b4b4b4', marginBottom:'10px', fontWeight:'700' }}>
+    <div style={{ fontSize:'0.62rem', color:'#b4b4b4', marginBottom:'10px', fontWeight:'700' }}>
       Drag tables to match your real floor plan, then tap Save Layout.
     </div>
   )}
   {joinMode && (
-    <div style={{ fontSize:'0.55rem', color:'#b4b4b4', marginBottom:'10px', fontWeight:'700' }}>
+    <div style={{ fontSize:'0.62rem', color:'#b4b4b4', marginBottom:'10px', fontWeight:'700' }}>
       Tap tables to select a party sitting across them, then tap Join.
     </div>
   )}
@@ -5769,7 +5772,7 @@ const renderMonthHeatmap = () => {
             </span>
           )}
           {t.seats > 0 && (
-            <span style={{ fontSize:'0.56rem', fontWeight:'800', color: colors.text, opacity:0.75, display:'flex', alignItems:'center', gap:'2px', marginTop:'2px' }}>
+            <span style={{ fontSize:'0.63rem', fontWeight:'800', color: colors.text, opacity:0.75, display:'flex', alignItems:'center', gap:'2px', marginTop:'2px' }}>
               <Users size={9}/> {t.seats}
             </span>
           )}
@@ -5780,7 +5783,7 @@ const renderMonthHeatmap = () => {
             <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} style={{ position:'absolute', bottom:-24, display:'flex', alignItems:'center', gap:'5px' }}>
               <button type="button" onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: Math.max(1, (o.seats||2)-1) } : o))}
                 style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', color:'#888', border:'1px solid rgba(211,191,162,0.16)', borderRadius:4, cursor:'pointer' }}>-</button>
-              <span style={{ fontSize:'0.55rem', color:'#888', fontWeight:800 }}>{t.seats || 2}</span>
+              <span style={{ fontSize:'0.62rem', color:'#888', fontWeight:800 }}>{t.seats || 2}</span>
               <button type="button" onClick={() => setLocalFloorLayout(prev => (prev || floorLayout).map(o => o.tableNumber === t.tableNumber ? { ...o, seats: (o.seats||2)+1 } : o))}
                 style={{ width:18, height:18, fontSize:'0.68rem', lineHeight:1, background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', color:'#888', border:'1px solid rgba(211,191,162,0.16)', borderRadius:4, cursor:'pointer' }}>+</button>
             </div>
@@ -5798,12 +5801,12 @@ const renderMonthHeatmap = () => {
     {Object.entries(ORDER_STATUS_RING).map(([status, color]) => (
       <div key={status} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
         <div style={{ width:'8px', height:'8px', borderRadius:'3px', border:`2px solid ${color}` }} />
-        <span style={{ fontSize:'0.48rem', color:'#b4b4b4', fontWeight:'700', textTransform:'capitalize' }}>{status}</span>
+        <span style={{ fontSize:'0.55rem', color:'#b4b4b4', fontWeight:'700', textTransform:'capitalize' }}>{status}</span>
       </div>
     ))}
     <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
       <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#e29a58' }} />
-      <span style={{ fontSize:'0.48rem', color:'#b4b4b4', fontWeight:'700' }}>Service call</span>
+      <span style={{ fontSize:'0.55rem', color:'#b4b4b4', fontWeight:'700' }}>Service call</span>
     </div>
   </div>
 </div>
@@ -6166,25 +6169,54 @@ const renderMonthHeatmap = () => {
       </div>
     </div>
 
+    {/* Queue summary strip */}
+    {(() => {
+      const now = Date.now();
+      const dineWaiting = waitlistEntries.length;
+      const longestMins = dineWaiting ? Math.max(...waitlistEntries.map(e => Math.floor((now - new Date(e.createdAt)) / 60000))) : 0;
+      const inKitchen = pickupEntries.filter(e => e.kitchenFired && e.status !== 'pickup-ready').length;
+      const readyPickup = pickupEntries.filter(e => e.status === 'pickup-ready').length;
+      const resPending = reservationEntries.filter(r => r.status === 'pending').length;
+      const covers = reservationEntries.filter(r => ['pending', 'confirmed'].includes(r.status)).reduce((n, r) => n + (Number(r.partySize) || 0), 0);
+      const tile = (label, value, sub, strong) => (
+        <div style={{ flex: 1, minWidth: '130px', padding: '13px 15px', borderRadius: '14px', background: strong ? 'linear-gradient(160deg, rgba(211,191,162,0.14), rgba(211,191,162,0.03))' : 'linear-gradient(165deg,#17181c 0%,#0e0f12 100%)',
+          border: `1px solid ${strong ? 'rgba(211,191,162,0.32)' : 'rgba(211,191,162,0.09)'}`, boxShadow: '0 12px 26px rgba(0,0,0,0.3)' }}>
+          <div style={{ fontSize: '0.64rem', letterSpacing: '1.6px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' }}>{label}</div>
+          <div style={{ marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontFamily: 'monospace', fontSize: '1.35rem', fontWeight: '900', color: strong ? '#d3bfa2' : '#f0ebe0' }}>{value}</span>
+            {sub && <span style={{ fontSize: '0.6rem', color: '#8a8a8a', fontWeight: '700' }}>{sub}</span>}
+          </div>
+        </div>
+      );
+      return (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', padding: '16px 20px 0' }}>
+          {tile('Dine-in waiting', dineWaiting, longestMins ? `longest ${formatDuration(longestMins)}` : 'none', dineWaiting > 0)}
+          {tile('Pickups in kitchen', inKitchen, 'preparing', false)}
+          {tile('Ready for pickup', readyPickup, 'collect now', readyPickup > 0)}
+          {tile('Reservations', resPending, 'to confirm', resPending > 0)}
+          {tile('Expected covers', covers, 'today', false)}
+        </div>
+      );
+    })()}
     {/* Tab bar + Search */}
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderBottom: '1px solid rgba(211,191,162,0.04)' }}>
       <div style={{ display: 'flex' }}>
         {[
-          { id: 'waitlist',     label: 'DINE-IN',      icon: <UserCheck size={11} />,    count: waitlistEntries.length },
-          { id: 'pickup',       label: 'PICKUP',        icon: <ShoppingBag size={11} />,  count: pickupEntries.length },
-          { id: 'reservations', label: 'RESERVATIONS',  icon: <CalendarClock size={11} />, count: reservationEntries.filter(r => r.status === 'pending').length },
+          { id: 'waitlist',     label: 'Dine-in',      icon: <UserCheck size={11} />,    count: waitlistEntries.length },
+          { id: 'pickup',       label: 'Pickup',        icon: <ShoppingBag size={11} />,  count: pickupEntries.length },
+          { id: 'reservations', label: 'Reservations',  icon: <CalendarClock size={11} />, count: reservationEntries.filter(r => r.status === 'pending').length },
         ].map(tab => (
           <button type="button" key={tab.id} onClick={() => { setQueueTab(tab.id); setQueueSearch(''); }} style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '12px 14px', background: 'transparent', border: 'none',
-            cursor: 'pointer', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '1px',
+            padding: '14px 16px', background: 'transparent', border: 'none',
+            cursor: 'pointer', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.4px',
             color: queueTab === tab.id ? '#d3bfa2' : '#969696',
-            borderBottom: `2px solid ${queueTab === tab.id ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
+            borderBottom: `2px solid ${queueTab === tab.id ? '#B8923A' : 'transparent'}`,
             transition: 'all 0.15s', marginBottom: '-1px'
           }}>
             <span style={{ color: queueTab === tab.id ? '#8a704d' : '#0c0c0c' }}>{tab.icon}</span>
             {tab.label}
-            <span style={{ fontSize: '0.48rem', padding: '1px 5px', borderRadius: '8px', fontWeight: '900', fontFamily: 'monospace', background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.03)') : '#0f0f0f', color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#969696') : '#0c0c0c', border: tab.count > 0 ? '1px solid rgba(211,191,162,0.08)' : '1px solid rgba(211,191,162,0.12)' }}>
+            <span style={{ fontSize: '0.56rem', padding: '1px 5px', borderRadius: '8px', fontWeight: '900', fontFamily: 'monospace', background: tab.count > 0 ? (queueTab === tab.id ? 'rgba(211,191,162,0.1)' : 'rgba(211,191,162,0.03)') : '#0f0f0f', color: tab.count > 0 ? (queueTab === tab.id ? '#d3bfa2' : '#969696') : '#0c0c0c', border: tab.count > 0 ? '1px solid rgba(211,191,162,0.08)' : '1px solid rgba(211,191,162,0.12)' }}>
               {tab.count}
             </span>
           </button>
@@ -6192,8 +6224,8 @@ const renderMonthHeatmap = () => {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: '#070707', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '8px', padding: '6px 11px', margin: '7px 0' }}>
         <Search size={10} color="#969696" />
-        <input type="text" placeholder="Search name..." value={queueSearch} onChange={e => setQueueSearch(e.target.value)}
-          style={{ background: 'transparent', border: 'none', color: '#c8c0b0', outline: 'none', fontSize: '0.64rem', width: '130px' }} />
+        <input type="text" placeholder="Search name or phone" value={queueSearch} onChange={e => setQueueSearch(e.target.value)}
+          style={{ background: 'transparent', border: 'none', color: '#B4B4B4', outline: 'none', fontSize: '0.74rem', width: '200px' }} />
         {queueSearch && (
           <button type="button" onClick={() => setQueueSearch('')} style={{ background: 'transparent', border: 'none', color: '#969696', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <X size={10} />
@@ -6203,7 +6235,7 @@ const renderMonthHeatmap = () => {
     </div>
 
     {/* Queue content */}
-    <div style={{ padding: '16px 20px 20px' }}>
+    <div style={{ padding: '18px 20px 24px', textAlign: 'left' }}>
 
       {/* ══ DINE-IN WAITLIST ══ */}
       {queueTab === 'waitlist' && (() => {
@@ -6216,12 +6248,12 @@ const renderMonthHeatmap = () => {
             <div style={{ fontSize: '0.68rem', color: '#8a8a8a', fontWeight: '700', letterSpacing: '0.3px' }}>
               {queueSearch ? `No results for "${queueSearch}"` : 'No one in the waitlist'}
             </div>
-            <div style={{ fontSize: '0.56rem', color: '#8a8a8a', marginTop: '5px' }}>
+            <div style={{ fontSize: '0.64rem', color: '#8a8a8a', marginTop: '5px' }}>
               {!queueSearch && 'Customers joining from the counter page appear here'}
             </div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }} className="p-queue-grid">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }} className="p-queue-grid">
             {filtered.map(entry => {
               const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
               const urgency = waitMins > 60 ? 'critical' : waitMins > 30 ? 'high' : waitMins > 15 ? 'medium' : 'low';
@@ -6229,7 +6261,7 @@ const renderMonthHeatmap = () => {
               const accentText = { critical: '#d3bfa2', high: '#8a704d', medium: '#6a5a3a', low: '#3a3228' }[urgency];
 
               return (
-                <div key={entry._id} style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderRadius: '14px', border: `1px solid ${urgency === 'critical' ? 'rgba(211,191,162,0.12)' : 'rgba(211,191,162,0.12)'}`, borderTop: `2px solid ${accentTop}`, overflow: 'hidden' }}>
+                <div key={entry._id} style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderRadius: '18px', boxShadow: '0 16px 34px rgba(0,0,0,0.35)', border: `1px solid ${urgency === 'critical' ? 'rgba(211,191,162,0.12)' : 'rgba(211,191,162,0.12)'}`, borderTop: `2px solid ${accentTop}`, overflow: 'hidden' }}>
 
                   {/* Card header */}
                   <div style={{ padding: '13px 15px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -6239,11 +6271,11 @@ const renderMonthHeatmap = () => {
                         <span style={{ fontSize: '0.6rem', fontWeight: '900', color: accentText, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
                       </div>
                       <div>
-                        <div style={{ fontWeight: '900', fontSize: '0.84rem', color: '#e8e0d0', letterSpacing: '0.2px' }}>{entry.customerName}</div>
+                        <div style={{ fontWeight: '900', fontSize: '0.95rem', color: '#ECDCB9', letterSpacing: '0.2px' }}>{entry.customerName}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
                           <Users size={9} color="#969696" />
-                          <span style={{ fontSize: '0.56rem', color: '#a6a6a6', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
-                          {entry.customerPhone && <span style={{ fontSize: '0.54rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                          <span style={{ fontSize: '0.64rem', color: '#a6a6a6', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
+                          {entry.customerPhone && <span style={{ fontSize: '0.62rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                         </div>
                       </div>
                     </div>
@@ -6259,7 +6291,7 @@ const renderMonthHeatmap = () => {
                     <div style={{ margin: '0 15px 10px', padding: '8px 10px', background: '#070707', borderRadius: '9px', border: '1px solid rgba(211,191,162,0.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
                         <UtensilsCrossed size={8} color="#969696" />
-                        <span style={{ fontSize: '0.46rem', color: '#969696', fontWeight: '900', letterSpacing: '1.2px', textTransform: 'uppercase' }}>Pre-order</span>
+                        <span style={{ fontSize: '0.54rem', color: '#969696', fontWeight: '900', letterSpacing: '1.2px', textTransform: 'uppercase' }}>Pre-order</span>
                         <span style={{ marginLeft: 'auto', fontSize: '0.62rem', fontWeight: '900', color: '#8a704d', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</span>
                       </div>
                       <div style={{ fontSize: '0.61rem', color: '#b4b4b4', lineHeight: 1.55 }}>
@@ -6293,7 +6325,7 @@ const renderMonthHeatmap = () => {
                     </div>
                     {/* Re-notify */}
                     <button type="button" onClick={async () => { try { await axios.post(`${BASE_URL}/waitlist/${entry._id}/notify`, { title: 'Almost ready!', body: `Hi ${entry.customerName}! Your table will be ready soon. Please stay nearby.`, tenantId }); showNotif(`${entry.customerName} — notified`); } catch { showNotif('Notification failed', 'error'); } }}
-                      style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid rgba(211,191,162,0.07)', color: '#969696', borderRadius: '8px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s' }}
+                      style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid rgba(211,191,162,0.07)', color: '#969696', borderRadius: '8px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.2)'; e.currentTarget.style.color = '#8a704d'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.07)'; e.currentTarget.style.color = '#969696'; }}>
                       <BellRing size={10} /> NOTIFY CUSTOMER
@@ -6330,7 +6362,7 @@ const renderMonthHeatmap = () => {
               const stepColors = ['rgba(211,191,162,0.2)', 'rgba(138,112,77,0.5)', 'rgba(211,191,162,0.8)'];
 
               return (
-                <div key={entry._id} style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderRadius: '14px', border: `1px solid ${isReady ? 'rgba(211,191,162,0.2)' : 'rgba(211,191,162,0.12)'}`, borderLeft: `3px solid ${stepColors[step]}`, overflow: 'hidden' }}>
+                <div key={entry._id} style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderRadius: '18px', boxShadow: '0 16px 34px rgba(0,0,0,0.35)', border: `1px solid ${isReady ? 'rgba(211,191,162,0.2)' : 'rgba(211,191,162,0.12)'}`, borderLeft: `3px solid ${stepColors[step]}`, overflow: 'hidden' }}>
                   <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                     {/* Customer info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -6338,8 +6370,8 @@ const renderMonthHeatmap = () => {
                         <div style={{ width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <ShoppingBag size={11} color="#8a704d" />
                         </div>
-                        <span style={{ fontWeight: '900', fontSize: '0.84rem', color: '#e8e0d0' }}>{entry.customerName}</span>
-                        {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                        <span style={{ fontWeight: '900', fontSize: '0.95rem', color: '#ECDCB9' }}>{entry.customerName}</span>
+                        {entry.customerPhone && <span style={{ fontSize: '0.64rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                       </div>
 
                       {/* Items */}
@@ -6404,7 +6436,7 @@ const renderMonthHeatmap = () => {
                     {/* Right: Amount + settle */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.46rem', color: '#969696', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
+                        <div style={{ fontSize: '0.54rem', color: '#969696', fontWeight: '900', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '3px' }}>AMOUNT</div>
                         <div style={{ fontSize: '1.05rem', fontWeight: '900', color: '#d3bfa2', fontFamily: 'monospace' }}>₹{entry.totalAmount?.toLocaleString()}</div>
                       </div>
                       <button type="button" onClick={() => {
@@ -6596,7 +6628,7 @@ const renderMonthHeatmap = () => {
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.16)'; e.currentTarget.style.color = '#a6a6a6'; }}>
                   <ChevronRight size={13} />
                 </button>
-                <button type="button" onClick={() => { const d = new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */; setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.56rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
+                <button type="button" onClick={() => { const d = new Date(Date.now() + 330 * 60000) /* IST wall-clock as UTC fields: re-parsing toLocaleString as local time gave yesterday's date 00:00-05:30 IST */; setReservationViewDate(d.toISOString().split('T')[0]); }} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '8px', fontSize: '0.64rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; }}>
                   TODAY
@@ -6617,7 +6649,7 @@ const renderMonthHeatmap = () => {
                 ].map(s => (
                   <div key={s.label} style={{ textAlign: 'center', padding: '7px 12px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.06)', borderRadius: '10px' }}>
                     <div style={{ fontSize: '1rem', fontWeight: '900', color: s.c, fontFamily: 'monospace', lineHeight: 1 }}>{s.val}</div>
-                    <div style={{ fontSize: '0.46rem', color: '#969696', fontWeight: '900', marginTop: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' }}>{s.label}</div>
+                    <div style={{ fontSize: '0.54rem', color: '#969696', fontWeight: '900', marginTop: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' }}>{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -6667,24 +6699,24 @@ const renderMonthHeatmap = () => {
 
                           {/* Guest details */}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#e8e0d0', marginBottom: '4px' }}>{entry.customerName}</div>
+                            <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#ECDCB9', marginBottom: '4px' }}>{entry.customerName}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Users size={9} color="#969696" />
                                 <span style={{ fontSize: '0.58rem', color: '#a6a6a6', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
                               </div>
-                              {entry.customerPhone && <span style={{ fontSize: '0.56rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
+                              {entry.customerPhone && <span style={{ fontSize: '0.64rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                               {entry.tablePreference && (
-                                <span style={{ fontSize: '0.52rem', padding: '1px 6px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '4px', color: '#8a704d', fontWeight: '800' }}>T-{entry.tablePreference}</span>
+                                <span style={{ fontSize: '0.60rem', padding: '1px 6px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.1)', borderRadius: '4px', color: '#8a704d', fontWeight: '800' }}>T-{entry.tablePreference}</span>
                               )}
                             </div>
                             {entry.specialRequests && (
-                              <div style={{ fontSize: '0.56rem', color: '#a6a6a6', fontStyle: 'italic', background: '#070707', padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(211,191,162,0.04)', marginBottom: '6px' }}>
+                              <div style={{ fontSize: '0.64rem', color: '#a6a6a6', fontStyle: 'italic', background: '#070707', padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(211,191,162,0.04)', marginBottom: '6px' }}>
                                 "{entry.specialRequests}"
                               </div>
                             )}
                             {entry.items?.length > 0 && (
-                              <div style={{ fontSize: '0.56rem', color: '#b4b4b4' }}>
+                              <div style={{ fontSize: '0.64rem', color: '#b4b4b4' }}>
                                 Pre-order: {entry.items.slice(0, 2).map(it => `${it.quantity}× ${it.name}`).join(' · ')}{entry.items.length > 2 ? ` +${entry.items.length - 2}` : ''}
                               </div>
                             )}
@@ -6692,31 +6724,31 @@ const renderMonthHeatmap = () => {
                         </div>
 
                         {/* Right: status + actions */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '7px', flexShrink: 0 }}>
-                          <span style={{ fontSize: '0.5rem', fontWeight: '900', padding: '3px 8px', borderRadius: '6px', background: `${sm.color}15`, color: sm.color, border: `1px solid ${sm.color}30`, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(104px, auto))', justifyContent: 'end', gap: '7px', flexShrink: 0, maxWidth: '240px' }}>
+                          <span style={{ gridColumn: '1 / -1', justifySelf: 'end', fontSize: '0.5rem', fontWeight: '900', padding: '3px 8px', borderRadius: '6px', background: `${sm.color}15`, color: sm.color, border: `1px solid ${sm.color}30`, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
                             {sm.label}
                           </span>
 
                           {/* Action row */}
-                          <div style={{ display: 'flex', gap: '5px' }}>
+                          <div style={{ display: 'flex', gap: '5px', gridColumn: '1 / -1', justifyContent: 'flex-end' }}>
                             {/* Confirm */}
                             {entry.status === 'pending' && (
                               <button type="button" onClick={async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'confirmed', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — confirmed`); } catch (err) { showNotif(err.response?.data?.error || 'Could not confirm reservation', 'error'); } }}
-                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0c0c0c', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
+                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0c0c0c', borderRadius: '7px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.3px' }}>
                                 CONFIRM
                               </button>
                             )}
                             {/* Seat */}
                             {entry.status === 'confirmed' && (
                               <button type="button" onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0c0c0c', borderRadius: '7px', fontSize: '0.54rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                style={{ padding: '6px 11px', background: 'linear-gradient(135deg,#d3bfa2,#bda88a)', border: 'none', color: '#0c0c0c', borderRadius: '7px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                 <TableProperties size={10} /> SEAT
                               </button>
                             )}
                             {/* Change table */}
                             {entry.status === 'seated' && (
                               <button type="button" onClick={() => setAssignTableModal({ ...entry, _fromReservation: true })}
-                                style={{ padding: '5px 9px', background: 'transparent', border: '1px solid rgba(211,191,162,0.16)', color: '#a6a6a6', borderRadius: '7px', fontSize: '0.52rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
+                                style={{ padding: '5px 9px', background: 'transparent', border: '1px solid rgba(211,191,162,0.16)', color: '#a6a6a6', borderRadius: '7px', fontSize: '0.60rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.25)'; e.currentTarget.style.color = '#d3bfa2'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.16)'; e.currentTarget.style.color = '#a6a6a6'; }}>
                                 <TableProperties size={9} /> CHANGE T
@@ -6742,7 +6774,7 @@ const renderMonthHeatmap = () => {
 
                           {/* Cancel + Notify — stacked */}
                           {['pending', 'confirmed'].includes(entry.status) && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                            <div style={{ display: 'flex', flexDirection: 'row', gap: '5px', gridColumn: '1 / -1', width: '100%' }}>
                               <button type="button" onClick={() => setConfirmModal({ show: true, title: `Cancel Reservation — ${entry.customerName}?`, subtitle: `${entry.partySize} pax · ${resTime.toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })} · Cannot be undone.`, onConfirm: async () => { try { await axios.patch(`${BASE_URL}/reservations/${entry._id}`, { status: 'cancelled', tenantId }); fetchCounterQueue(); showNotif(`${entry.customerName} — reservation cancelled`); } catch (err) { showNotif(err.response?.data?.error || 'Cancel failed', 'error'); } } })}
                                 style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(211,191,162,0.12)', color: '#8a8a8a', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.15)'; e.currentTarget.style.color = '#8a704d'; }}
@@ -7253,315 +7285,315 @@ const renderMonthHeatmap = () => {
   </motion.div>
 )}
 
-{activeTab === 'customers' && (
-  <motion.div key="customers" initial={false} animate={{opacity:1}} style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+{activeTab === 'customers' && (() => {
+  /* ── Premium palette: obsidian, brass, ivory (no red / green / blue) ── */
+  const P = {
+    gold: '#B8923A', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
+    line: 'rgba(211,191,162,0.14)', lineSoft: 'rgba(255,255,255,0.05)',
+    panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+    well: '#070707',
+    mono: "ui-monospace, Consolas, monospace",
+    serif: "inherit",
+  };
+  const SEG = {
+    all:       { label: 'All',      color: P.brass, bg: 'rgba(211,191,162,0.10)' },
+    new:       { label: 'New',      color: P.ivory, bg: 'rgba(240,237,232,0.07)' },
+    regular:   { label: 'Regular',  color: P.muted, bg: 'rgba(143,138,128,0.12)' },
+    loyal:     { label: 'Loyal',    color: P.gold,  bg: 'rgba(211,191,162,0.14)' },
+    'at-risk': { label: 'At risk',  color: '#8A704D', bg: 'rgba(168,134,74,0.14)' },
+    champion:  { label: 'Champion', color: P.brass, bg: 'rgba(211,191,162,0.20)' },
+  };
+  const SEG_ICON = { new: UserCheck, regular: User, loyal: Star, 'at-risk': AlertCircle, champion: Crown };
+  const seg = (k) => SEG[k] || SEG.regular;
+  const segIcon = (k, size) => { const I = SEG_ICON[k]; return I ? <I size={size} /> : null; };
+  const initials = (name) => (String(name || 'Guest').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2) || 'G').toUpperCase();
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const lastSeen = (d) => {
+    if (d === null || d === undefined || Number.isNaN(Number(d))) return { text: 'No visits yet', alert: false };
+    const days = Number(d);
+    if (days > 365) return { text: 'Over a year ago', alert: true };
+    if (days === 0) return { text: 'Today', alert: false };
+    return { text: `${days} day${days === 1 ? '' : 's'} ago`, alert: days > 21 };
+  };
+  const sum = customerDir.summary || {};
+  const rows = customerDir.customers || [];
+  const kpis = [
+    { key: 'all',      label: 'Total guests', val: sum.total || 0 },
+    { key: 'new',      label: 'New',          val: sum.new || 0 },
+    { key: 'regular',  label: 'Regular',      val: sum.regular || 0 },
+    { key: 'loyal',    label: 'Loyal',        val: sum.loyal || 0 },
+    { key: 'at-risk',  label: 'At risk',      val: sum.atRisk || 0 },
+    { key: 'champion', label: 'Champions',    val: sum.champion || 0 },
+  ];
+  const avgPerGuest = sum.total > 0 ? Math.round((sum.totalRevenue || 0) / sum.total) : 0;
+  const segLabel = SEG[customerSegFilter]?.label || 'All';
+  const pickSegment = (k) => { setCustomerSegFilter(k); fetchCustomerDir(k, customerSearch); };
+  const profileDishes = customerProfile?.allDishes || [];
+  const topDishCount = Math.max(1, ...profileDishes.slice(0, 5).map(d => Number(d.count) || 0));
+  const cols = '2.2fr 1.1fr 0.8fr 1.1fr 1fr 1.2fr 1.4fr';
 
-    {/* ── SUMMARY STRIP ── */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'12px'}}>
-      {[
-        { label:'TOTAL CUSTOMERS', val: customerDir.summary?.total    || 0, color:'#d3bfa2' },
-        { label:'NEW',             val: customerDir.summary?.new      || 0, color:'#ecdcb9' },
-        { label:'REGULAR',         val: customerDir.summary?.regular  || 0, color:'#8a704d' },
-        { label:'LOYAL',           val: customerDir.summary?.loyal    || 0, color:'#C9A84C' },
-        { label:'AT-RISK',         val: customerDir.summary?.atRisk   || 0, color:'#b8923a' },
-        { label:'CHAMPION',        val: customerDir.summary?.champion || 0, color:'#d3bfa2' },
-      ].map(({label,val,color}) => (
-        <div key={label} style={{
-          background:'linear-gradient(165deg, #101010 0%, #0d0d0d 100%)', border:'1px solid rgba(255,255,255,0.06)',
-          borderTop:`2px solid ${color}`, borderRadius:'12px',
-          padding:'14px 14px 12px', boxShadow:'0 6px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.02)'
-        }}>
-          <div style={{fontSize:'1.4rem',fontWeight:'900',color,fontFamily:'monospace'}}>{val}</div>
-          <div style={{fontSize:'0.5rem',color:'#b4b4b4',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
-        </div>
-      ))}
-    </div>
+  return (
+    <motion.div key="customers" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%', maxWidth: '1180px', margin: '0 auto', paddingBottom: '100px', textAlign: 'left' }}>
 
-    {/* ── LIFETIME REVENUE ── */}
-    <div style={{
-      background:'linear-gradient(165deg, rgba(211,191,162,0.07) 0%, rgba(211,191,162,0.02) 100%)', border:'1px solid rgba(211,191,162,0.18)',
-      borderRadius:'14px', padding:'20px 24px',
-      display:'flex', alignItems:'center', justifyContent:'space-between',
-      boxShadow:'0 10px 28px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03)'
-    }}>
-      <div>
-        <div style={{fontSize:'0.55rem',color:'#b4b4b4',fontWeight:'900',letterSpacing:'2px',marginBottom:'4px'}}>LIFETIME CUSTOMER REVENUE</div>
-        <div style={{fontSize:'2rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>
-          ₹{(customerDir.summary?.totalRevenue || 0).toLocaleString()}
+      {/* ── HEADER ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: '10px', letterSpacing: '2.4px', textTransform: 'uppercase', color: P.gold, fontWeight: 800 }}>Guest intelligence</div>
+          <div style={{ marginTop: '4px', fontSize: '12px', color: P.muted }}>Segments, visit history and lifetime value</div>
         </div>
-      </div>
-      <div style={{textAlign:'right'}}>
-        <div style={{fontSize:'0.58rem',color:'#a6a6a6',fontStyle:'italic'}}>
-          Avg ₹{customerDir.summary?.total > 0 ? Math.round((customerDir.summary?.totalRevenue||0)/customerDir.summary.total).toLocaleString() : 0} per customer
-        </div>
-        <button type="button"
-          onClick={() => fetchCustomerDir(customerSegFilter, customerSearch)}
-          style={{
-            marginTop:'8px', display:'flex', alignItems:'center', gap:'6px',
-            background:'transparent', border:'1px solid rgba(211,191,162,0.2)',
-            color:'#d3bfa2', padding:'6px 12px', borderRadius:'8px',
-            cursor:'pointer', fontSize:'0.62rem', fontWeight:'900'
-          }}
-        >
-          <RefreshCw size={12}/> REFRESH
+        <button type="button" onClick={() => fetchCustomerDir(customerSegFilter, customerSearch)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '10px',
+            background: 'transparent', border: `1px solid ${P.line}`, color: P.brass, cursor: 'pointer', fontSize: '11px', fontWeight: 800, letterSpacing: '1px' }}>
+          <RefreshCw size={13} /> REFRESH
         </button>
       </div>
-    </div>
 
-    {/* ── SEGMENT PILLS + SEARCH ── */}
-    <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-      {Object.entries(SEG_META).map(([seg, meta]) => (
-        <button type="button"
-          key={seg}
-          onClick={() => { setCustomerSegFilter(seg); fetchCustomerDir(seg, customerSearch); }}
-          style={{
-            display:'flex', alignItems:'center', gap:'5px',
-            padding:'7px 14px', borderRadius:'20px', border:'none',
-            cursor:'pointer', fontWeight:'900', fontSize:'0.62rem',
-            letterSpacing:'1px', textTransform:'uppercase', transition:'all 0.15s',
-            background: customerSegFilter === seg ? meta.color : '#121212',
-            color:      customerSegFilter === seg ? '#0c0c0c'  : meta.color,
-            boxShadow:  customerSegFilter === seg ? `0 0 12px ${meta.color}40` : 'none',
-          }}
-        >
-          {seg !== 'all' && SEG_ICONS_COMPONENT[seg]}
-          {meta.label}
-        </button>
-      ))}
-      {/* Search */}
-      <div style={{flex:1, position:'relative', minWidth:'200px'}}>
-        <Search size={13} color="#b4b4b4" style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)'}}/>
-        <input
-          value={customerSearch}
-          onChange={e => {
-            const v = e.target.value;
-            setCustomerSearch(v);
-            // one request per keystroke hammered the directory endpoint (300 rows each); wait for a short pause in typing
-            if (customerSearchTimer.current) clearTimeout(customerSearchTimer.current);
-            customerSearchTimer.current = setTimeout(() => fetchCustomerDir(customerSegFilter, v), 300);
-          }}
-          placeholder="Search name or phone..."
-          style={{
-            width:'100%', padding:'9px 12px 9px 34px',
-            background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border:'1px solid rgba(211,191,162,0.24)',
-            borderRadius:'8px', color:'#fff', fontSize:'0.78rem', outline:'none'
-          }}
-        />
-      </div>
-    </div>
-
-    {/* ── CUSTOMER TABLE ── */}
-    {customerLoading ? (
-      <SkelTable rows={8} cols={5} label="Loading customers" />
-    ) : (
-      <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',borderRadius:'14px',overflow:'hidden'}}>
-        {/* Header */}
-        <div style={{
-          display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 1fr 1fr',
-          padding:'10px 16px', borderBottom:'1px solid rgba(211,191,162,0.16)', background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909'
-        }}>
-          {['CUSTOMER','SEGMENT','VISITS','TOTAL SPENT','AVG ORDER','LAST SEEN','TOP DISH'].map(h => (
-            <div key={h} style={{fontSize:'0.5rem',color:'#a6a6a6',fontWeight:'900',letterSpacing:'1.5px'}}>{h}</div>
-          ))}
+      {/* ── LIFETIME VALUE HERO ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: '14px' }}>
+        <div style={{ background: 'linear-gradient(150deg, rgba(211,191,162,0.16) 0%, rgba(211,191,162,0.03) 60%, #090909 100%)',
+          border: `1px solid ${P.line}`, borderRadius: '18px', padding: '24px 26px', boxShadow: '0 18px 40px rgba(0,0,0,0.35)' }}>
+          <div style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>Lifetime guest revenue</div>
+          <div style={{ marginTop: '10px', fontFamily: P.mono, fontSize: '34px', fontWeight: 800, color: P.brass, letterSpacing: '-0.5px' }}>
+            {money(sum.totalRevenue)}
+          </div>
+          <div style={{ marginTop: '6px', fontSize: '12px', color: P.muted }}>
+            Average {money(avgPerGuest)} per guest across {sum.total || 0} {sum.total === 1 ? 'profile' : 'profiles'}
+          </div>
         </div>
-        {/* Rows */}
-        <div style={{maxHeight:'480px',overflowY:'auto'}} className="custom-scroll">
-          {(customerDir.customers || []).length === 0 ? (
-            <div style={{padding:'48px',textAlign:'center',color:'#969696',fontSize:'0.78rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'12px'}}>
-              <Users size={32} color="rgba(211,191,162,0.24)"/>
-              No customers found
-            </div>
-          ) : (customerDir.customers || []).map((c, i) => {
-            const meta = SEG_META[c.segment] || SEG_META.regular;
+        <div style={{ background: P.panel, border: `1px solid ${P.lineSoft}`, borderRadius: '18px', padding: '22px 24px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '10px' }}>
+          <div style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>Showing</div>
+          <div style={{ fontFamily: P.serif, fontSize: '20px', color: P.ivory }}>{segLabel} guests</div>
+          <div style={{ fontSize: '12px', color: P.muted }}>
+            {rows.length} {rows.length === 1 ? 'result' : 'results'}{customerSearch ? ` matching "${customerSearch}"` : ''}
+          </div>
+        </div>
+      </div>
+
+      {/* ── SEGMENT TILES (click to filter) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: '10px' }}>
+        {kpis.map(k => {
+          const active = customerSegFilter === k.key;
+          const t = seg(k.key);
+          return (
+            <button type="button" key={k.key} onClick={() => pickSegment(k.key)}
+              style={{ textAlign: 'left', cursor: 'pointer', padding: '14px 14px 12px', borderRadius: '14px',
+                background: active ? 'linear-gradient(160deg, rgba(211,191,162,0.18), rgba(211,191,162,0.05))' : P.panel,
+                border: `1px solid ${active ? 'rgba(211,191,162,0.45)' : P.lineSoft}`,
+                boxShadow: active ? '0 10px 26px rgba(211,191,162,0.10)' : '0 8px 18px rgba(0,0,0,0.25)', transition: 'all .18s ease' }}>
+              <div style={{ fontFamily: P.mono, fontSize: '22px', fontWeight: 800, color: active ? P.brass : t.color }}>{k.val}</div>
+              <div style={{ marginTop: '4px', fontSize: '10px', letterSpacing: '1.2px', textTransform: 'uppercase', color: active ? P.ivory : P.muted, fontWeight: 700 }}>{k.label}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── TOOLBAR ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {Object.entries(SEG).map(([k, meta]) => {
+            const on = customerSegFilter === k;
             return (
-              <div
-                key={c._id}
-                onClick={() => fetchCustomerProfile(c.phone)}
-                style={{
-                  display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1fr 1fr 1fr',
-                  padding:'12px 16px', cursor:'pointer',
-                  borderBottom:'1px solid rgba(255,255,255,0.03)',
-                  transition:'background 0.15s',
-                  background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.04)'}
-                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'}
-              >
-                {/* Name + phone */}
-                <div>
-                  <div style={{display:'flex',alignItems:'center',gap:'6px',fontWeight:'800',fontSize:'0.82rem',color:'#fff'}}>
-                    {c.segment === 'champion' && <Crown size={12} color="#C9A84C"/>}
-                    {c.name}
-                  </div>
-                  <div style={{fontSize:'0.6rem',color:'#b4b4b4',marginTop:'2px',fontFamily:'monospace'}}>{c.phone}</div>
-                </div>
-                {/* Segment */}
-                <div style={{display:'flex',alignItems:'center'}}>
-                  <span style={{
-                    display:'inline-flex', alignItems:'center', gap:'4px',
-                    fontSize:'0.52rem', fontWeight:'900', padding:'3px 9px',
-                    borderRadius:'10px', background:meta.bg, color:meta.color,
-                    border:`1px solid ${meta.color}33`, letterSpacing:'0.5px'
-                  }}>
-                    {SEG_ICONS_COMPONENT[c.segment]}
-                    {meta.label}
-                  </span>
-                </div>
-                {/* Visits */}
-                <div style={{display:'flex',alignItems:'center'}}>
-                  <span style={{fontSize:'0.88rem',fontWeight:'800',color:'#d3bfa2',fontFamily:'monospace'}}>{c.visitCount}</span>
-                </div>
-                {/* Spend */}
-                <div style={{display:'flex',alignItems:'center'}}>
-                  <span style={{fontSize:'0.88rem',fontWeight:'800',color:'#d3bfa2',fontFamily:'monospace'}}>₹{c.totalSpend?.toLocaleString()}</span>
-                </div>
-                {/* Avg */}
-                <div style={{display:'flex',alignItems:'center'}}>
-                  <span style={{fontSize:'0.82rem',color:'#8a704d',fontFamily:'monospace'}}>₹{c.avgOrderValue?.toLocaleString()}</span>
-                </div>
-                {/* Last seen */}
-                <div style={{display:'flex',alignItems:'center'}}>
-                  <span style={{fontSize:'0.72rem',color:c.daysSinceVisit > 21 ? '#b8923a' : '#c2c2c2'}}>
-                    {c.daysSinceVisit > 365 ? 'Long ago' : `${c.daysSinceVisit}d ago`}
-                  </span>
-                </div>
-                {/* Top dish */}
-                <div style={{display:'flex',alignItems:'center',overflow:'hidden'}}>
-                  <span style={{fontSize:'0.68rem',color:'#c2c2c2',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.topDish || '—'}</span>
-                </div>
-              </div>
+              <button type="button" key={k} onClick={() => pickSegment(k)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 13px', borderRadius: '999px', cursor: 'pointer',
+                  border: `1px solid ${on ? P.gold : 'rgba(255,255,255,0.06)'}`, background: on ? P.gold : P.well,
+                  color: on ? '#0c0c0c' : P.muted, fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                {k !== 'all' && segIcon(k, 11)}
+                {meta.label}
+              </button>
             );
           })}
         </div>
-      </div>
-    )}
-
-    {/* ── CUSTOMER PROFILE DRAWER ── */}
-    <AnimatePresence>
-      {customerProfile && (
-        <>
-          <motion.div
-            initial={false} animate={{opacity:0.6}}
-            onClick={() => setCustomerProfile(null)}
-            style={{position:'fixed',inset:0,background:'#070707',zIndex:3000}}
-          />
-          <motion.div
-            initial={false} animate={{x:0}}
-            transition={{type:'spring',stiffness:300,damping:32}}
-            style={{
-              position:'fixed',right:0,top:0,bottom:0,width:'420px',
-              background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border:'1px solid rgba(211,191,162,0.24)',
-              borderRadius:'20px 0 0 20px', zIndex:3001,
-              display:'flex', flexDirection:'column', overflow:'hidden'
+        <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
+          <Search size={14} color={P.muted} style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)' }} />
+          <input value={customerSearch} placeholder="Search by name or phone"
+            onChange={e => {
+              const v = e.target.value;
+              setCustomerSearch(v);
+              // Debounced: one directory request after typing pauses, not one per keystroke.
+              if (customerSearchTimer.current) clearTimeout(customerSearchTimer.current);
+              customerSearchTimer.current = setTimeout(() => fetchCustomerDir(customerSegFilter, v), 300);
             }}
-          >
-            {/* Drawer header */}
-            <div style={{padding:'20px 24px',borderBottom:'1px solid rgba(211,191,162,0.16)',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <div>
-                  <div style={{fontSize:'1.1rem',fontWeight:'900',color:'#fff'}}>
-                    {customerProfile.customer?.name || 'Guest'}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 36px 10px 38px', background: P.well, border: `1px solid ${P.line}`,
+              borderRadius: '11px', color: P.ivory, fontSize: '13px', outline: 'none', fontFamily: 'inherit' }} />
+          {customerSearch && (
+            <button type="button" aria-label="Clear search"
+              onClick={() => { setCustomerSearch(''); if (customerSearchTimer.current) clearTimeout(customerSearchTimer.current); fetchCustomerDir(customerSegFilter, ''); }}
+              style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: P.muted, cursor: 'pointer', padding: '4px' }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── DIRECTORY ── */}
+      {customerLoading ? (
+        <SkelTable rows={8} cols={5} label="Loading guests" />
+      ) : (
+        <div style={{ background: P.panel, border: `1px solid ${P.line}`, borderRadius: '18px', overflow: 'hidden', boxShadow: '0 18px 40px rgba(0,0,0,0.3)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '12px', padding: '13px 20px', borderBottom: `1px solid ${P.line}`, background: 'rgba(255,255,255,0.02)' }}>
+            {['Guest', 'Segment', 'Visits', 'Total spent', 'Avg order', 'Last visit', 'Favourite dish'].map(h => (
+              <div key={h} style={{ fontSize: '9.5px', letterSpacing: '1.5px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>{h}</div>
+            ))}
+          </div>
+
+          <div style={{ maxHeight: '520px', overflowY: 'auto' }} className="custom-scroll">
+            {rows.length === 0 ? (
+              <div style={{ padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'rgba(211,191,162,0.08)', border: `1px solid ${P.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={24} color={P.gold} />
+                </div>
+                <div style={{ fontFamily: P.serif, fontSize: '18px', color: P.ivory }}>No guests found</div>
+                <div style={{ fontSize: '12px', color: P.muted, maxWidth: '360px' }}>
+                  {customerSearch ? `Nothing matches "${customerSearch}"${customerSegFilter === 'all' ? '' : ` in ${segLabel.toLowerCase()} guests`}. Try a different name or phone.` : (customerSegFilter === 'all' ? 'No guests yet. Guests appear here after their first order.' : `No ${segLabel.toLowerCase()} guests yet. They appear here once they match this segment.`)}
+                </div>
+              </div>
+            ) : rows.map((c, i) => {
+              const t = seg(c.segment);
+              const ls = lastSeen(c.daysSinceVisit);
+              return (
+                <div key={c._id} onClick={() => fetchCustomerProfile(c.phone)} role="button" tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter') fetchCustomerProfile(c.phone); }}
+                  style={{ display: 'grid', gridTemplateColumns: cols, gap: '12px', alignItems: 'center', padding: '13px 20px', cursor: 'pointer',
+                    borderBottom: '1px solid rgba(255,255,255,0.035)', background: i % 2 ? 'rgba(255,255,255,0.012)' : 'transparent', transition: 'background .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.06)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = i % 2 ? 'rgba(255,255,255,0.012)' : 'transparent'; }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '11px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: t.bg, border: `1px solid ${t.color}40`, color: t.color, fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px' }}>
+                      {initials(c.name)}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: P.ivory, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || 'Guest'}</div>
+                      <div style={{ marginTop: '2px', fontFamily: P.mono, fontSize: '11px', color: P.muted }}>{c.phone}</div>
+                    </div>
                   </div>
-                  <div style={{fontSize:'0.68rem',color:'#b4b4b4',fontFamily:'monospace',marginTop:'3px'}}>
-                    {customerProfile.customer?.phone}
-                  </div>
-                  {customerProfile.customer?.segment && (
-                    <span style={{
-                      display:'inline-flex', alignItems:'center', gap:'4px', marginTop:'6px',
-                      fontSize:'0.52rem', fontWeight:'900', padding:'3px 9px', borderRadius:'10px',
-                      background: SEG_META[customerProfile.customer.segment]?.bg || SEG_META.regular.bg,
-                      color:      SEG_META[customerProfile.customer.segment]?.color || SEG_META.regular.color,
-                      border:`1px solid ${SEG_META[customerProfile.customer.segment]?.color || '#8a704d'}33`
-                    }}>
-                      {SEG_ICONS_COMPONENT[customerProfile.customer.segment]}
-                      {SEG_META[customerProfile.customer.segment]?.label || 'Regular'}
+                  <div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '999px',
+                      background: t.bg, border: `1px solid ${t.color}40`, color: t.color, fontSize: '10px', fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                      {segIcon(c.segment, 11)}{t.label}
                     </span>
-                  )}
-                </div>
-                <button type="button" onClick={() => setCustomerProfile(null)} style={{
-                  background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border:'1px solid rgba(211,191,162,0.24)',
-                  color:'#b4b4b4', padding:'8px', borderRadius:'9px', cursor:'pointer',
-                  display:'flex', alignItems:'center', justifyContent:'center'
-                }}>
-                  <X size={16}/>
-                </button>
-              </div>
-            </div>
-
-            <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}} className="custom-scroll">
-              {/* Stats grid */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'20px'}}>
-                {[
-                  { label:'Total Visits',  val: customerProfile.customer?.visitCount || 0 },
-                  { label:'Total Spent',   val: `₹${(customerProfile.customer?.totalSpend||0).toLocaleString()}` },
-                  { label:'Avg Order',     val: `₹${customerProfile.avgOrderValue?.toLocaleString() || 0}` },
-                  { label:'Last Seen',     val: `${customerProfile.daysSinceVisit || '—'}d ago` },
-                ].map(({label,val}) => (
-                  <div key={label} style={{background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b',border:'1px solid rgba(211,191,162,0.24)',borderRadius:'10px',padding:'14px'}}>
-                    <div style={{fontSize:'1.2rem',fontWeight:'900',color:'#d3bfa2',fontFamily:'monospace'}}>{val}</div>
-                    <div style={{fontSize:'0.52rem',color:'#a6a6a6',fontWeight:'900',letterSpacing:'1px',marginTop:'4px'}}>{label}</div>
                   </div>
-                ))}
-              </div>
-
-              {/* Dish preferences */}
-              {(customerProfile.allDishes || []).length > 0 && (
-                <div style={{marginBottom:'20px'}}>
-                  <div style={{fontSize:'0.55rem',color:'#b4b4b4',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>DISH PREFERENCES</div>
-                  {customerProfile.allDishes.slice(0,5).map((d, i) => (
-                    <div key={d.name} style={{
-                      display:'flex', alignItems:'center', justifyContent:'space-between',
-                      padding:'9px 0', borderBottom:'1px solid rgba(211,191,162,0.12)'
-                    }}>
-                      <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                        <span style={{
-                          width:'22px', height:'22px', borderRadius:'6px',
-                          background: i === 0 ? 'rgba(201,168,76,0.15)' : '#101010',
-                          border:`1px solid ${i === 0 ? 'rgba(201,168,76,0.3)' : 'rgba(211,191,162,0.24)'}`,
-                          display:'flex', alignItems:'center', justifyContent:'center',
-                          fontSize:'0.55rem', fontWeight:'900',
-                          color: i === 0 ? '#C9A84C' : '#a6a6a6', fontFamily:'monospace'
-                        }}>{i + 1}</span>
-                        <span style={{fontSize:'0.8rem',color:'#d9d1c4'}}>{d.name}</span>
-                      </div>
-                      <span style={{fontSize:'0.65rem',color:'#8a704d',fontFamily:'monospace'}}>{d.count}×</span>
-                    </div>
-                  ))}
+                  <div style={{ fontFamily: P.mono, fontSize: '13px', fontWeight: 700, color: P.brass }}>{c.visitCount ?? 0}</div>
+                  <div style={{ fontFamily: P.mono, fontSize: '13px', fontWeight: 700, color: P.brass }}>{money(c.totalSpend)}</div>
+                  <div style={{ fontFamily: P.mono, fontSize: '12px', color: P.muted }}>{money(c.avgOrderValue)}</div>
+                  <div style={{ fontSize: '12px', color: ls.alert ? P.gold : P.ivory }}>{ls.text}</div>
+                  <div style={{ fontSize: '12px', color: P.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.topDish || '-'}</div>
                 </div>
-              )}
-
-              {/* Recent orders */}
-              {(customerProfile.recentOrders || []).length > 0 && (
-                <div>
-                  <div style={{fontSize:'0.55rem',color:'#b4b4b4',fontWeight:'900',letterSpacing:'2px',marginBottom:'10px'}}>RECENT ORDERS</div>
-                  {customerProfile.recentOrders.slice(0,5).map((o) => (
-                    <div key={o._id} style={{
-                      background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border:'1px solid rgba(211,191,162,0.24)',
-                      borderRadius:'10px', padding:'12px 14px', marginBottom:'8px',
-                      display:'flex', justifyContent:'space-between', alignItems:'center'
-                    }}>
-                      <div>
-                        <div style={{fontSize:'0.72rem',color:'#d3bfa2',fontWeight:'800'}}>
-                          Table {o.tableNumber} · {o.items?.length || 0} items
-                        </div>
-                        <div style={{fontSize:'0.6rem',color:'#a6a6a6',marginTop:'3px'}}>
-                          {new Date(o.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                        </div>
-                      </div>
-                      <div style={{fontFamily:'monospace',fontWeight:'900',color:'#d3bfa2',fontSize:'0.88rem'}}>
-                        ₹{(o.billDetails?.grandTotal || 0).toLocaleString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </>
+              );
+            })}
+          </div>
+        </div>
       )}
-    </AnimatePresence>
-  </motion.div>
-)}
+
+      {/* ── GUEST PROFILE PANEL ── */}
+      <AnimatePresence>
+        {customerProfile && (
+          <>
+            <motion.div key="cust-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setCustomerProfile(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 1000 }} />
+            <motion.aside key="cust-panel" initial={{ x: 460 }} animate={{ x: 0 }} exit={{ x: 460 }} transition={{ type: 'tween', duration: 0.26 }}
+              style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '440px', maxWidth: '100vw', zIndex: 1001, display: 'flex', flexDirection: 'column',
+                background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderLeft: `1px solid ${P.line}`, boxShadow: '-30px 0 60px rgba(0,0,0,0.5)' }}>
+              {(() => {
+                const cust = customerProfile.customer || {};
+                const t = seg(cust.segment);
+                const ls = lastSeen(customerProfile.daysSinceVisit);
+                return (
+                  <>
+                    <div style={{ padding: '26px 26px 20px', borderBottom: `1px solid ${P.line}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                          <div style={{ width: '52px', height: '52px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            background: t.bg, border: `1px solid ${t.color}55`, color: t.color, fontSize: '15px', fontWeight: 800 }}>{initials(cust.name)}</div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontFamily: P.serif, fontSize: '20px', color: P.ivory, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cust.name || 'Guest'}</div>
+                            <div style={{ marginTop: '3px', fontFamily: P.mono, fontSize: '12px', color: P.muted }}>{cust.phone}</div>
+                            {cust.segment && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '8px', padding: '3px 10px', borderRadius: '999px',
+                                background: t.bg, border: `1px solid ${t.color}40`, color: t.color, fontSize: '10px', fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                {segIcon(cust.segment, 11)}{t.label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button type="button" aria-label="Close" onClick={() => setCustomerProfile(null)}
+                          style={{ width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0, background: 'transparent', border: `1px solid ${P.line}`, color: P.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <X size={15} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '22px 26px 40px' }} className="custom-scroll">
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '22px' }}>
+                        {[
+                          { l: 'Visits', v: cust.visitCount ?? 0 },
+                          { l: 'Total spent', v: money(cust.totalSpend) },
+                          { l: 'Average order', v: money(customerProfile.avgOrderValue) },
+                          { l: 'Last visit', v: ls.text },
+                        ].map(s => (
+                          <div key={s.l} style={{ padding: '14px', borderRadius: '13px', background: P.well, border: `1px solid ${P.lineSoft}` }}>
+                            <div style={{ fontFamily: P.mono, fontSize: s.l === 'Last visit' ? '13px' : '18px', fontWeight: 800, color: P.brass }}>{s.v}</div>
+                            <div style={{ marginTop: '5px', fontSize: '9.5px', letterSpacing: '1.2px', textTransform: 'uppercase', color: P.muted, fontWeight: 700 }}>{s.l}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {profileDishes.length > 0 && (
+                        <div style={{ marginBottom: '24px' }}>
+                          <div style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', color: P.gold, fontWeight: 800, marginBottom: '12px' }}>Favourite dishes</div>
+                          {profileDishes.slice(0, 5).map((d, i) => (
+                            <div key={d.name} style={{ marginBottom: '12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: P.ivory, marginBottom: '6px' }}>
+                                <span>{d.name}</span>
+                                <span style={{ fontFamily: P.mono, color: P.muted }}>{d.count}×</span>
+                              </div>
+                              <div style={{ height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.round(((Number(d.count) || 0) / topDishCount) * 100)}%`, borderRadius: '3px',
+                                  background: i === 0 ? `linear-gradient(90deg, ${P.gold}, ${P.brass})` : 'rgba(211,191,162,0.35)' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(customerProfile.recentOrders || []).length === 0 && profileDishes.length === 0 && (
+                        <div style={{ padding: '26px 18px', textAlign: 'center', borderRadius: '14px', background: P.well, border: `1px solid ${P.lineSoft}` }}>
+                          <div style={{ fontFamily: P.serif, fontSize: '16px', color: P.ivory }}>No visits recorded yet</div>
+                          <div style={{ marginTop: '6px', fontSize: '12px', color: P.muted }}>Visit history and favourite dishes appear after the first settled bill.</div>
+                        </div>
+                      )}
+                      {(customerProfile.recentOrders || []).length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', color: P.gold, fontWeight: 800, marginBottom: '12px' }}>Recent visits</div>
+                          {customerProfile.recentOrders.slice(0, 6).map(o => {
+                            const d = new Date(o.createdAt);
+                            const dateText = Number.isNaN(d.getTime()) ? '-' : d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
+                            return (
+                              <div key={o._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '13px 14px', marginBottom: '8px',
+                                borderRadius: '12px', background: P.well, border: `1px solid ${P.lineSoft}` }}>
+                                <div>
+                                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: P.ivory }}>{/^\d+$/.test(String(o.tableNumber)) ? `Table ${o.tableNumber}` : String(o.tableNumber || 'Counter')} · {o.items?.length || 0} {(o.items?.length || 0) === 1 ? 'item' : 'items'}</div>
+                                  <div style={{ marginTop: '3px', fontSize: '11px', color: P.muted }}>{dateText}</div>
+                                </div>
+                                <div style={{ fontFamily: P.mono, fontWeight: 800, color: P.brass, fontSize: '13px' }}>{money(o.billDetails?.grandTotal)}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+})()}
 
 
 {activeTab === 'marketing' && (
@@ -12761,19 +12793,8 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                               const net=Math.min(Math.round(Number(m.baseSalary)||0),Math.round(perDay*workDays));
                               // No attendance rows (not recorded, or the month failed to load) would have recorded a ₹0 salary as PAID.
                               if(workDays===0||net<=0){showNotif('No attendance found for this month — nothing to pay yet','error');return;}
-                              setConfirmModal({
-                                show:true,
-                                title:`Pay ${pureName}?`,
-                                subtitle:`${workDays} days worked · ₹${net.toLocaleString()} net salary for ${viewDate.toLocaleString('default',{month:'long'})}`,
-                                onConfirm:async()=>{
-                                  try {
-                                    await axios.post(`${BASE_URL}/staff/salary/mark-paid`,{tenantId,staffId:m._id,month:monthStr,workDays,netSalary:net,baseSalary:Number(m.baseSalary)});
-                                    showNotif(`${pureName} — salary marked paid`,'success');
-                                    const prefix2=viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
-                                    fetchMonthlySalary(prefix2);
-                                  } catch (err) { showNotif(err.response?.data?.error||'Could not mark salary paid','error'); }
-                                }
-                              });
+                              setPayPassword('');
+                              setPayPrompt({ staffId: m._id, name: pureName, monthStr, monthLabel: viewDate.toLocaleString('default',{month:'long'}), workDays, estimate: net, base: Number(m.baseSalary) || 0 });
                             }} style={{
                               padding:'5px 11px',borderRadius:'7px',cursor:'pointer',
                               fontSize:'0.6rem',fontWeight:'900',
@@ -12973,6 +12994,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
                             }}>
                               <span style={{fontSize:'0.5rem',color:'#969696',fontWeight:'900',minWidth:'16px',fontFamily:'monospace'}}>#{idx+1}</span>
                               <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{inTime}</span>
+                              {log.autoClosed && <span title="No clock-out was recorded. Closed automatically after 12 hours. Correct the hours." style={{fontSize:'0.5rem',color:'#B8923A',fontWeight:'900',letterSpacing:'0.8px',border:'1px solid rgba(184,146,58,0.45)',borderRadius:'5px',padding:'2px 6px'}}>AUTO-CLOSED · REVIEW</span>}
                               <span style={{fontSize:'0.5rem',color:'#969696'}}>→</span>
                               {outTime?(
                                 <>
@@ -13026,1087 +13048,754 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           {/* ════════════════════════════════════════════
               INVENTORY — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
-          {activeTab==='inventory' && (
-            <motion.div key="inventory" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}}
-              style={{display:'flex',flexDirection:'column',gap:'25px',paddingBottom:'100px',width:'100%',maxWidth:'1100px',margin:'0 auto'}}>
+{activeTab === 'inventory' && (() => {
+  /* ── Premium palette: obsidian, brass, ivory. Alerts use brass weight, never red / green / orange. ── */
+  const P = {
+    gold: '#B8923A', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
+    line: 'rgba(211,191,162,0.14)', lineSoft: 'rgba(255,255,255,0.05)',
+    panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+    well: '#070707',
+    mono: "ui-monospace, Consolas, monospace",
+    serif: "inherit",
+  };
+  const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: P.well, border: `1px solid ${P.line}`,
+    borderRadius: '10px', color: P.ivory, fontSize: '13px', outline: 'none', fontFamily: 'inherit' };
+  const labelStyle = { display: 'block', marginBottom: '7px', fontSize: '9.5px', letterSpacing: '1.4px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 };
+  const eyebrow = { fontSize: '10px', letterSpacing: '2.4px', textTransform: 'uppercase', color: P.gold, fontWeight: 800 };
+  const panelStyle = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '18px', padding: '22px', boxShadow: '0 18px 40px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.03)' };
+  const ghostBtn = { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '9px', background: 'transparent',
+    border: `1px solid ${P.line}`, color: P.brass, cursor: 'pointer', fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.8px' };
+  const pill = (strong) => ({ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 9px', borderRadius: '999px', fontSize: '9.5px', fontWeight: 800,
+    letterSpacing: '0.7px', textTransform: 'uppercase', background: strong ? 'rgba(211,191,162,0.18)' : 'rgba(255,255,255,0.04)',
+    border: `1px solid ${strong ? 'rgba(211,191,162,0.5)' : P.line}`, color: strong ? P.brass : P.muted });
 
-{/* ── SMART PURCHASE ASSISTANT ── */}
-{purchaseRecommendations.length > 0 && (
-  <div style={{
-    background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
-    border: '1px solid rgba(211,191,162,0.18)',
-    borderRadius: '14px',
-    padding: '17px 18px'
-  }}>
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const wacOf = (i) => Number(i.weightedAvgCost || i.costPrice || 0);
+  const isLow = (i) => Number(i.currentStock || 0) <= Number(i.minThreshold || 0);
+  const daysToExpiry = (i) => (i.batchExpiry ? Math.ceil((new Date(i.batchExpiry) - new Date()) / 86400000) : null);
+  const roundStep = (unit) => (['kg', 'l'].includes(unit) ? 1 : (unit === 'gm' || unit === 'ml') ? 100 : 10);
+  const suggestQty = (avgDaily, currentStock, minThreshold, unit) => {
+    const needed = Math.max(0, Math.ceil((Number(avgDaily || 0) * 30) - Number(currentStock || 0)));
+    const step = roundStep(unit);
+    return needed > 0 ? Math.ceil(needed / step) * step : Math.ceil((Number(minThreshold || 0) * 2) / step) * step;
+  };
+  const openPurchaseOrder = (payload) => setPurchaseOrderModal({ ...payload, copySuccess: false });
 
-    {/* Header */}
-    <div style={{
-      display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center', marginBottom: '14px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <div style={{
-          width: '28px', height: '28px', borderRadius: '8px',
-          background: 'rgba(211,191,162,0.07)',
-          border: '1px solid rgba(211,191,162,0.15)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <Truck size={13} color="#d3bfa2" strokeWidth={1.5} />
-        </div>
+  const q = inventorySearchQuery.trim().toLowerCase();
+  const visible = inventory.filter(i => (i.itemName || '').toLowerCase().includes(q));
+  const totalItems = inventory.length;
+  const lowCount = inventory.filter(isLow).length;
+  const depletedCount = inventory.filter(i => Number(i.currentStock || 0) < 0).length;
+  const expiringCount = inventory.filter(i => { const d = daysToExpiry(i); return d !== null && d <= 5; }).length;
+  const stockValue = inventory.reduce((a, i) => a + Math.max(0, Math.round(Number(i.currentStock || 0) * wacOf(i))), 0);
+  const cols = 'minmax(0,1.7fr) 56px minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr) minmax(0,0.95fr) minmax(0,1.35fr) 92px';
+
+  return (
+    <motion.div key="inventory" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%', maxWidth: '1240px', margin: '0 auto', paddingBottom: '100px', textAlign: 'left' }}>
+
+      {/* ── HEADER ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <div style={{
-            fontSize: '0.6rem', fontWeight: '900', color: '#d3bfa2',
-            letterSpacing: '2px', textTransform: 'uppercase'
-          }}>
-            SMART PURCHASE ASSISTANT
-          </div>
-          <div style={{
-            fontSize: '0.53rem', color: 'rgba(255,255,255,0.2)',
-            marginTop: '1px'
-          }}>
-            Based on daily consumption · 2-week supply target
-          </div>
+          <div style={eyebrow}>Stock control</div>
+          <div style={{ marginTop: '4px', fontSize: '12px', color: P.muted }}>Live stock, weighted average cost and purchasing</div>
         </div>
+        <button type="button" onClick={() => fetchManagementData()} style={ghostBtn}><RefreshCw size={12} /> REFRESH</button>
       </div>
-      <div style={{
-        background: 'rgba(226,154,88,0.08)',
-        border: '1px solid rgba(226,154,88,0.18)',
-        borderRadius: '6px', padding: '3px 9px',
-        display: 'flex', alignItems: 'center', gap: '5px'
-      }}>
-        <TrendingDown size={10} color="#e29a58" strokeWidth={2} />
-        <span style={{
-          color: '#e29a58', fontSize: '0.6rem', fontWeight: '900'
-        }}>
-          {purchaseRecommendations.length} LOW
-        </span>
+
+      {/* ── KPI STRIP ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: '10px' }}>
+        {[
+          { l: 'Ingredients', v: totalItems, strong: false },
+          { l: 'Low stock', v: lowCount, strong: lowCount > 0 },
+          { l: 'Depleted', v: depletedCount, strong: depletedCount > 0 },
+          { l: 'Expiring in 5 days', v: expiringCount, strong: expiringCount > 0 },
+          { l: 'Stock value (WAC)', v: money(stockValue), strong: false, wide: true },
+        ].map(k => (
+          <div key={k.l} style={{ padding: '15px 16px', borderRadius: '14px', background: P.panel, border: `1px solid ${k.strong ? 'rgba(211,191,162,0.4)' : P.lineSoft}`,
+            borderTop: `2px solid ${k.strong ? P.gold : 'rgba(255,255,255,0.06)'}`, boxShadow: '0 8px 18px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontFamily: P.mono, fontSize: k.wide ? '17px' : '22px', fontWeight: 800, color: k.strong ? P.brass : P.ivory, whiteSpace: 'nowrap' }}>{k.v}</div>
+            <div style={{ marginTop: '4px', fontSize: '10px', letterSpacing: '1.1px', textTransform: 'uppercase', color: P.muted, fontWeight: 700 }}>{k.l}</div>
+          </div>
+        ))}
       </div>
-    </div>
 
-    {/* Item rows */}
-    {purchaseRecommendations.map(item => (
-      <div key={item._id} style={{
-        padding: '12px 13px', marginBottom: '7px',
-        background: item.urgency === 'critical'
-          ? 'rgba(226,154,88,0.04)'
-          : 'rgba(255,255,255,0.02)',
-        border: `1px solid ${
-          item.urgency === 'critical'
-            ? 'rgba(226,154,88,0.16)'
-            : 'rgba(255,255,255,0.05)'
-        }`,
-        borderRadius: '10px'
-      }}>
-
-        {/* Item name + urgency badge */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', marginBottom: '10px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-            {item.urgency === 'critical'
-              ? <AlertTriangle size={12} color="#e29a58" strokeWidth={2} />
-              : <Package2 size={12} color="rgba(240,165,0,0.7)" strokeWidth={1.8} />
-            }
-            <span style={{
-              color: '#fff', fontSize: '0.78rem', fontWeight: '700'
-            }}>
-              {item.itemName}
-            </span>
-          </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            fontSize: '0.6rem', padding: '2px 9px',
-            borderRadius: '20px', fontWeight: '900',
-            background: item.urgency === 'critical'
-              ? 'rgba(226,154,88,0.1)'
-              : 'rgba(240,165,0,0.08)',
-            color: item.urgency === 'critical' ? '#e29a58' : '#f0a500',
-            border: `1px solid ${
-              item.urgency === 'critical'
-                ? 'rgba(226,154,88,0.2)'
-                : 'rgba(240,165,0,0.15)'
-            }`
-          }}>
-            {item.daysRemaining === 0 ? 'OUT TODAY' : `${item.daysRemaining}d left`}
-          </div>
-        </div>
-
-        {/* Stats grid */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3,1fr)',
-          gap: '8px', marginBottom: '8px'
-        }}>
-          {[
-            {
-              label: 'Current Stock',
-              value: `${item.currentStock || 0} ${item.unit}`,
-              dim: true
-            },
-            {
-              label: 'Daily Usage',
-              value: `${(item.avgDailyUsage || 0).toFixed(1)} ${item.unit}`,
-              dim: true
-            },
-            {
-              label: 'Buy Now',
-              value: `${item.recommendedQty} ${item.unit}`,
-              dim: false
-            },
-          ].map(({ label, value, dim }) => (
-            <div key={label} style={{
-              textAlign: 'center', padding: '8px 6px',
-              background: dim ? 'transparent' : 'rgba(211,191,162,0.05)',
-              border: dim
-                ? '1px solid rgba(255,255,255,0.04)'
-                : '1px solid rgba(211,191,162,0.12)',
-              borderRadius: '7px'
-            }}>
-              <div style={{
-                color: dim ? 'rgba(255,255,255,0.45)' : '#d3bfa2',
-                fontSize: '0.78rem', fontWeight: '800',
-                fontFamily: 'monospace'
-              }}>
-                {value}
-              </div>
-              <div style={{
-                color: 'rgba(255,255,255,0.2)',
-                fontSize: '0.52rem', marginTop: '2px'
-              }}>
-                {label}
-              </div>
+      {/* ── SMART PURCHASE ASSISTANT ── */}
+      {purchaseRecommendations.length > 0 && (
+        <div style={{ ...panelStyle, padding: '18px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={eyebrow}>Smart purchase assistant</div>
+              <div style={{ marginTop: '4px', fontSize: '11.5px', color: P.muted }}>Based on daily usage, targeting a two-week supply</div>
             </div>
-          ))}
-        </div>
-
-        {/* Estimated cost */}
-        {item.estimatedCost > 0 && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            padding: '6px 8px',
-            background: 'rgba(255,255,255,0.02)',
-            borderRadius: '6px'
-          }}>
-            <PackageCheck size={10} color="rgba(211,191,162,0.35)" strokeWidth={1.8} />
-            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.62rem' }}>
-              Estimated purchase cost:
-            </span>
-            <span style={{
-              color: 'rgba(211,191,162,0.6)', fontSize: '0.62rem',
-              fontWeight: '700', fontFamily: 'monospace'
-            }}>
-              ₹{item.estimatedCost.toLocaleString()}
-            </span>
+            <span style={pill(true)}><TrendingDown size={11} /> {purchaseRecommendations.length} to order</span>
           </div>
-        )}
-      </div>
-    ))}
-  </div>
-)}
-
-{/* ADD FORM */}
-<div style={{...styles.biCard, padding:'20px 25px'}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
-    <h4 style={{...styles.biTitle, marginBottom:0, color: selectedExistingItem ? '#d3bfa2' : '#fff'}}>
-      {selectedExistingItem
-        ? `RESTOCK: ${selectedExistingItem.itemName.toUpperCase()}`
-        : 'ADD / RESTOCK INGREDIENT'}
-    </h4>
-    {selectedExistingItem && (
-      <button type="button" onClick={() => {
-        setSelectedExistingItem(null);
-        setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '' });
-      }} style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.24)', color: '#b4b4b4', padding: '4px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', cursor: 'pointer' }}>
-        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}>CLEAR <X size={10} /></span>
-      </button>
-    )}
-  </div>
-
-  {/* RESTOCK BANNER */}
-  {selectedExistingItem && (
-    <div style={{ marginBottom: '16px', padding: '14px 16px', background: 'rgba(211,191,162,0.05)', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '10px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
-        <div>
-          <div style={{ fontSize: '0.54rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>CURRENT STOCK</div>
-          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#d3bfa2' }}>{selectedExistingItem.currentStock} {selectedExistingItem.unit}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: '0.54rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>WAC (CURRENT)</div>
-          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
-            ₹{(selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0).toFixed(2)}/{selectedExistingItem.unit}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: '0.54rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>LAST BUY PRICE</div>
-          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#fff' }}>
-            ₹{(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}/{selectedExistingItem.unit}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: '0.54rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '1px', marginBottom: '3px' }}>STOCK VALUE</div>
-          <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#8a704d' }}>
-            ₹{((selectedExistingItem.currentStock || 0) * (selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0)).toFixed(0)}
-          </div>
-        </div>
-      </div>
-      {/* WAC PREVIEW — show new WAC as user types purchase price */}
-      {newInventoryItem.currentStock && newInventoryItem.purchasePrice && (() => {
-        const addQty = Number(newInventoryItem.currentStock);
-        const buyPrice = Number(newInventoryItem.purchasePrice);
-        if (!(addQty > 0) || !(buyPrice >= 0)) return null; // invalid input: no preview instead of a misleading one
-        const oldStock = Math.max(0, Number(selectedExistingItem.currentStock) || 0); // negative stock has no cost basis
-        const oldWAC = selectedExistingItem.weightedAvgCost || selectedExistingItem.costPrice || 0;
-        const newStock = oldStock + addQty;
-        const newWAC = newStock > 0 ? ((oldStock * oldWAC) + (addQty * buyPrice)) / newStock : buyPrice;
-        const changePct = oldWAC > 0 ? ((buyPrice - oldWAC) / oldWAC) * 100 : 0;
-        return (
-          <div style={{ marginTop: '12px', padding: '10px 12px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderRadius: '8px', border: '1px solid rgba(211,191,162,0.16)', display: 'flex', gap: '24px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.62rem', color: '#b4b4b4' }}>NEW WAC PREVIEW</span>
-            <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>₹{newWAC.toFixed(2)}/{selectedExistingItem.unit}</span>
-            <span style={{ fontSize: '0.62rem', color: '#b4b4b4' }}>New stock: {newStock} {selectedExistingItem.unit}</span>
-            {Math.abs(changePct) > 0.5 && (
-              <span style={{ fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px',
-                color: changePct > 25 ? '#b8923a' : changePct > 10 ? '#d3bfa2' : '#ecdcb9',
-                background: changePct > 25 ? 'rgba(184,146,58,0.1)' : changePct > 10 ? 'rgba(211,191,162,0.06)' : 'rgba(236,220,185,0.06)',
-                border: `1px solid ${changePct > 25 ? 'rgba(184,146,58,0.3)' : changePct > 10 ? 'rgba(211,191,162,0.15)' : 'rgba(236,220,185,0.2)'}`
-              }}>
-                {changePct > 0 ? '▲' : '▼'} {Math.abs(changePct).toFixed(1)}% vs WAC
-              </span>
-            )}
-          </div>
-        );
-      })()}
-    </div>
-  )}
-
-  <div style={{ display: 'grid', gridTemplateColumns: selectedExistingItem ? '2fr 1fr 1fr 1fr auto' : '2fr 1fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
-
-    {/* NAME with autocomplete */}
-    <div style={{ position: 'relative' }}>
-      <label style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        NAME {selectedExistingItem && <span style={{ color: '#d3bfa2', display:'inline-flex', alignItems:'center', gap:'3px' }}><CheckCircle2 size={10} /> MATCHED</span>}
-      </label>
-      <input type="text" placeholder="e.g. Tomato" style={{
-        width: '100%', padding: '10px 12px',
-        background: selectedExistingItem ? 'rgba(211,191,162,0.06)' : '#070707',
-        border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.16)'}`,
-        color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box'
-      }}
-        value={newInventoryItem.itemName}
-        onChange={e => {
-          const val = e.target.value;
-          setNewInventoryItem(p => ({ ...p, itemName: val }));
-          setSelectedExistingItem(prev => prev ? null : prev);
-          if (val.trim().length >= 1) {
-            const matches = inventory.filter(i => i.itemName.toLowerCase().includes(val.toLowerCase()));
-            setInventorySuggestions(matches);
-            setShowSuggestions(matches.length > 0);
-          } else {
-            setShowSuggestions(false);
-            setInventorySuggestions([]);
-          }
-        }}
-        onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
-        onFocus={() => { if (newInventoryItem.itemName.trim().length >= 1 && inventorySuggestions.length > 0) setShowSuggestions(true); }}
-      />
-      {showSuggestions && inventorySuggestions.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.2)', borderRadius: '8px', marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
-          <div style={{ padding: '6px 10px', fontSize: '0.54rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '1px', borderBottom: '1px solid rgba(211,191,162,0.12)' }}>EXISTING — CLICK TO RESTOCK</div>
-          {inventorySuggestions.map(item => {
-            const wac = item.weightedAvgCost || item.costPrice || 0;
-            const lastPrice = item.lastPurchasePrice || wac;
-            const drift = wac > 0 ? ((lastPrice - wac) / wac) * 100 : 0;
-            return (
-              <div key={item._id} onMouseDown={() => {
-                setSelectedExistingItem(item);
-                setNewInventoryItem({ itemName: item.itemName, unit: item.unit, currentStock: '', minThreshold: item.minThreshold, costPrice: item.costPrice, purchasePrice: '', vendor: '' });
-                setShowSuggestions(false);
-                setInventorySuggestions([]);
-              }} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(211,191,162,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(211,191,162,0.06)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#fff' }}>{item.itemName}</div>
-                  <div style={{ fontSize: '0.62rem', color: '#b4b4b4', marginTop: '2px' }}>
-                    {item.currentStock} {item.unit} · WAC ₹{wac.toFixed(2)}
-                    {Math.abs(drift) > 0.5 && <span style={{ color: drift > 0 ? '#b8923a' : '#ecdcb9', marginLeft: '6px' }}>({drift > 0 ? '▲' : '▼'}{Math.abs(drift).toFixed(1)}% drift)</span>}
+          <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }} className="custom-scroll">
+            {purchaseRecommendations.map(item => {
+              const urgent = item.urgency === 'critical';
+              return (
+                <div key={item._id} style={{ flex: '0 0 270px', padding: '15px', borderRadius: '14px', background: P.well,
+                  border: `1px solid ${urgent ? 'rgba(211,191,162,0.5)' : P.lineSoft}`, boxShadow: urgent ? '0 10px 24px rgba(211,191,162,0.08)' : 'none' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: P.ivory, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.itemName}</div>
+                    <span style={pill(urgent)}>{item.daysRemaining === 0 ? 'Out today' : `${item.daysRemaining}d left`}</span>
                   </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '6px' }}>
+                    {[
+                      { l: 'In stock', v: `${item.currentStock || 0} ${item.unit}`, strong: false },
+                      { l: 'Daily use', v: `${Number(item.avgDailyUsage || 0).toFixed(1)} ${item.unit}`, strong: false },
+                      { l: 'Buy now', v: `${item.recommendedQty} ${item.unit}`, strong: true },
+                    ].map(m => (
+                      <div key={m.l} style={{ padding: '8px 6px', borderRadius: '9px', textAlign: 'center', background: m.strong ? 'rgba(211,191,162,0.1)' : 'rgba(255,255,255,0.02)', border: `1px solid ${m.strong ? 'rgba(211,191,162,0.3)' : 'transparent'}` }}>
+                        <div style={{ fontFamily: P.mono, fontSize: '11.5px', fontWeight: 800, color: m.strong ? P.brass : P.ivory }}>{m.v}</div>
+                        <div style={{ marginTop: '3px', fontSize: '9px', letterSpacing: '0.8px', textTransform: 'uppercase', color: P.muted }}>{m.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {item.estimatedCost > 0 && (
+                    <div style={{ marginTop: '10px', fontSize: '11px', color: P.muted }}>Estimated cost <span style={{ fontFamily: P.mono, color: P.brass }}>{money(item.estimatedCost)}</span></div>
+                  )}
                 </div>
-                <span style={{ fontSize: '0.62rem', color: item.currentStock <= item.minThreshold ? '#b8923a' : '#b4b4b4', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', background: item.currentStock <= item.minThreshold ? 'rgba(138,112,77,0.12)' : 'rgba(211,191,162,0.04)', border: `1px solid ${item.currentStock <= item.minThreshold ? 'rgba(184,146,58,0.25)' : 'rgba(211,191,162,0.16)'}` }}>
-                  {item.currentStock <= item.minThreshold ? 'LOW' : 'OK'}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
-    </div>
 
-    {/* QTY TO ADD */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        {selectedExistingItem ? 'QTY TO ADD' : 'STOCK'}
-      </label>
-      <input type="number" placeholder={selectedExistingItem ? `+ to ${selectedExistingItem.currentStock}` : '500'}
-        style={{ width: '100%', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-        value={newInventoryItem.currentStock}
-        onChange={e => setNewInventoryItem(p => ({ ...p, currentStock: e.target.value }))}
-      />
-    </div>
+      {/* ── WORKSPACE: restock (left) + ledger (right) ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
 
-    {/* PURCHASE PRICE — replaces "cost/unit" in restock mode */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: selectedExistingItem ? '#d3bfa2' : '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        {selectedExistingItem ? 'BUY PRICE (₹/unit) *' : 'COST (₹/unit)'}
-      </label>
-      <input type="number" step="0.01"
-        placeholder={selectedExistingItem ? `last: ₹${(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}` : '2.50'}
-        style={{ width: '100%', padding: '10px 12px', background: '#070707', border: `1px solid ${selectedExistingItem ? 'rgba(211,191,162,0.35)' : 'rgba(211,191,162,0.16)'}`, color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-        value={selectedExistingItem ? newInventoryItem.purchasePrice : newInventoryItem.costPrice}
-        onChange={e => {
-          if (selectedExistingItem) {
-            setNewInventoryItem(p => ({ ...p, purchasePrice: e.target.value }));
-          } else {
-            setNewInventoryItem(p => ({ ...p, costPrice: e.target.value }));
-          }
-        }}
-      />
-    </div>
+        {/* RESTOCK / ADD PANEL */}
+        <div style={{ ...panelStyle, padding: '24px 26px' }}>
+          <div style={eyebrow}>{selectedExistingItem ? 'Restock' : 'New ingredient'}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginTop: '6px', marginBottom: '16px' }}>
+            <div style={{ fontFamily: P.serif, fontSize: '19px', color: P.ivory, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {selectedExistingItem ? selectedExistingItem.itemName : 'Add or restock'}
+            </div>
+            {selectedExistingItem && (
+              <button type="button" onClick={() => {
+                setSelectedExistingItem(null);
+                setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '', expiryDate: '' });
+              }} style={{ ...ghostBtn, flexShrink: 0, padding: '5px 9px' }}><X size={10} /> CLEAR</button>
+            )}
+          </div>
 
-    {/* VENDOR (restock only) OR MIN THRESHOLD (new item) */}
-    {selectedExistingItem ? (
-      <div>
-        <label style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>VENDOR (optional)</label>
-        <input type="text" placeholder="e.g. Rajesh Traders" list="vendor-name-list"
-          style={{ width: '100%', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-          value={newInventoryItem.vendor || ''}
-          onChange={e => setNewInventoryItem(p => ({ ...p, vendor: e.target.value }))}
-        />
-        <datalist id="vendor-name-list">
-          {vendors.map(v => <option key={v._id} value={v.name} />)}
-        </datalist>
-      </div>
-    ) : (
-      <>
-        <div>
-          <label style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>MIN THRESHOLD</label>
-          <input type="number" placeholder="100"
-            style={{ width: '100%', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-            value={newInventoryItem.minThreshold}
-            onChange={e => setNewInventoryItem(p => ({ ...p, minThreshold: e.target.value }))}
-          />
-        </div>
-        <div>
-          <label style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>UNIT</label>
-          <select style={{ width: '100%', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
-            value={newInventoryItem.unit}
-            onChange={e => setNewInventoryItem(p => ({ ...p, unit: e.target.value }))}>
-            {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
-          </select>
-        </div>
-      </>
-    )}
-
-    {/* EXPIRY DATE — FEFO tracking: alerts fire 2 days before this batch expires */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '0.8px', display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-        <CalendarClock size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
-        BATCH EXPIRY (optional)
-      </label>
-      <input type="date" min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]}
-        style={{ width: '100%', padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-        value={newInventoryItem.expiryDate || ''}
-        onChange={e => setNewInventoryItem(p => ({ ...p, expiryDate: e.target.value }))}
-      />
-    </div>
-
-    {/* ADD / RESTOCK BUTTON */}
-    <div>
-      <label style={{ fontSize: '0.55rem', color: 'transparent', display: 'block', marginBottom: '6px' }}>_</label>
-      <button type="button" disabled={isSubmittingRestock} onClick={async () => {
-        if (isSubmittingRestock) return;
-        if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) return showNotif("Name and quantity are required", "error");
-        // "0", "-5" and non-numeric text are all truthy strings: they used to be sent and could REDUCE stock / poison the weighted-average cost.
-        if (!(Number(newInventoryItem.currentStock) > 0)) return showNotif("Quantity must be a number greater than 0", "error");
-        if (newInventoryItem.purchasePrice !== '' && newInventoryItem.purchasePrice != null && !(Number(newInventoryItem.purchasePrice) >= 0)) return showNotif("Purchase price can't be negative", "error");
-        if (newInventoryItem.costPrice !== '' && newInventoryItem.costPrice != null && !(Number(newInventoryItem.costPrice) >= 0)) return showNotif("Cost price can't be negative", "error");
-        if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif("Enter the purchase price for this restock — needed to update WAC", "error");
-        if (newInventoryItem.minThreshold !== '' && newInventoryItem.minThreshold != null && !(Number(newInventoryItem.minThreshold) >= 0)) return showNotif("Minimum threshold can't be negative", "error");
-        setIsSubmittingRestock(true);
-        try {
-          const payload = {
-            itemName: newInventoryItem.itemName,
-            unit: selectedExistingItem ? selectedExistingItem.unit : (newInventoryItem.unit || 'gm'),
-            currentStock: Number(newInventoryItem.currentStock),
-            vendor: newInventoryItem.vendor || '',
-            expiryDate: newInventoryItem.expiryDate || null,
-            ...(selectedExistingItem
-              ? { costPrice: Number(newInventoryItem.purchasePrice) }  // purchase price → WAC calc on server
-              : { minThreshold: Number(newInventoryItem.minThreshold) || 0, costPrice: Number(newInventoryItem.costPrice) || 0 }
-            )
-          };
-          const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, payload);
-          if (res.data.merged) {
-            const msg = res.data.wacUpdated
-              ? `Restocked · WAC updated: ${res.data.note}`
-              : `${res.data.item.itemName} restocked at existing WAC`;
-            showNotif(msg);
-            // Cost spike alert
-            if (res.data.priceChangePct > 25) showNotif(`Price spike: +${res.data.priceChangePct}% vs WAC — check supplier`, "error");
-            else if (res.data.priceChangePct > 10) showNotif(`Price up ${res.data.priceChangePct}% vs WAC`, "info");
-          } else {
-            showNotif(`${res.data.item.itemName} added to inventory`);
-          }
-          setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '', expiryDate: '' });
-          setSelectedExistingItem(null);
-          setInventorySuggestions([]);
-          setShowSuggestions(false);
-          fetchManagementData();
-        } catch (err) { showNotif(err?.response?.data?.error || "Failed to add ingredient", "error"); }
-        finally { setIsSubmittingRestock(false); }
-      }} style={{ padding: '10px 20px', background: selectedExistingItem ? 'linear-gradient(135deg,#bda88a,#d3bfa2)' : 'linear-gradient(135deg,#d3bfa2,#bda88a)', color: '#0c0c0c', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '0.75rem', cursor: isSubmittingRestock ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isSubmittingRestock ? 0.55 : 1 }}>
-        {isSubmittingRestock ? 'SAVING…' : selectedExistingItem ? '+ RESTOCK' : '+ ADD'}
-      </button>
-    </div>
-  </div>
-
-  <div style={{ marginTop: '10px', fontSize: '0.62rem', color: '#969696', fontWeight: '600' }}>
-    {selectedExistingItem
-      ? 'Enter the price you paid THIS time — WAC auto-recalculates weighted average across all batches.'
-      : 'Type an ingredient name to see existing matches and restock with WAC calculation.'}
-  </div>
-</div>
-              {/* VENDOR MANAGEMENT */}
-              <div style={styles.biCard}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom: showVendorPanel ? '20px' : '0'}}>
-                  <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'8px'}}>
-                    <Truck size={14} color="#d3bfa2" /> VENDORS <span style={{color:'#b4b4b4',fontWeight:'500'}}>({vendors.length})</span>
-                  </h4>
-                  <button type="button" onClick={() => setShowVendorPanel(p => !p)}
-                    style={{ display:'flex', alignItems:'center', gap:'5px', padding:'8px 14px', borderRadius:'8px', border:'1px solid rgba(211,191,162,0.25)', background:'rgba(211,191,162,0.06)', color:'#d3bfa2', fontSize:'0.65rem', fontWeight:'900', cursor:'pointer' }}>
-                    {showVendorPanel ? <ChevronUp size={12}/> : <ChevronDown size={12}/>} {showVendorPanel ? 'HIDE' : 'MANAGE'}
-                  </button>
-                </div>
-
-                {showVendorPanel && (
-                  <>
-                    {/* Add / edit vendor form */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 1fr 0.7fr auto', gap: '8px', marginBottom: '16px' }}>
-                      <input placeholder="Vendor name *" value={newVendorDraft.name}
-                        onChange={e => setNewVendorDraft(p => ({ ...p, name: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
-                      <input placeholder="Contact person" value={newVendorDraft.contactPerson}
-                        onChange={e => setNewVendorDraft(p => ({ ...p, contactPerson: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
-                      <input placeholder="Phone" value={newVendorDraft.phone}
-                        onChange={e => setNewVendorDraft(p => ({ ...p, phone: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
-                      <select value={newVendorDraft.paymentTerms} onChange={e => setNewVendorDraft(p => ({ ...p, paymentTerms: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}>
-                        {['COD', 'Net 7', 'Net 15', 'Net 30'].map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      <input type="number" placeholder="Lead days" value={newVendorDraft.leadTimeDays}
-                        onChange={e => setNewVendorDraft(p => ({ ...p, leadTimeDays: e.target.value }))}
-                        style={{ padding: '10px 12px', background: '#070707', border: '1px solid rgba(211,191,162,0.16)', color: '#fff', borderRadius: '8px', fontSize: '0.75rem', outline: 'none' }} />
-                      <button type="button" onClick={saveVendor}
-                        style={{ padding: '0 16px', borderRadius: '8px', border: 'none', background: '#d3bfa2', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        {editingVendorId ? 'UPDATE' : 'ADD'}
-                      </button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(260px,1fr)', gap: '26px', alignItems: 'start' }}>
+          <div style={{ minWidth: 0 }}>
+          {/* NAME with autocomplete */}
+          <div style={{ position: 'relative', marginBottom: '12px' }}>
+            <label style={labelStyle}>Ingredient {selectedExistingItem && <span style={{ color: P.brass }}>· matched</span>}</label>
+            <input type="text" placeholder="e.g. Tomato" style={{ ...fieldStyle, borderColor: selectedExistingItem ? 'rgba(211,191,162,0.45)' : P.line }}
+              value={newInventoryItem.itemName}
+              onChange={e => {
+                const val = e.target.value;
+                setNewInventoryItem(p => ({ ...p, itemName: val }));
+                setSelectedExistingItem(prev => prev ? null : prev);
+                if (val.trim().length >= 1) {
+                  const matches = inventory.filter(i => i.itemName.toLowerCase().includes(val.toLowerCase()));
+                  setInventorySuggestions(matches);
+                  setShowSuggestions(matches.length > 0);
+                } else {
+                  setShowSuggestions(false);
+                  setInventorySuggestions([]);
+                }
+              }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
+              onFocus={() => { if (newInventoryItem.itemName.trim().length >= 1 && inventorySuggestions.length > 0) setShowSuggestions(true); }}
+            />
+            {showSuggestions && inventorySuggestions.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, marginTop: '6px', borderRadius: '12px', overflow: 'hidden',
+                background: '#090909', border: `1px solid ${P.line}`, boxShadow: '0 20px 40px rgba(0,0,0,0.55)' }}>
+                <div style={{ padding: '8px 12px', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: P.muted, fontWeight: 800, borderBottom: `1px solid ${P.lineSoft}` }}>Existing · click to restock</div>
+                {inventorySuggestions.map(item => {
+                  const wac = wacOf(item);
+                  const lastPrice = Number(item.lastPurchasePrice || wac);
+                  const drift = wac > 0 ? ((lastPrice - wac) / wac) * 100 : 0;
+                  return (
+                    <div key={item._id} onMouseDown={() => {
+                      setSelectedExistingItem(item);
+                      setNewInventoryItem({ itemName: item.itemName, unit: item.unit, currentStock: '', minThreshold: item.minThreshold, costPrice: item.costPrice, purchasePrice: '', vendor: '', expiryDate: '' });
+                      setShowSuggestions(false);
+                      setInventorySuggestions([]);
+                    }} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', borderBottom: `1px solid ${P.lineSoft}` }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.07)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: P.ivory }}>{item.itemName}</div>
+                        <div style={{ marginTop: '2px', fontFamily: P.mono, fontSize: '10.5px', color: P.muted }}>
+                          {item.currentStock} {item.unit} · WAC {wac.toFixed(2)}{Math.abs(drift) > 0.5 && <span style={{ color: P.brass }}> · {Math.abs(drift).toFixed(0)}% drift</span>}
+                        </div>
+                      </div>
+                      {isLow(item) && <span style={pill(true)}>Low</span>}
                     </div>
-
-                    {/* Vendor list */}
-                    {vendors.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '30px', color: '#969696', fontSize: '0.75rem', fontWeight: '700' }}>
-                        NO VENDORS YET — ADD ONE ABOVE
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {vendors.map(v => {
-                          const linkedCount = inventory.filter(i => i.vendorId === v._id).length;
-                          const dueCount = (procurementData || []).filter(p => p.vendorId === v._id && p.suggestedReorderQty > 0).length;
-                          return (
-                            <div key={v._id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)' }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: '0.78rem', fontWeight: '900', color: '#fff' }}>{v.name}</div>
-                                <div style={{ fontSize: '0.6rem', color: '#b4b4b4', marginTop: '2px' }}>
-                                  {v.contactPerson && `${v.contactPerson} · `}{v.phone || 'no phone'} · {v.paymentTerms} · {v.leadTimeDays}d lead · {linkedCount} ingredient{linkedCount !== 1 ? 's' : ''} linked
-                                </div>
-                              </div>
-                              <button type="button" onClick={() => generatePurchaseOrderPDF(v)}
-                                title={dueCount === 0 ? 'Nothing due for reorder' : `${dueCount} item(s) due for reorder`}
-                                disabled={dueCount === 0}
-                                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${dueCount > 0 ? 'rgba(236,220,185,0.35)' : 'rgba(255,255,255,0.08)'}`, background: dueCount > 0 ? 'rgba(236,220,185,0.1)' : 'transparent', color: dueCount > 0 ? '#ecdcb9' : '#969696', fontSize: '0.6rem', fontWeight: '900', cursor: dueCount === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                                <FileText size={11} /> PO {dueCount > 0 ? `(${dueCount})` : ''}
-                              </button>
-                              <button type="button" onClick={() => { setNewVendorDraft({ name: v.name, contactPerson: v.contactPerson, phone: v.phone, email: v.email, paymentTerms: v.paymentTerms, leadTimeDays: v.leadTimeDays }); setEditingVendorId(v._id); }}
-                                style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
-                                <SquarePen size={12} />
-                              </button>
-                              <button type="button" onClick={() => setConfirmModal({ show: true, title: 'Remove vendor?', subtitle: `${v.name} will be unlinked from its ingredients.`, onConfirm: () => deleteVendor(v._id) })}
-                                style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '7px', color: '#888', cursor: 'pointer', flexShrink: 0 }}>
-                                <X size={12} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
-                )}
+                  );
+                })}
               </div>
+            )}
+          </div>
 
-              {/* LEDGER TABLE */}
-              <div style={styles.biCard}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
-                  <h4 style={{...styles.biTitle,margin:0,color:'#fff',fontSize:'0.85rem'}}>
-                    CURRENT STOCK LEDGER <span style={{color:'#b4b4b4',fontWeight:'500'}}>({inventory.filter(i=>i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())).length} items)</span>
-                  </h4>
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',background:'#070707',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'8px',padding:'8px 14px'}}>
-                    <Search size={13} color="#a6a6a6"/>
-                    <input type="text" placeholder="Search ingredient..." value={inventorySearchQuery}
-                      onChange={e=>setInventorySearchQuery(e.target.value)}
-                      style={{background:'transparent',border:'none',color:'#fff',outline:'none',fontSize:'0.75rem',width:'140px'}}/>
-                  </div>
-                </div>
-                {inventory.length===0 ? (
-                  <div style={{textAlign:'center',padding:'50px',color:'#969696',fontSize:'0.8rem',fontWeight:'700'}}>
-                    NO INGREDIENTS ADDED YET — USE THE FORM ABOVE TO ADD YOUR FIRST ITEM
-                  </div>
-                ) : (
-                  <div style={{overflowX:'auto'}} className="custom-scroll">
-<table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
-  <thead>
-    <tr style={{ fontSize: '0.58rem', color: '#a6a6a6', borderBottom: '1px solid rgba(211,191,162,0.16)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Ingredient</th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Unit</th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Current Stock</th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>
-        Min Threshold
-        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}><SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /> editable</span>
-      </th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>
-        Cost/Unit
-        <span style={{ color: '#d3bfa2', marginLeft: '4px', fontSize: '0.5rem' }}><SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /> editable</span>
-      </th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Stock Value</th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Status</th>
-      <th style={{ padding: '0 16px 12px 0', textAlign: 'left' }}>Action</th>
-    </tr>
-  </thead>
-  <tbody>
-    {inventory
-      .filter(i => i.itemName?.toLowerCase().includes(inventorySearchQuery.toLowerCase()))
-      .map(item => {
-        const isLow = item.currentStock <= item.minThreshold;
-        const sv = Math.round(item.currentStock * item.costPrice);
-        return (
-          <tr key={item._id} style={{ borderBottom: '1px solid rgba(211,191,162,0.12)' }}>
- 
-            {/* INGREDIENT NAME */}
-            <td style={{ padding: '14px 16px 14px 0', fontWeight: '900', color: '#fff', fontSize: '0.82rem' }}>
-              {item.itemName}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+            <div>
+              <label style={labelStyle}>{selectedExistingItem ? 'Qty to add' : 'Opening stock'}</label>
+              <input type="number" placeholder={selectedExistingItem ? `+ to ${selectedExistingItem.currentStock}` : '500'} style={fieldStyle}
+                value={newInventoryItem.currentStock} onChange={e => setNewInventoryItem(p => ({ ...p, currentStock: e.target.value }))} />
+            </div>
+            <div>
+              <label style={{ ...labelStyle, color: selectedExistingItem ? P.brass : P.muted }}>{selectedExistingItem ? 'Buy price / unit *' : 'Cost / unit'}</label>
+              <input type="number" step="0.01"
+                placeholder={selectedExistingItem ? `last ${Number(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)}` : '2.50'}
+                style={fieldStyle}
+                value={selectedExistingItem ? newInventoryItem.purchasePrice : newInventoryItem.costPrice}
+                onChange={e => {
+                  if (selectedExistingItem) setNewInventoryItem(p => ({ ...p, purchasePrice: e.target.value }));
+                  else setNewInventoryItem(p => ({ ...p, costPrice: e.target.value }));
+                }} />
+            </div>
+          </div>
+
+          {selectedExistingItem ? (
+            <div style={{ marginBottom: '12px' }}>
+              <label style={labelStyle}>Vendor (optional)</label>
+              <input type="text" placeholder="e.g. Rajesh Traders" list="vendor-name-list" style={fieldStyle}
+                value={newInventoryItem.vendor || ''} onChange={e => setNewInventoryItem(p => ({ ...p, vendor: e.target.value }))} />
+              <datalist id="vendor-name-list">{vendors.map(v => <option key={v._id} value={v.name} />)}</datalist>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
               <div>
-                <select value={item.vendorId || ''} onChange={e => linkIngredientVendor(item._id, e.target.value)}
-                  style={{ marginTop: '4px', background: 'transparent', border: 'none', color: item.vendorId ? '#8a704d' : '#969696', fontSize: '0.55rem', fontWeight: '700', outline: 'none', cursor: 'pointer', padding: 0 }}>
-                  <option value="">+ link vendor</option>
-                  {vendors.map(v => <option key={v._id} value={v._id}>{v.name}</option>)}
+                <label style={labelStyle}>Min threshold</label>
+                <input type="number" placeholder="100" style={fieldStyle} value={newInventoryItem.minThreshold}
+                  onChange={e => setNewInventoryItem(p => ({ ...p, minThreshold: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Unit</label>
+                <select style={fieldStyle} value={newInventoryItem.unit} onChange={e => setNewInventoryItem(p => ({ ...p, unit: e.target.value }))}>
+                  {['gm', 'kg', 'ml', 'l', 'pcs'].map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
                 </select>
               </div>
-              {item.batchExpiry && (() => {
-                const daysLeft = Math.ceil((new Date(item.batchExpiry) - new Date()) / 86400000);
-                if (daysLeft > 5) return null; // only surface it once it matters
-                const expired = daysLeft < 0;
+            </div>
+          )}
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}><CalendarClock size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />Batch expiry (optional)</label>
+            <input type="date" min={new Date(Date.now() + 330 * 60000).toISOString().split('T')[0]} style={{ ...fieldStyle, colorScheme: 'dark' }}
+              value={newInventoryItem.expiryDate || ''} onChange={e => setNewInventoryItem(p => ({ ...p, expiryDate: e.target.value }))} />
+          </div>
+
+          </div>
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {selectedExistingItem && (
+            <div style={{ marginBottom: '16px', padding: '14px', borderRadius: '12px', background: P.well, border: `1px solid ${P.line}` }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {[
+                  { l: 'Current stock', v: `${selectedExistingItem.currentStock} ${selectedExistingItem.unit}`, strong: true },
+                  { l: 'WAC now', v: `${wacOf(selectedExistingItem).toFixed(2)} / ${selectedExistingItem.unit}`, strong: false },
+                  { l: 'Last buy price', v: `${Number(selectedExistingItem.lastPurchasePrice || selectedExistingItem.costPrice || 0).toFixed(2)} / ${selectedExistingItem.unit}`, strong: false },
+                  { l: 'Stock value', v: money(Math.max(0, Math.round((Number(selectedExistingItem.currentStock) || 0) * wacOf(selectedExistingItem)))), strong: false },
+                ].map(m => (
+                  <div key={m.l}>
+                    <div style={{ fontFamily: P.mono, fontSize: '12.5px', fontWeight: 800, color: m.strong ? P.brass : P.ivory }}>{m.v}</div>
+                    <div style={{ marginTop: '3px', fontSize: '9px', letterSpacing: '1px', textTransform: 'uppercase', color: P.muted }}>{m.l}</div>
+                  </div>
+                ))}
+              </div>
+              {newInventoryItem.currentStock && newInventoryItem.purchasePrice && (() => {
+                const addQty = Number(newInventoryItem.currentStock);
+                const buyPrice = Number(newInventoryItem.purchasePrice);
+                if (!(addQty > 0) || !(buyPrice >= 0)) return null;
+                const oldStock = Math.max(0, Number(selectedExistingItem.currentStock) || 0);
+                const oldWAC = wacOf(selectedExistingItem);
+                const newStock = oldStock + addQty;
+                const newWAC = newStock > 0 ? ((oldStock * oldWAC) + (addQty * buyPrice)) / newStock : buyPrice;
+                const changePct = oldWAC > 0 ? ((buyPrice - oldWAC) / oldWAC) * 100 : 0;
                 return (
-                  <div title={new Date(item.batchExpiry).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} style={{ marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 7px', borderRadius: '5px', fontSize: '0.48rem', fontWeight: '900', background: expired ? 'rgba(226,154,88,0.12)' : 'rgba(184,146,58,0.12)', border: `1px solid ${expired ? 'rgba(226,154,88,0.35)' : 'rgba(184,146,58,0.35)'}`, color: expired ? '#e29a58' : '#b8923a' }}>
-                    <CalendarClock size={9} />
-                    {expired ? 'EXPIRED — USE FIRST' : daysLeft === 0 ? 'EXPIRES TODAY' : `${daysLeft}D LEFT · FEFO`}
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${P.lineSoft}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: '9px', letterSpacing: '1px', textTransform: 'uppercase', color: P.muted }}>New WAC preview</div>
+                      <div style={{ marginTop: '3px', fontFamily: P.mono, fontSize: '14px', fontWeight: 800, color: P.brass }}>{newWAC.toFixed(2)} / {selectedExistingItem.unit}</div>
+                      <div style={{ marginTop: '2px', fontSize: '10.5px', color: P.muted }}>New stock {newStock} {selectedExistingItem.unit}</div>
+                    </div>
+                    {Math.abs(changePct) > 0.5 && <span style={pill(Math.abs(changePct) > 25)}>{Math.abs(changePct).toFixed(1)}% vs WAC</span>}
                   </div>
                 );
               })()}
-            </td>
- 
-            {/* UNIT */}
-            <td style={{ color: '#b4b4b4', fontSize: '0.75rem', fontWeight: '800', paddingRight: '16px' }}>
-              {item.unit}
-            </td>
- 
-            {/* CURRENT STOCK — edits stock value only */}
-            <td style={{ paddingRight: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  type="number"
-                  key={`${item._id}-stock-${item.currentStock}`}
-                  defaultValue={Math.max(0, item.currentStock)}
-                  title="Edit current stock level directly"
-                  style={{ width: '80px', background: '#070707', border: `1px solid ${item.currentStock < 0 ? 'rgba(184,146,58,0.4)' : 'rgba(211,191,162,0.16)'}`, color: item.currentStock < 0 ? '#b8923a' : '#d3bfa2', padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '900', outline: 'none' }}
-                  onBlur={async e => {
-                    const raw = String(e.target.value).trim();
-                    const val = Number(raw);
-                    // A cleared box read as 0 and wiped the stock on blur; and a negative (depleted) stock is DISPLAYED as 0, so just
-                    // focusing and leaving the field "changed" -5 to 0.
-                    if (raw === '' || !Number.isFinite(val)) { e.target.value = Math.max(0, item.currentStock); return; }
-                    if (val < 0) { e.target.value = Math.max(0, item.currentStock); showNotif('Stock cannot be negative', 'error'); return; }
-                    if (val === Math.max(0, item.currentStock)) return;
-                    // Use general patch — stock only
-                    try {
-                      await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val, tenantId });
-                      fetchManagementData();
-                      showNotif(`${item.itemName} stock → ${val} ${item.unit}`);
-                    } catch (err) { e.target.value = Math.max(0, item.currentStock); showNotif(err.response?.data?.error || 'Could not update stock', 'error'); }
-                  }}
-                />
-                {item.currentStock < 0 && (
-                  <AlertTriangle size={12} title="Stock depleted" color="#b8923a" />
-                )}
-              </div>
-            </td>
- 
-            {/* MIN THRESHOLD — uses /config route, does NOT touch stock */}
-            <td style={{ paddingRight: '16px' }}>
-              <input
-                type="number"
-                key={`${item._id}-thresh-${item.minThreshold}`}
-                defaultValue={item.minThreshold}
-                title="Click to edit minimum threshold — saves on click-away"
-                style={{ width: '70px', background: '#070707', border: '1px solid rgba(211,191,162,0.15)', color: '#888', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
-                onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
-                onBlur={async e => {
-                  e.target.style.borderColor = 'rgba(211,191,162,0.15)';
-                  e.target.style.color = '#888';
-                  const rawT = String(e.target.value).trim();
-                  const val = Number(rawT);
-                  if (rawT === '' || !Number.isFinite(val)) { e.target.value = item.minThreshold; return; } // cleared box saved a threshold of 0
-                  if (val < 0) { e.target.value = item.minThreshold; showNotif('Threshold cannot be negative', 'error'); return; }
-                  if (val === item.minThreshold) return;
-                  try {
-                    await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val, tenantId });
-                    fetchManagementData();
-                    showNotif(`${item.itemName} threshold → ${val} ${item.unit}`);
-                  } catch (err) { e.target.value = item.minThreshold; showNotif(err.response?.data?.error || 'Could not update threshold', 'error'); }
-                }}
-              />
-            </td>
- 
-{/* WAC + LAST PRICE */}
-<td style={{ paddingRight: '16px' }}>
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-    {/* WAC — editable */}
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <span style={{ position: 'absolute', left: '8px', color: '#b4b4b4', fontSize: '0.72rem', fontWeight: '900', pointerEvents: 'none' }}>₹</span>
-      <input type="number" step="0.01"
-        key={`${item._id}-wac-${item.weightedAvgCost || item.costPrice}`}
-        defaultValue={(item.weightedAvgCost || item.costPrice || 0).toFixed(2)}
-        title="Weighted Average Cost — auto-updated on every restock. Edit to manually correct."
-        style={{ width: '82px', paddingLeft: '18px', padding: '6px 10px 6px 18px', background: '#070707', border: '1px solid rgba(211,191,162,0.15)', color: '#c2c2c2', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', outline: 'none', cursor: 'text' }}
-        onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.4)'; e.target.style.color = '#fff'; }}
-        onBlur={async e => {
-          e.target.style.borderColor = 'rgba(211,191,162,0.15)';
-          e.target.style.color = '#c2c2c2';
-          const rawW = String(e.target.value).trim();
-          const val = Number(rawW);
-          const current = item.weightedAvgCost || item.costPrice || 0;
-          if (rawW === '' || !Number.isFinite(val)) { e.target.value = current.toFixed(2); return; } // cleared box set the unit cost to 0 and zeroed every dish margin using it
-          if (val < 0) { e.target.value = current.toFixed(2); showNotif('Cost cannot be negative', 'error'); return; }
-          if (Math.abs(val - current) < 0.001) return;
-          try {
-            await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val, tenantId });
-            fetchManagementData();
-            showNotif(`${item.itemName} WAC manually set → ₹${val}/${item.unit}`);
-          } catch (err) {
-            e.target.value = current.toFixed(2);
-            // A server-side failure used to show raw database text to the operator; say what to do instead.
-            const serverMsg = err.response?.data?.error;
-            showNotif(err.response?.status >= 500 ? 'Could not save the unit cost right now. Your value was not saved; try again shortly.' : (serverMsg || 'Could not update cost'), 'error');
-          }
-        }}
-      />
-    </div>
-    {/* Last purchase price + drift indicator */}
-    {item.lastPurchasePrice && item.lastPurchasePrice !== (item.weightedAvgCost || item.costPrice) && (() => {
-      const wac = item.weightedAvgCost || item.costPrice || 0;
-      const last = item.lastPurchasePrice;
-      const drift = wac > 0 ? ((last - wac) / wac) * 100 : 0;
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ fontSize: '0.52rem', color: '#a6a6a6' }}>last ₹{last.toFixed(2)}</span>
-          <span style={{ fontSize: '0.5rem', fontWeight: '900',
-            color: Math.abs(drift) > 25 ? '#b8923a' : Math.abs(drift) > 10 ? '#d3bfa2' : '#b4b4b4'
-          }}>
-            {drift > 0 ? '▲' : '▼'}{Math.abs(drift).toFixed(0)}%
-          </span>
-        </div>
-      );
-    })()}
-    <span style={{ fontSize: '0.5rem', color: '#969696', letterSpacing: '0.5px' }}>WAC <SquarePen size={9} style={{display:'inline',verticalAlign:'middle'}} /></span>
-  </div>
-</td>
- 
-            {/* STOCK VALUE */}
-            <td style={{ color: sv >= 0 ? '#d3bfa2' : '#8a704d', fontWeight: '900', fontSize: '0.82rem', paddingRight: '16px', display:'flex', alignItems:'center', gap:'4px' }}>
-              ₹{Math.abs(sv).toLocaleString()}{sv < 0 && <AlertTriangle size={10} />}
-            </td>
- 
-            {/* STATUS */}
-<td style={{ paddingRight: '10px' }}>
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-    {/* Existing status badge — unchanged logic */}
-    <span style={{
-      fontSize: '0.58rem', padding: '3px 8px', borderRadius: '4px', fontWeight: '900',
-      background: isLow ? 'rgba(184,146,58,0.12)' : 'rgba(211,191,162,0.04)',
-      color: isLow ? '#b8923a' : '#a6a6a6',
-      border: `1px solid ${isLow ? 'rgba(184,146,58,0.25)' : 'rgba(211,191,162,0.16)'}`
-    }}>
-      {isLow ? 'LOW STOCK' : 'OK'}
-    </span>
-
-    {/* ── PURCHASE ORDER BUTTON — only shows when low stock ── */}
-    {isLow && (
-      <button type="button"
-        onClick={() => {
-          // Pull procurement data for this item if available
-          const proc = procurementData.find(p => p._id?.toString() === item._id?.toString());
-
-          // Calculate suggested reorder quantity:
-          // avgDailyUsage × 30 days − current stock, rounded up to nearest 100/10
-          const avgDaily = proc?.avgDailyUsage || 0;
-          const targetDays = 30;
-          const needed = Math.max(0, Math.ceil((avgDaily * targetDays) - item.currentStock));
-          // Round to a sensible quantity based on unit
-          const roundTo = ['kg','l'].includes(item.unit) ? 1 : item.unit === 'gm' || item.unit === 'ml' ? 100 : 10;
-          const suggestedQty = needed > 0 ? Math.ceil(needed / roundTo) * roundTo : Math.ceil(item.minThreshold * 2 / roundTo) * roundTo;
-
-          // Last vendor from purchase history
-          const lastVendor = item.purchaseHistory?.[0]?.vendor || '';
-          const lastPrice  = item.lastPurchasePrice || item.costPrice || 0;
-          const daysLeft   = proc?.daysRemaining;
-
-          setPurchaseOrderModal({
-            item,
-            proc,
-            suggestedQty,
-            lastVendor,
-            lastPrice,
-            daysLeft,
-            customQty: String(suggestedQty),
-            customVendor: lastVendor,
-            copySuccess: false,
-          });
-        }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          padding: '4px 8px', borderRadius: '5px',
-          background: 'rgba(184,146,58,0.12)',
-          border: '1px solid rgba(184,146,58,0.35)',
-          color: '#b8923a', cursor: 'pointer',
-          fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.5px',
-          whiteSpace: 'nowrap'
-        }}
-        title="Generate purchase order for this ingredient"
-      >
-        <ShoppingCart size={9}/> PURCHASE ORDER
-      </button>
-    )}
-  </div>
-</td>
- 
-{/* ACTION */}
-<td>
-  <div style={{ display: 'flex', gap: '6px' }}>
-    <button type="button"
-      onClick={async () => {
-        setPurchaseHistoryItem(item);
-        await fetchPurchaseHistory(item._id);
-      }}
-      style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.2)', color: '#8a704d', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', cursor: 'pointer', fontWeight: '800', whiteSpace: 'nowrap' }}
-      title="View purchase history"
-    >
-      HISTORY
-    </button>
-    <button type="button"
-      onClick={() => setConfirmModal({
-        show: true,
-        title: `Remove ${item.itemName}?`,
-        subtitle: 'Permanently delete this ingredient and all linked recipe references.',
-        onConfirm: async () => {
-          await axios.delete(`${BASE_URL}/inventory/item/${item._id}`, { data: { tenantId } });
-          fetchManagementData();
-          showNotif(`${item.itemName} removed`);
-        }
-      })}
-      style={{ background: 'transparent', border: '1px solid rgba(211,191,162,0.16)', color: '#a6a6a6', padding: '5px 10px', borderRadius: '6px', fontSize: '0.58rem', cursor: 'pointer' }}
-      onMouseEnter={e => { e.currentTarget.style.color = '#b8923a'; e.currentTarget.style.borderColor = 'rgba(184,146,58,0.3)'; }}
-      onMouseLeave={e => { e.currentTarget.style.color = '#a6a6a6'; e.currentTarget.style.borderColor = 'rgba(211,191,162,0.16)'; }}
-    >
-      REMOVE
-    </button>
-  </div>
-</td>
-          </tr>
-        );
-      })}
-  </tbody>
-  <tfoot>
-    <tr style={{ borderTop: '2px solid rgba(211,191,162,0.16)' }}>
-      <td colSpan="5" style={{ padding: '14px 0', fontSize: '0.65rem', color: '#8a704d', fontWeight: '900', textTransform: 'uppercase' }}>TOTAL STOCK VALUE</td>
-      <td style={{ padding: '14px 0', fontWeight: '900', color: '#d3bfa2', fontSize: '0.95rem' }}>
-        ₹{inventory.reduce((a, i) => a + Math.max(0, Math.round(i.currentStock * (i.weightedAvgCost || i.costPrice || 0))), 0).toLocaleString()}
-      </td>
-      <td colSpan="2" />
-    </tr>
-  </tfoot>
-</table>
-{/* PURCHASE HISTORY DRAWER */}
-<AnimatePresence>
-  {purchaseHistoryItem && (
-    <div style={styles.modalBackdrop} onClick={() => setPurchaseHistoryItem(null)}>
-      <motion.div
-        initial={false} animate={{ x: 0, opacity: 1 }}
-        transition={{ type: 'tween', duration: 0.25 }}
-        onClick={e => e.stopPropagation()}
-        style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '420px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderLeft: '1px solid rgba(211,191,162,0.12)', display: 'flex', flexDirection: 'column', zIndex: 9100 }}
-      >
-        {/* HEADER */}
-        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid rgba(211,191,162,0.12)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: '0.58rem', color: '#a6a6a6', fontWeight: '900', letterSpacing: '2px', marginBottom: '6px' }}>PURCHASE LEDGER</div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>{purchaseHistoryItem.itemName}</h3>
-              <div style={{ fontSize: '0.75rem', color: '#8a704d', marginTop: '3px' }}>{purchaseHistoryItem.unit}</div>
             </div>
-            <button type="button" onClick={() => setPurchaseHistoryItem(null)} style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border: '1px solid rgba(211,191,162,0.16)', color: '#b4b4b4', padding: '7px', borderRadius: '8px', cursor: 'pointer' }}>
-              <X size={16} />
-            </button>
+          )}
+
+            <button type="button" disabled={isSubmittingRestock}
+            onClick={async () => {
+              if (isSubmittingRestock) return;
+              if (!newInventoryItem.itemName?.trim() || !newInventoryItem.currentStock) return showNotif('Name and quantity are required', 'error');
+              if (!(Number(newInventoryItem.currentStock) > 0)) return showNotif('Quantity must be a number greater than 0', 'error');
+              if (newInventoryItem.purchasePrice !== '' && newInventoryItem.purchasePrice != null && !(Number(newInventoryItem.purchasePrice) >= 0)) return showNotif("Purchase price can't be negative", 'error');
+              if (newInventoryItem.costPrice !== '' && newInventoryItem.costPrice != null && !(Number(newInventoryItem.costPrice) >= 0)) return showNotif("Cost price can't be negative", 'error');
+              if (selectedExistingItem && !newInventoryItem.purchasePrice) return showNotif('Enter the buy price for this restock, it is needed to update WAC', 'error');
+              if (newInventoryItem.minThreshold !== '' && newInventoryItem.minThreshold != null && !(Number(newInventoryItem.minThreshold) >= 0)) return showNotif("Minimum threshold can't be negative", 'error');
+              setIsSubmittingRestock(true);
+              try {
+                const payload = {
+                  itemName: newInventoryItem.itemName,
+                  unit: selectedExistingItem ? selectedExistingItem.unit : (newInventoryItem.unit || 'gm'),
+                  currentStock: Number(newInventoryItem.currentStock),
+                  vendor: newInventoryItem.vendor || '',
+                  expiryDate: newInventoryItem.expiryDate || null,
+                  ...(selectedExistingItem
+                    ? { costPrice: Number(newInventoryItem.purchasePrice) }
+                    : { minThreshold: Number(newInventoryItem.minThreshold) || 0, costPrice: Number(newInventoryItem.costPrice) || 0 })
+                };
+                const res = await axios.post(`${BASE_URL}/inventory/${tenantId}`, payload);
+                if (res.data.merged) {
+                  const note = String(res.data.note || '');
+                  // The server's note already starts with "WAC updated:" on most restocks; never print that phrase twice.
+                  const wacText = note.startsWith('WAC') ? note : (note ? `WAC updated: ${note}` : '');
+                  showNotif(res.data.wacUpdated && wacText ? `Restocked. ${wacText}` : `${res.data.item.itemName} restocked at existing WAC`);
+                  if (res.data.priceChangePct > 25) showNotif(`Price spike: +${res.data.priceChangePct}% vs WAC. Check the supplier.`, 'error');
+                  else if (res.data.priceChangePct > 10) showNotif(`Price up ${res.data.priceChangePct}% vs WAC`, 'info');
+                } else {
+                  showNotif(`${res.data.item.itemName} added to inventory`);
+                }
+                setNewInventoryItem({ itemName: '', unit: 'gm', currentStock: '', minThreshold: '', costPrice: '', purchasePrice: '', vendor: '', expiryDate: '' });
+                setSelectedExistingItem(null);
+                setInventorySuggestions([]);
+                setShowSuggestions(false);
+                fetchManagementData();
+              } catch (err) { showNotif(err?.response?.data?.error || 'Failed to add ingredient', 'error'); }
+              finally { setIsSubmittingRestock(false); }
+            }}
+            style={{ width: '100%', padding: '12px', borderRadius: '11px', border: 'none', cursor: isSubmittingRestock ? 'wait' : 'pointer', opacity: isSubmittingRestock ? 0.7 : 1,
+              background: `linear-gradient(135deg, ${P.brass}, ${P.gold})`, color: '#0c0c0c', fontSize: '11.5px', fontWeight: 900, letterSpacing: '1px',
+              boxShadow: '0 10px 24px rgba(211,191,162,0.18)' }}>
+            {isSubmittingRestock ? 'Saving…' : selectedExistingItem ? 'Record restock' : 'Add ingredient'}
+          </button>
+          <div style={{ marginTop: '2px', fontSize: '11px', lineHeight: 1.5, color: P.muted }}>
+            {selectedExistingItem
+              ? 'Enter the price you paid this time. WAC recalculates the weighted average across all batches.'
+              : 'Type an ingredient name to see existing matches and restock with WAC.'}
           </div>
-
-          {/* SUMMARY STATS */}
-          {purchaseHistoryData && !purchaseHistoryLoading && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginTop: '16px' }}>
-              {[
-                { l: 'CURRENT WAC', v: `₹${(purchaseHistoryData.weightedAvgCost || 0).toFixed(2)}` },
-                { l: 'LAST BUY', v: `₹${(purchaseHistoryData.lastPurchasePrice || 0).toFixed(2)}` },
-                { l: 'STOCK VALUE', v: `₹${((purchaseHistoryData.currentStock || 0) * (purchaseHistoryData.weightedAvgCost || 0)).toFixed(0)}` },
-              ].map(s => (
-                <div key={s.l} style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', padding: '10px', borderRadius: '8px', border: '1px solid rgba(211,191,162,0.16)' }}>
-                  <div style={{ fontSize: '0.52rem', color: '#a6a6a6', fontWeight: '900', marginBottom: '3px' }}>{s.l}</div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>{s.v}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          </div>
+          </div>
         </div>
 
-        {/* HISTORY LIST */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 28px 40px' }} className="custom-scroll">
-          {purchaseHistoryLoading ? (
-            <SkelRows count={5} label="Loading purchase history" />
-          ) : !purchaseHistoryData?.purchaseHistory?.length ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#8a8a8a', fontSize: '0.8rem', fontWeight: '700' }}>
-              NO PURCHASE HISTORY YET<br/>
-              <span style={{ fontSize: '0.65rem', color: '#0c0c0c', marginTop: '8px', display: 'block' }}>History recorded from next restock</span>
+        {/* LEDGER */}
+        <div style={{ ...panelStyle, padding: '20px 22px', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={eyebrow}>Stock ledger</div>
+              <div style={{ marginTop: '4px', fontFamily: P.serif, fontSize: '19px', color: P.ivory }}>
+                {visible.length} of {totalItems} ingredient{totalItems === 1 ? '' : 's'}
+              </div>
             </div>
-          ) : (
-            <>
-              <div style={{ fontSize: '0.58rem', color: '#a6a6a6', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '14px' }}>
-                {purchaseHistoryData.purchaseHistory.length} PURCHASE{purchaseHistoryData.purchaseHistory.length > 1 ? 'S' : ''} RECORDED
-              </div>
-              {purchaseHistoryData.purchaseHistory.map((entry, idx) => {
-                const driftPct = entry.wacBefore > 0
-                  ? ((entry.unitPrice - entry.wacBefore) / entry.wacBefore) * 100
-                  : 0;
-                const isFirst = idx === purchaseHistoryData.purchaseHistory.length - 1;
-                return (
-                  <div key={idx} style={{ padding: '16px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.12)', borderRadius: '12px', marginBottom: '10px' }}>
-                    {/* DATE + VENDOR */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                      <div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#fff' }}>
-                          {new Date(entry.purchaseDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
-                        </div>
-                        {entry.vendor && <div style={{ fontSize: '0.65rem', color: '#b4b4b4', marginTop: '2px' }}>{entry.vendor}</div>}
-                        {entry.batchId && <div style={{ fontSize: '0.58rem', color: '#969696', marginTop: '1px' }}>Batch: {entry.batchId}</div>}
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#d3bfa2' }}>₹{entry.unitPrice?.toFixed(2)}/{purchaseHistoryItem.unit}</div>
-                        <div style={{ fontSize: '0.62rem', color: '#a6a6a6', marginTop: '2px' }}>× {entry.qty} {purchaseHistoryItem.unit} = ₹{entry.totalCost?.toFixed(0)}</div>
-                      </div>
-                    </div>
-                    {/* WAC MOVEMENT */}
-                    {!isFirst && entry.wacBefore > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: '#070707', borderRadius: '8px', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '0.62rem', color: '#a6a6a6' }}>WAC</span>
-                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#c2c2c2' }}>₹{entry.wacBefore?.toFixed(2)}</span>
-                        <span style={{ fontSize: '0.6rem', color: '#969696' }}>→</span>
-                        <span style={{ fontSize: '0.78rem', fontWeight: '900', color: '#d3bfa2' }}>₹{entry.wacAfter?.toFixed(2)}</span>
-                        {Math.abs(driftPct) > 0.5 && (
-                          <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px',
-                            color: driftPct > 25 ? '#b8923a' : driftPct > 10 ? '#d3bfa2' : driftPct < -10 ? '#ecdcb9' : '#b4b4b4',
-                            background: driftPct > 25 ? 'rgba(184,146,58,0.1)' : driftPct > 10 ? 'rgba(211,191,162,0.06)' : driftPct < -10 ? 'rgba(236,220,185,0.06)' : 'transparent',
-                            border: `1px solid ${driftPct > 25 ? 'rgba(184,146,58,0.3)' : driftPct > 10 ? 'rgba(211,191,162,0.15)' : driftPct < -10 ? 'rgba(236,220,185,0.2)' : 'rgba(211,191,162,0.16)'}`
-                          }}>
-                            {driftPct > 0 ? '▲' : '▼'} {Math.abs(driftPct).toFixed(1)}%
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {/* STOCK BEFORE */}
-                    <div style={{ fontSize: '0.58rem', color: '#969696' }}>
-                      Stock before: {entry.stockBefore} → {(entry.stockBefore || 0) + (entry.qty || 0)} {purchaseHistoryItem.unit}
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </div>
-      </motion.div>
-    </div>
-  )}
-</AnimatePresence>
-                   </div>
-                )}
-              </div>
-
-              {/* PROCUREMENT PREDICTOR */}
-{procurementData.length > 0 && (
-  <div style={{ ...styles.biCard, borderLeft: '4px solid #8a704d' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-      <h4 style={{ ...styles.biTitle, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Truck size={16}/> PROCUREMENT PREDICTOR
-      </h4>
-      {/* Summary pill */}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <span style={{
-          fontSize: '0.58rem', fontWeight: '900', padding: '4px 12px', borderRadius: '20px',
-          background: 'rgba(184,146,58,0.1)', border: '1px solid rgba(184,146,58,0.25)', color: '#b8923a'
-        }}>
-          {procurementData.filter(i => i.isLow || (i.daysRemaining !== null && i.daysRemaining <= 7)).length} items need reorder
-        </span>
-      </div>
-    </div>
-
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '12px' }}>
-      {procurementData.slice(0, 12).map(item => {
-        const isUrg = item.daysRemaining !== null && item.daysRemaining <= 3;
-        const isWrn = item.daysRemaining !== null && item.daysRemaining <= 7;
-        const needsOrder = isUrg || isWrn || item.isLow;
-
-        // Find full inventory item for vendor/price lookup
-        const fullItem = inventory.find(i => i._id?.toString() === item._id?.toString()) || {};
-        const lastVendor = fullItem.purchaseHistory?.[0]?.vendor || '';
-        const lastPrice  = fullItem.lastPurchasePrice || fullItem.costPrice || 0;
-
-        // Suggested qty
-        const avgDaily = item.avgDailyUsage || 0;
-        const needed   = Math.max(0, Math.ceil((avgDaily * 30) - item.currentStock));
-        const roundTo  = ['kg','l'].includes(item.unit) ? 1 : item.unit === 'gm' || item.unit === 'ml' ? 100 : 10;
-        const suggestedQty = needed > 0 ? Math.ceil(needed / roundTo) * roundTo
-          : Math.ceil(item.minThreshold * 2 / roundTo) * roundTo;
-
-        return (
-          <div key={item._id} style={{
-            background: '#070707',
-            border: `1px solid ${isUrg ? 'rgba(184,146,58,0.4)' : needsOrder ? 'rgba(184,146,58,0.2)' : '#121212'}`,
-            padding: '14px', borderRadius: '12px', position: 'relative',
-            boxShadow: isUrg ? '0 0 12px rgba(184,146,58,0.08)' : 'none'
-          }}>
-            {/* Urgency indicator strip */}
-            {needsOrder && (
-              <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, height: '2px', borderRadius: '12px 12px 0 0',
-                background: isUrg ? '#b8923a' : 'rgba(184,146,58,0.4)'
-              }}/>
-            )}
-
-            {/* Item name + days left */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <div style={{ fontWeight: '900', color: '#fff', fontSize: '0.8rem', flex: 1, marginRight: '6px' }}>{item.itemName}</div>
-              {item.daysRemaining !== null ? (
-                <span style={{
-                  fontSize: '0.65rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
-                  background: isUrg ? 'rgba(184,146,58,0.18)' : isWrn ? 'rgba(184,146,58,0.08)' : 'rgba(211,191,162,0.04)',
-                  color: isUrg ? '#b8923a' : isWrn ? '#d3bfa2' : '#b4b4b4'
-                }}>
-                  {item.daysRemaining}d left
-                </span>
-              ) : (
-                <span style={{ fontSize: '0.58rem', color: '#969696' }}>No usage data</span>
+            <div style={{ position: 'relative', width: '240px', maxWidth: '100%' }}>
+              <Search size={13} color={P.muted} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input type="text" placeholder="Search ingredient" value={inventorySearchQuery}
+                onChange={e => setInventorySearchQuery(e.target.value)}
+                style={{ ...fieldStyle, padding: '9px 30px 9px 34px' }} />
+              {inventorySearchQuery && (
+                <button type="button" aria-label="Clear search" onClick={() => setInventorySearchQuery('')}
+                  style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: P.muted, cursor: 'pointer', padding: '4px' }}>
+                  <X size={13} />
+                </button>
               )}
             </div>
+          </div>
 
-            {/* Stock bar */}
-            <div style={{ marginBottom: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.6rem', color: '#a6a6a6' }}>{item.currentStock} {item.unit} remaining</span>
-                <span style={{ fontSize: '0.6rem', color: '#969696' }}>min: {item.minThreshold} {item.unit}</span>
+          {inventory.length === 0 ? (
+            <div style={{ padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'rgba(211,191,162,0.08)', border: `1px solid ${P.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Layers size={24} color={P.gold} />
               </div>
-              <div style={{ height: '3px', background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${Math.min(100, item.minThreshold > 0 ? Math.round((item.currentStock / (item.minThreshold * 3)) * 100) : 50)}%`,
-                  background: isUrg ? '#b8923a' : isWrn ? '#8a704d' : '#171717',
-                  borderRadius: '2px', transition: 'width 0.5s'
-                }}/>
+              <div style={{ fontFamily: P.serif, fontSize: '18px', color: P.ivory }}>No ingredients yet</div>
+              <div style={{ fontSize: '12px', color: P.muted, maxWidth: '340px' }}>Add your first ingredient with the form on the left. Stock, cost and alerts appear here.</div>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }} className="custom-scroll">
+              <div style={{ minWidth: '940px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '12px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${P.lineSoft}` }}>
+                  {['Ingredient', 'Unit', 'Stock', 'Min', 'WAC / unit', 'Value', 'Status', ''].map((h, idx) => (
+                    <div key={idx} style={{ fontSize: '9px', letterSpacing: '1.3px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>{h}</div>
+                  ))}
+                </div>
+
+                {visible.length === 0 ? (
+                  <div style={{ padding: '36px', textAlign: 'center', color: P.muted, fontSize: '12.5px' }}>
+                    No ingredient matches "{inventorySearchQuery}". Clear the search to see everything.
+                  </div>
+                ) : visible.map(item => {
+                  const low = isLow(item);
+                  const depleted = Number(item.currentStock || 0) < 0;
+                  const wac = wacOf(item);
+                  const value = Math.max(0, Math.round(Number(item.currentStock || 0) * wac));
+                  const d = daysToExpiry(item);
+                  const drift = wac > 0 && item.lastPurchasePrice ? ((item.lastPurchasePrice - wac) / wac) * 100 : 0;
+                  return (
+                    <div key={item._id} style={{ display: 'grid', gridTemplateColumns: cols, gap: '12px', alignItems: 'center', padding: '14px', borderBottom: `1px solid ${P.lineSoft}`, transition: 'background .15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      {/* Name, vendor, expiry */}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: P.ivory, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.itemName}</div>
+                        <select value={item.vendorId || ''} onChange={e => linkIngredientVendor(item._id, e.target.value)}
+                          style={{ marginTop: '4px', maxWidth: '100%', background: 'transparent', border: 'none', color: item.vendorId ? P.brass : P.faint, fontSize: '10.5px', fontWeight: 600, outline: 'none', cursor: 'pointer' }}>
+                          <option value="">+ link vendor</option>
+                          {vendors.map(v => <option key={v._id} value={v._id}>{v.name}</option>)}
+                        </select>
+                        {d !== null && d <= 5 && (
+                          <div title={new Date(item.batchExpiry).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} style={{ marginTop: '3px' }}>
+                            <span style={pill(d <= 2)}><CalendarClock size={9} /> {d < 0 ? 'Expired · use first' : d === 0 ? 'Expires today' : `${d}d left · FEFO`}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11.5px', fontWeight: 700, color: P.muted, textTransform: 'uppercase' }}>{item.unit}</div>
+                      {/* Stock: inline edit, saves on blur */}
+                      <div>
+                        <input type="number" key={`${item._id}-stock-${item.currentStock}`} defaultValue={Math.max(0, item.currentStock)}
+                          title="Edit current stock. Saves when you leave the field."
+                          style={{ ...fieldStyle, width: '96px', padding: '7px 9px', fontFamily: P.mono, fontWeight: 700, borderColor: depleted ? 'rgba(211,191,162,0.5)' : P.line }}
+                          onBlur={async e => {
+                            const raw = String(e.target.value).trim();
+                            const val = Number(raw);
+                            if (raw === '' || !Number.isFinite(val)) { e.target.value = Math.max(0, item.currentStock); return; }
+                            if (val < 0) { e.target.value = Math.max(0, item.currentStock); showNotif('Stock cannot be negative', 'error'); return; }
+                            if (val === Math.max(0, item.currentStock)) return;
+                            try {
+                              await axios.patch(`${BASE_URL}/inventory/item/${item._id}`, { currentStock: val, tenantId });
+                              fetchManagementData();
+                              showNotif(`${item.itemName} stock set to ${val} ${item.unit}`);
+                            } catch (err) { e.target.value = Math.max(0, item.currentStock); showNotif(err.response?.data?.error || 'Could not update stock', 'error'); }
+                          }} />
+                        {depleted && <div style={{ marginTop: '3px', fontSize: '9.5px', color: P.gold, fontWeight: 700 }}>Depleted</div>}
+                      </div>
+                      {/* Min threshold: inline edit, saves on blur, does not touch stock */}
+                      <div>
+                        <input type="number" key={`${item._id}-thresh-${item.minThreshold}`} defaultValue={item.minThreshold}
+                          title="Minimum threshold. Saves when you leave the field."
+                          style={{ ...fieldStyle, width: '76px', padding: '7px 9px', fontFamily: P.mono, color: P.muted }}
+                          onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.45)'; e.target.style.color = P.ivory; }}
+                          onBlur={async e => {
+                            e.target.style.borderColor = P.line;
+                            e.target.style.color = P.muted;
+                            const rawT = String(e.target.value).trim();
+                            const val = Number(rawT);
+                            if (rawT === '' || !Number.isFinite(val)) { e.target.value = item.minThreshold; return; }
+                            if (val < 0) { e.target.value = item.minThreshold; showNotif('Threshold cannot be negative', 'error'); return; }
+                            if (val === item.minThreshold) return;
+                            try {
+                              await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { minThreshold: val, tenantId });
+                              fetchManagementData();
+                              showNotif(`${item.itemName} threshold set to ${val} ${item.unit}`);
+                            } catch (err) { e.target.value = item.minThreshold; showNotif(err.response?.data?.error || 'Could not update threshold', 'error'); }
+                          }} />
+                      </div>
+                      {/* WAC: inline edit, plus last buy price drift */}
+                      <div>
+                        <input type="number" step="0.01" key={`${item._id}-wac-${wac}`} defaultValue={wac.toFixed(2)}
+                          title="Weighted average cost. Updates on every restock. Edit to correct it manually."
+                          style={{ ...fieldStyle, width: '96px', padding: '7px 9px', fontFamily: P.mono, color: P.ivory }}
+                          onFocus={e => { e.target.style.borderColor = 'rgba(211,191,162,0.45)'; }}
+                          onBlur={async e => {
+                            e.target.style.borderColor = P.line;
+                            const rawW = String(e.target.value).trim();
+                            const val = Number(rawW);
+                            const current = wac;
+                            if (rawW === '' || !Number.isFinite(val)) { e.target.value = current.toFixed(2); return; }
+                            if (val < 0) { e.target.value = current.toFixed(2); showNotif('Cost cannot be negative', 'error'); return; }
+                            if (Math.abs(val - current) < 0.001) return;
+                            try {
+                              await axios.patch(`${BASE_URL}/inventory/item/${item._id}/config`, { costPrice: val, tenantId });
+                              fetchManagementData();
+                              showNotif(`${item.itemName} WAC set to ${val} / ${item.unit}`);
+                            } catch (err) {
+                              e.target.value = current.toFixed(2);
+                              const serverMsg = err.response?.data?.error;
+                              showNotif(err.response?.status >= 500 ? 'Could not save the unit cost right now. Your value was not saved; try again shortly.' : (serverMsg || 'Could not update cost'), 'error');
+                            }
+                          }} />
+                        {item.lastPurchasePrice && Math.abs(drift) > 0.5 && (
+                          <div style={{ marginTop: '3px', fontSize: '9.5px', color: Math.abs(drift) > 25 ? P.brass : P.muted, fontFamily: P.mono }}>
+                            last {Number(item.lastPurchasePrice).toFixed(2)} · {drift > 0 ? '+' : '-'}{Math.abs(drift).toFixed(0)}%
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontFamily: P.mono, fontSize: '13px', fontWeight: 800, color: value > 0 ? P.brass : P.faint }}>{money(value)}</div>
+                      {/* Status + purchase order */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
+                        <span style={pill(low)}>{low ? 'Low stock' : 'In stock'}</span>
+                        {low && (
+                          <button type="button" title="Generate purchase order for this ingredient"
+                            onClick={() => {
+                              const proc = procurementData.find(p => p._id?.toString() === item._id?.toString());
+                              const avgDaily = proc?.avgDailyUsage || 0;
+                              const suggestedQty = suggestQty(avgDaily, item.currentStock, item.minThreshold, item.unit);
+                              const lastVendor = item.purchaseHistory?.[0]?.vendor || '';
+                              openPurchaseOrder({ item, proc, suggestedQty, lastVendor, lastPrice: item.lastPurchasePrice || item.costPrice || 0,
+                                daysLeft: proc?.daysRemaining, customQty: String(suggestedQty), customVendor: lastVendor });
+                            }}
+                            style={{ ...ghostBtn, padding: '4px 9px', fontSize: '9.5px', color: P.gold, borderColor: 'rgba(211,191,162,0.4)' }}>
+                            <ShoppingCart size={10} /> Order
+                          </button>
+                        )}
+                      </div>
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        <button type="button" title="View purchase history"
+                          onClick={async () => { setPurchaseHistoryItem(item); await fetchPurchaseHistory(item._id); }}
+                          style={{ ...ghostBtn, padding: '6px 9px', fontSize: '9.5px' }}>History</button>
+                        <button type="button" aria-label={`Remove ${item.itemName}`}
+                          onClick={() => setConfirmModal({
+                            show: true,
+                            title: `Remove ${item.itemName}?`,
+                            subtitle: 'This permanently deletes the ingredient and its linked recipe references.',
+                            onConfirm: async () => {
+                              try {
+                                await axios.delete(`${BASE_URL}/inventory/item/${item._id}`, { data: { tenantId } });
+                                fetchManagementData();
+                                showNotif(`${item.itemName} removed`);
+                              } catch (err) {
+                                showNotif(err?.response?.data?.error || `Could not remove ${item.itemName}`, 'error');
+                              }
+                            }
+                          })}
+                          style={{ width: '30px', height: '30px', borderRadius: '9px', background: 'transparent', border: `1px solid ${P.lineSoft}`, color: P.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onMouseEnter={e => { e.currentTarget.style.color = P.brass; e.currentTarget.style.borderColor = P.line; }}
+                          onMouseLeave={e => { e.currentTarget.style.color = P.faint; e.currentTarget.style.borderColor = P.lineSoft; }}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {visible.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '12px', alignItems: 'center', padding: '14px', marginTop: '4px', borderRadius: '10px', background: 'rgba(211,191,162,0.06)', border: `1px solid ${P.line}` }}>
+                    <div style={{ gridColumn: 'span 5', fontSize: '10px', letterSpacing: '1.4px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>Total stock value (WAC)</div>
+                    <div style={{ fontFamily: P.mono, fontWeight: 800, color: P.brass, fontSize: '14px' }}>{money(stockValue)}</div>
+                    <div style={{ gridColumn: 'span 2' }} />
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Usage rate */}
-            {item.avgDailyUsage > 0 && (
-              <div style={{ fontSize: '0.58rem', color: '#b4b4b4', marginBottom: '8px' }}>
-                Avg usage: {item.avgDailyUsage} {item.unit}/day
-                {suggestedQty > 0 && <span style={{ color: '#8a704d', marginLeft: '6px' }}>· Reorder: ~{suggestedQty} {item.unit}</span>}
-              </div>
-            )}
-
-            {/* Last vendor */}
-            {lastVendor && (
-              <div style={{ fontSize: '0.58rem', color: '#a6a6a6', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Truck size={8} color="#b4b4b4"/> {lastVendor}
-                {lastPrice > 0 && <span style={{ color: '#b4b4b4' }}>· ₹{lastPrice.toFixed(2)}/{item.unit}</span>}
-              </div>
-            )}
-
-            {/* 1-TAP PURCHASE ORDER BUTTON */}
-            {needsOrder && (
-              <button type="button"
-                onClick={() => {
-                  setPurchaseOrderModal({
-                    item: { ...item, ...fullItem },
-                    proc: item,
-                    suggestedQty,
-                    lastVendor,
-                    lastPrice,
-                    daysLeft: item.daysRemaining,
-                    customQty: String(suggestedQty),
-                    customVendor: lastVendor,
-                    copySuccess: false,
-                  });
-                }}
-                style={{
-                  width: '100%', padding: '8px', borderRadius: '7px',
-                  background: isUrg ? 'rgba(184,146,58,0.15)' : 'rgba(184,146,58,0.08)',
-                  border: `1px solid ${isUrg ? 'rgba(184,146,58,0.45)' : 'rgba(184,146,58,0.25)'}`,
-                  color: '#b8923a', cursor: 'pointer',
-                  fontSize: '0.62rem', fontWeight: '900', letterSpacing: '0.5px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(184,146,58,0.22)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = isUrg ? 'rgba(184,146,58,0.15)' : 'rgba(184,146,58,0.08)'; }}
-              >
-                <ShoppingCart size={11}/> GENERATE PURCHASE ORDER
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  </div>
-)}
-
-              
-            </motion.div>
           )}
+        </div>
+      </div>
+
+      {/* ── VENDORS ── */}
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: showVendorPanel ? '18px' : 0, flexWrap: 'wrap' }}>
+          <div>
+            <div style={eyebrow}>Suppliers</div>
+            <div style={{ marginTop: '4px', fontFamily: P.serif, fontSize: '19px', color: P.ivory }}>Vendors <span style={{ fontFamily: P.mono, fontSize: '13px', color: P.muted }}>({vendors.length})</span></div>
+          </div>
+          <button type="button" onClick={() => setShowVendorPanel(p => !p)} style={ghostBtn}>
+            {showVendorPanel ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {showVendorPanel ? 'Hide' : 'Manage'}
+          </button>
+        </div>
+        {showVendorPanel && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 0.9fr 0.7fr auto', gap: '8px', marginBottom: '16px' }}>
+              <input placeholder="Vendor name *" value={newVendorDraft.name} onChange={e => setNewVendorDraft(p => ({ ...p, name: e.target.value }))} style={fieldStyle} />
+              <input placeholder="Contact person" value={newVendorDraft.contactPerson} onChange={e => setNewVendorDraft(p => ({ ...p, contactPerson: e.target.value }))} style={fieldStyle} />
+              <input placeholder="Phone" value={newVendorDraft.phone} onChange={e => setNewVendorDraft(p => ({ ...p, phone: e.target.value }))} style={fieldStyle} />
+              <select value={newVendorDraft.paymentTerms} onChange={e => setNewVendorDraft(p => ({ ...p, paymentTerms: e.target.value }))} style={fieldStyle}>
+                {['COD', 'Net 7', 'Net 15', 'Net 30'].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input type="number" placeholder="Lead days" value={newVendorDraft.leadTimeDays} onChange={e => setNewVendorDraft(p => ({ ...p, leadTimeDays: e.target.value }))} style={fieldStyle} />
+              <button type="button" onClick={saveVendor}
+                style={{ padding: '0 18px', borderRadius: '10px', border: 'none', background: `linear-gradient(135deg, ${P.brass}, ${P.gold})`, color: '#0c0c0c', fontSize: '11px', fontWeight: 900, cursor: 'pointer', letterSpacing: '0.6px' }}>
+                {editingVendorId ? 'UPDATE' : 'ADD'}
+              </button>
+            </div>
+            {vendors.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '26px', color: P.muted, fontSize: '12px' }}>No vendors yet. Add one above to start linking ingredients.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '10px' }}>
+                {vendors.map(v => {
+                  const linkedCount = inventory.filter(i => i.vendorId === v._id).length;
+                  const dueCount = (procurementData || []).filter(p => p.vendorId === v._id && p.suggestedReorderQty > 0).length;
+                  return (
+                    <div key={v._id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px', borderRadius: '13px', background: P.well, border: `1px solid ${P.lineSoft}` }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: P.ivory, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.name}</div>
+                        <div style={{ marginTop: '3px', fontSize: '11px', color: P.muted }}>
+                          {v.contactPerson ? `${v.contactPerson} · ` : ''}{v.phone || 'No phone'} · {v.paymentTerms} · {v.leadTimeDays}d lead · {linkedCount} ingredient{linkedCount === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => generatePurchaseOrderPDF(v)} disabled={dueCount === 0}
+                        title={dueCount === 0 ? 'Nothing due for reorder' : `${dueCount} item(s) due for reorder`}
+                        style={{ ...ghostBtn, padding: '7px 10px', fontSize: '10px', opacity: dueCount === 0 ? 0.4 : 1, cursor: dueCount === 0 ? 'not-allowed' : 'pointer', color: dueCount > 0 ? P.gold : P.muted }}>
+                        <FileText size={11} /> PO{dueCount > 0 ? ` (${dueCount})` : ''}
+                      </button>
+                      <button type="button" aria-label="Edit vendor"
+                        onClick={() => { setNewVendorDraft({ name: v.name, contactPerson: v.contactPerson, phone: v.phone, email: v.email, paymentTerms: v.paymentTerms, leadTimeDays: v.leadTimeDays }); setEditingVendorId(v._id); }}
+                        style={{ width: '30px', height: '30px', borderRadius: '9px', background: 'transparent', border: `1px solid ${P.line}`, color: P.brass, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <SquarePen size={12} />
+                      </button>
+                      <button type="button" aria-label="Remove vendor"
+                        onClick={() => setConfirmModal({ show: true, title: 'Remove vendor?', subtitle: `${v.name} will be unlinked from its ingredients.`, onConfirm: () => deleteVendor(v._id) })}
+                        style={{ width: '30px', height: '30px', borderRadius: '9px', background: 'transparent', border: `1px solid ${P.lineSoft}`, color: P.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── PROCUREMENT PREDICTOR ── */}
+      {procurementData.length > 0 && (
+        <div style={panelStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={eyebrow}>Procurement predictor</div>
+              <div style={{ marginTop: '4px', fontSize: '11.5px', color: P.muted }}>Forecast from recent usage. Orders are suggested before stock runs out.</div>
+            </div>
+            <span style={pill(true)}>{procurementData.filter(i => i.isLow || (i.daysRemaining !== null && i.daysRemaining <= 7)).length} need reorder</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
+            {procurementData.slice(0, 12).map(item => {
+              const urgent = item.daysRemaining !== null && item.daysRemaining <= 3;
+              const soon = item.daysRemaining !== null && item.daysRemaining <= 7;
+              const needsOrder = urgent || soon || item.isLow;
+              const fullItem = inventory.find(i => i._id?.toString() === item._id?.toString()) || {};
+              const lastVendor = fullItem.purchaseHistory?.[0]?.vendor || '';
+              const lastPrice = fullItem.lastPurchasePrice || fullItem.costPrice || 0;
+              const suggestedQty = suggestQty(item.avgDailyUsage, item.currentStock, item.minThreshold, item.unit);
+              const fillPct = Math.min(100, item.minThreshold > 0 ? Math.round((Number(item.currentStock || 0) / (item.minThreshold * 3)) * 100) : 50);
+              return (
+                <div key={item._id} style={{ position: 'relative', padding: '15px', borderRadius: '14px', background: P.well,
+                  border: `1px solid ${urgent ? 'rgba(211,191,162,0.5)' : needsOrder ? 'rgba(211,191,162,0.2)' : P.lineSoft}` }}>
+                  {needsOrder && <div style={{ position: 'absolute', top: 0, left: '14px', right: '14px', height: '2px', borderRadius: '2px', background: urgent ? P.gold : 'rgba(211,191,162,0.35)' }} />}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: P.ivory, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.itemName}</div>
+                    {item.daysRemaining !== null
+                      ? <span style={pill(urgent)}>{item.daysRemaining}d left</span>
+                      : <span style={{ fontSize: '10px', color: P.faint }}>No usage data</span>}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: P.muted, marginBottom: '6px' }}>
+                    <span>{item.currentStock} {item.unit} left</span>
+                    <span>min {item.minThreshold} {item.unit}</span>
+                  </div>
+                  <div style={{ height: '4px', borderRadius: '3px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden', marginBottom: '10px' }}>
+                    <div style={{ height: '100%', width: `${Math.max(0, fillPct)}%`, borderRadius: '3px', background: urgent ? `linear-gradient(90deg, ${P.gold}, ${P.brass})` : 'rgba(211,191,162,0.35)' }} />
+                  </div>
+                  {item.avgDailyUsage > 0 && (
+                    <div style={{ fontSize: '10.5px', color: P.muted, marginBottom: '6px' }}>
+                      Uses {item.avgDailyUsage} {item.unit}/day{suggestedQty > 0 && <span style={{ color: P.brass }}> · reorder ~{suggestedQty} {item.unit}</span>}
+                    </div>
+                  )}
+                  {lastVendor && (
+                    <div style={{ fontSize: '10.5px', color: P.muted, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Truck size={10} /> {lastVendor}{lastPrice > 0 && <span style={{ fontFamily: P.mono }}> · {Number(lastPrice).toFixed(2)}/{item.unit}</span>}
+                    </div>
+                  )}
+                  {needsOrder && (
+                    <button type="button"
+                      onClick={() => openPurchaseOrder({ item: { ...item, ...fullItem }, proc: item, suggestedQty, lastVendor, lastPrice, daysLeft: item.daysRemaining, customQty: String(suggestedQty), customVendor: lastVendor })}
+                      style={{ width: '100%', padding: '9px', borderRadius: '9px', cursor: 'pointer', background: urgent ? 'rgba(211,191,162,0.18)' : 'rgba(211,191,162,0.08)',
+                        border: `1px solid ${urgent ? 'rgba(211,191,162,0.5)' : 'rgba(211,191,162,0.25)'}`, color: P.brass, fontSize: '10px', fontWeight: 800, letterSpacing: '0.7px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <ShoppingCart size={11} /> GENERATE PURCHASE ORDER
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── PURCHASE HISTORY PANEL ── */}
+      <AnimatePresence>
+        {purchaseHistoryItem && (
+          <>
+            <motion.div key="hist-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setPurchaseHistoryItem(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 1000 }} />
+            <motion.aside key="hist-panel" initial={{ x: 460 }} animate={{ x: 0 }} exit={{ x: 460 }} transition={{ type: 'tween', duration: 0.26 }}
+              style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: '440px', maxWidth: '100vw', zIndex: 1001, display: 'flex', flexDirection: 'column',
+                background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderLeft: `1px solid ${P.line}`, boxShadow: '-30px 0 60px rgba(0,0,0,0.5)' }}>
+              <div style={{ padding: '26px 26px 20px', borderBottom: `1px solid ${P.line}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={eyebrow}>Purchase ledger</div>
+                    <div style={{ marginTop: '6px', fontFamily: P.serif, fontSize: '21px', color: P.ivory, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{purchaseHistoryItem.itemName}</div>
+                    <div style={{ marginTop: '3px', fontSize: '11.5px', color: P.muted }}>Unit: {purchaseHistoryItem.unit}</div>
+                  </div>
+                  <button type="button" aria-label="Close" onClick={() => setPurchaseHistoryItem(null)}
+                    style={{ width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0, background: 'transparent', border: `1px solid ${P.line}`, color: P.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={15} />
+                  </button>
+                </div>
+                {purchaseHistoryData && !purchaseHistoryLoading && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginTop: '18px' }}>
+                    {[
+                      { l: 'Current WAC', v: (purchaseHistoryData.weightedAvgCost || 0).toFixed(2) },
+                      { l: 'Last buy', v: (purchaseHistoryData.lastPurchasePrice || 0).toFixed(2) },
+                      { l: 'Stock value', v: Math.max(0, Math.round((purchaseHistoryData.currentStock || 0) * (purchaseHistoryData.weightedAvgCost || 0))).toLocaleString('en-IN') },
+                    ].map(s => (
+                      <div key={s.l} style={{ padding: '11px', borderRadius: '11px', background: P.well, border: `1px solid ${P.lineSoft}` }}>
+                        <div style={{ fontFamily: P.mono, fontSize: '14px', fontWeight: 800, color: P.brass }}>{s.v}</div>
+                        <div style={{ marginTop: '3px', fontSize: '9px', letterSpacing: '1px', textTransform: 'uppercase', color: P.muted }}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '18px 26px 40px' }} className="custom-scroll">
+                {purchaseHistoryLoading ? (
+                  <SkelRows count={5} label="Loading purchase history" />
+                ) : !purchaseHistoryData?.purchaseHistory?.length ? (
+                  <div style={{ textAlign: 'center', padding: '44px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ fontFamily: P.serif, fontSize: '17px', color: P.ivory }}>No purchases recorded yet</div>
+                    <div style={{ fontSize: '12px', color: P.muted, maxWidth: '300px' }}>History is recorded from the next restock of this ingredient.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '9.5px', letterSpacing: '1.4px', textTransform: 'uppercase', color: P.muted, fontWeight: 800, marginBottom: '14px' }}>
+                      {purchaseHistoryData.purchaseHistory.length} purchase{purchaseHistoryData.purchaseHistory.length > 1 ? 's' : ''} recorded
+                    </div>
+                    {purchaseHistoryData.purchaseHistory.map((entry, idx) => {
+                      const driftPct = entry.wacBefore > 0 ? ((entry.unitPrice - entry.wacBefore) / entry.wacBefore) * 100 : 0;
+                      const isFirst = idx === purchaseHistoryData.purchaseHistory.length - 1;
+                      const pd = new Date(entry.purchaseDate);
+                      return (
+                        <div key={idx} style={{ padding: '15px', marginBottom: '10px', borderRadius: '14px', background: P.well, border: `1px solid ${P.lineSoft}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+                            <div>
+                              <div style={{ fontSize: '12.5px', fontWeight: 700, color: P.ivory }}>{Number.isNaN(pd.getTime()) ? '-' : pd.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                              {entry.vendor && <div style={{ marginTop: '2px', fontSize: '11px', color: P.muted }}>{entry.vendor}</div>}
+                              {entry.batchId && <div style={{ marginTop: '1px', fontSize: '10px', color: P.faint }}>Batch {entry.batchId}</div>}
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontFamily: P.mono, fontSize: '13px', fontWeight: 800, color: P.brass }}>{Number(entry.unitPrice || 0).toFixed(2)} / {purchaseHistoryItem.unit}</div>
+                              <div style={{ marginTop: '2px', fontFamily: P.mono, fontSize: '10.5px', color: P.muted }}>{entry.qty} {purchaseHistoryItem.unit} = {Number(entry.totalCost || 0).toFixed(0)}</div>
+                            </div>
+                          </div>
+                          {!isFirst && entry.wacBefore > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '9px', background: 'rgba(255,255,255,0.02)', marginBottom: '8px' }}>
+                              <span style={{ fontSize: '10px', color: P.muted }}>WAC</span>
+                              <span style={{ fontFamily: P.mono, fontSize: '11.5px', color: P.ivory }}>{Number(entry.wacBefore).toFixed(2)}</span>
+                              <span style={{ color: P.faint }}>→</span>
+                              <span style={{ fontFamily: P.mono, fontSize: '12px', fontWeight: 800, color: P.brass }}>{Number(entry.wacAfter || 0).toFixed(2)}</span>
+                              {Math.abs(driftPct) > 0.5 && <span style={{ marginLeft: 'auto', ...pill(Math.abs(driftPct) > 25) }}>{Math.abs(driftPct).toFixed(1)}%</span>}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '10.5px', color: P.muted }}>Stock before {entry.stockBefore} → {(entry.stockBefore || 0) + (entry.qty || 0)} {purchaseHistoryItem.unit}</div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+})()}
 
           {/* ════════════════════════════════════════════
               RECIPES — standalone, NOT inside any modal
@@ -16157,6 +15846,30 @@ onClick={async () => {
       }
     }
   } catch (err) {
+    // The server refuses a table another party holds. Ask the operator before overriding it, then retry once with force.
+    if (err.response?.data?.code === 'TABLE_OCCUPIED') {
+      setConfirmModal({
+        show: true,
+        title: `T${id} is still in use`,
+        subtitle: `${err.response.data.error} Assign ${assignTableModal?.customerName || 'this party'} anyway?`,
+        onConfirm: async () => {
+          try {
+            const forced = assignTableModal._fromReservation
+              ? await axios.patch(`${BASE_URL}/reservations/${assignTableModal._id}`, { tenantId, status: 'seated', assignedTable: id, force: true })
+              : await axios.patch(`${BASE_URL}/waitlist/${assignTableModal._id}/assign`, { tableNumber: id, tenantId, force: true });
+            if (forced.data?.success) {
+              setAssignTableModal(null);
+              fetchCounterQueue();
+              fetchInitialData();
+              showNotif(`T${id} assigned to ${assignTableModal.customerName}`, 'success');
+            }
+          } catch (e2) {
+            showNotif(e2.response?.data?.error || 'Failed to assign table', 'error');
+          }
+        }
+      });
+      return;
+    }
     console.error('Assign error:', err.response?.data || err.message);
     showNotif(
       err.response?.data?.error || err.message || 'Failed to assign table',
@@ -16310,6 +16023,45 @@ onClick={async () => {
 
       {/* SALARY EDIT MODAL */}
 <AnimatePresence>
+  {payPrompt && (
+    <div style={styles.modalBackdrop}>
+      <motion.div initial={false} animate={{scale:1,opacity:1}} style={{...styles.confirmBox, width:'400px', textAlign:'left'}}>
+        <div style={{fontSize:'0.55rem',color:'#C8A96E',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>PAYROLL</div>
+        <div style={{fontFamily:"'Playfair Display', serif",fontSize:'1.05rem',color:'#F0EDE8',marginBottom:'6px'}}>Pay {payPrompt.name}</div>
+        <div style={{fontSize:'0.7rem',color:'#a6a6a6',marginBottom:'18px',lineHeight:1.5}}>
+          {payPrompt.workDays} days worked in {payPrompt.monthLabel}. The amount is calculated by the server from the base salary and attendance.
+          Estimate: <span style={{fontFamily:'monospace',color:'#d3bfa2'}}>{Number(payPrompt.estimate || 0).toLocaleString()}</span>
+        </div>
+        <label style={{fontSize:'0.55rem',color:'#b4b4b4',fontWeight:'900',letterSpacing:'1px',display:'block',marginBottom:'6px'}}>OPERATOR PASSWORD</label>
+        <input type="password" autoFocus value={payPassword} onChange={e => setPayPassword(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && payPassword && !payBusy) document.getElementById('pay-confirm-btn')?.click(); }}
+          style={{width:'100%',boxSizing:'border-box',padding:'11px 12px',background:'#0b0c0e',border:'1px solid rgba(200,169,110,0.24)',borderRadius:'10px',color:'#F0EDE8',fontSize:'0.85rem',outline:'none'}} />
+        <div style={{display:'flex',gap:'10px',marginTop:'18px'}}>
+          <button type="button" onClick={() => { setPayPrompt(null); setPayPassword(''); }}
+            style={{flex:1,padding:'11px',borderRadius:'10px',background:'transparent',border:'1px solid rgba(200,169,110,0.2)',color:'#b4b4b4',cursor:'pointer',fontWeight:'900',fontSize:'0.7rem'}}>CANCEL</button>
+          <button id="pay-confirm-btn" type="button" disabled={!payPassword || payBusy}
+            onClick={async () => {
+              if (!payPassword || payBusy) return;
+              setPayBusy(true);
+              try {
+                await axios.post(`${BASE_URL}/staff/salary/mark-paid`, { tenantId, staffId: payPrompt.staffId, month: payPrompt.monthStr, authPassword: payPassword });
+                showNotif(`${payPrompt.name} salary marked paid`, 'success');
+                setPayPrompt(null); setPayPassword('');
+                const prefix2 = viewDate.getFullYear() + '-' + String(viewDate.getMonth() + 1).padStart(2, '0');
+                fetchMonthlySalary(prefix2);
+              } catch (err) {
+                // Wrong password keeps the dialog open so the operator can retry; other errors are shown and the dialog closes.
+                showNotif(err.response?.data?.error || 'Could not mark salary paid', 'error');
+                if (err.response?.status !== 403) { setPayPrompt(null); setPayPassword(''); }
+              } finally { setPayBusy(false); }
+            }}
+            style={{flex:2,padding:'11px',borderRadius:'10px',border:'none',background:'linear-gradient(135deg,#d3bfa2,#C8A96E)',color:'#0c0c0c',cursor: (!payPassword || payBusy) ? 'not-allowed' : 'pointer',opacity: (!payPassword || payBusy) ? 0.6 : 1,fontWeight:'900',fontSize:'0.7rem',letterSpacing:'0.5px'}}>
+            {payBusy ? 'PAYING...' : 'CONFIRM PAYMENT'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )}
   {salaryEditModal && (
     <div style={styles.modalBackdrop}>
       <motion.div
@@ -16383,9 +16135,9 @@ onClick={async () => {
           </button>
           <button type="button"
             onClick={async () => {
-              const expectedPass = `${tenantId}@${storedTableCount}`; // unchanged behaviour: built from the login-time table count
-              if (salaryEditPassword !== expectedPass) {
-                showNotif('Incorrect authorization password', 'error');
+              // The operator password is checked on the server; the browser no longer decides it.
+              if (!salaryEditPassword) {
+                showNotif('Enter your operator password to change a salary', 'error');
                 return;
               }
               if (!salaryEditValue || Number(salaryEditValue) <= 0) {
@@ -16396,7 +16148,8 @@ onClick={async () => {
                 // Update base salary on staff record
                 await axios.patch(`${BASE_URL}/staff/salary-status/${salaryEditModal.staffId}`, {
                   tenantId,
-                  baseSalary: Number(salaryEditValue)
+                  baseSalary: Number(salaryEditValue),
+                  authPassword: salaryEditPassword
                 });
                 // Also update the monthly salary record for current month
                 const monthStr = viewDate.getFullYear()+'-'+String(viewDate.getMonth()+1).padStart(2,'0');
@@ -16405,7 +16158,8 @@ onClick={async () => {
                 const monthAlreadyPaid = !!(monthRec?.paidAt || monthRec?.status === 'Paid');
                 if (!monthAlreadyPaid) {
                   await axios.patch(`${BASE_URL}/staff/salary/${tenantId}/${salaryEditModal.staffId}/${monthStr}`, {
-                    baseSalary: Number(salaryEditValue)
+                    baseSalary: Number(salaryEditValue),
+                    authPassword: salaryEditPassword
                   });
                 }
                 showNotif(monthAlreadyPaid
@@ -16415,8 +16169,8 @@ onClick={async () => {
                 setSalaryEditPassword('');
                 fetchManagementData();
                 fetchMonthlySalary(monthStr);
-              } catch {
-                showNotif('Failed to update salary', 'error');
+              } catch (err) {
+                showNotif(err?.response?.data?.error || 'Failed to update salary', 'error');
               }
             }}
             style={{...styles.confirmBtn, flex: 2}}

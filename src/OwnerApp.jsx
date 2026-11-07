@@ -55,8 +55,9 @@ const T = {
   border: 'rgba(211,191,162,0.12)',
   borderStrong: 'rgba(211,191,162,0.24)',
   textHigh: '#ffffff',
-  textMed: 'rgba(255,255,255,0.55)',
-  textLow: 'rgba(255,255,255,0.42)',
+  // Same white as before, slightly more opaque: 55% / 42% fell below the 4.5:1 contrast minimum for small text.
+  textMed: 'rgba(255,255,255,0.66)',
+  textLow: 'rgba(255,255,255,0.52)',
   danger: 'rgba(214,109,39,0.92)',
   dangerSoft: 'rgba(214,109,39,0.14)',
   warning: 'rgba(226,154,88,0.9)',
@@ -153,6 +154,59 @@ const GlobalStyles = () => (
     @keyframes pownPageIn { from { opacity: 0; transform: translateY(8px) scale(0.994); } to { opacity: 1; transform: translateY(0) scale(1); } }
     @media (max-width: 640px) { .pown-hide-mobile { display: none !important; } }
 
+    /* ── Keyboard focus: every control gets a visible ring (the old styles removed outlines and added none) ── */
+    .pown button:focus-visible, .pown a:focus-visible, .pown [role="switch"]:focus-visible, .pown summary:focus-visible {
+      outline: 2px solid ${T.primary}; outline-offset: 2px; border-radius: 10px;
+    }
+    .pown input:focus-visible, .pown select:focus-visible, .pown textarea:focus-visible {
+      outline: none; border-color: ${T.primary} !important; box-shadow: 0 0 0 3px ${T.primarySoft};
+    }
+    .pown input, .pown select, .pown textarea { transition: border-color .15s ease, box-shadow .15s ease; }
+    .pown input::placeholder, .pown textarea::placeholder { color: rgba(255,255,255,0.38); }
+    .pown input[type="date"], .pown input[type="month"], .pown input[type="time"] { color-scheme: dark; }
+
+    /* ── Readable line length on very wide screens: content is centred instead of stretching edge to edge ── */
+    .pown-content { width: 100%; max-width: 1320px; margin: 0 auto; }
+
+
+    /* ── Tables: quiet header, roomy rows, sticky header inside scroll panes ── */
+    .pown table { border-collapse: separate; border-spacing: 0; }
+    .pown table thead th {
+      position: sticky; top: 0; z-index: 1; background: ${T.surface};
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: ${T.textLow};
+      border-bottom: 1px solid ${T.borderStrong};
+    }
+    .pown table tbody tr { transition: background .15s ease; }
+    .pown table tbody tr:hover { background: rgba(211,191,162,0.045); }
+    .pown table tbody td { border-bottom: 1px solid rgba(255,255,255,0.045); }
+    .pown table tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Navigation ── */
+    .pown-nav-group { font-size: 10px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: ${T.textLow}; padding: 14px 13px 6px; }
+    .pown-nav-link:hover { background: rgba(255,255,255,0.045) !important; color: ${T.textHigh} !important; }
+    .pown-nav-link.active:hover { background: ${T.primarySoft} !important; color: ${T.primary} !important; }
+
+    /* ── Touch devices: comfortable targets for the small icon-only and pill controls ── */
+    @media (pointer: coarse) { .pown-btn { min-height: 38px; } }
+
+    /* Phones: the live-activity strip becomes a tidy two-column grid (it stacked into one tall list with stray dividers) */
+    @media (max-width: 640px) {
+      .pown-strip { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px !important; }
+      .pown-strip > .pown-strip-divider { display: none !important; }
+    }
+
+    /* Phones: KPI rows sit two per row instead of one tall card each */
+    @media (max-width: 520px) {
+      .pown-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+      .pown-kpi-grid .pown-kpi { padding: 14px !important; min-height: 104px !important; }
+      .pown-kpi-grid .pown-kpi-icon { display: none !important; }
+      .pown-kpi-grid .pown-kpi > .pown-mono { font-size: 21px !important; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pown *, .pown *::before, .pown *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+    }
+
     /* ── Responsive grid utilities — fixed-column grids that would otherwise
        squash illegibly on phones instead collapse to fewer columns. ── */
     .pown-split-main { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 14px; }
@@ -204,7 +258,11 @@ api.interceptors.response.use(
   (err) => {
     if (err?.response?.status === 401) window.dispatchEvent(new Event('owner-auth-expired'));
     // A subscription that expires or is paused mid-session answers 402 on every call; only 401 was handled, so each page just showed a generic load error.
-    else if (err?.response?.status === 402) window.dispatchEvent(new CustomEvent('owner-subscription-blocked', { detail: err.response.data?.error || '' }));
+    else if (err?.response?.status === 402) {
+      // This instance is separate from the global axios one, so the app-wide renewal screen never heard about expiries seen here.
+      if (err.response.data?.code === 'SUBSCRIPTION_EXPIRED') window.dispatchEvent(new CustomEvent('px-subscription-expired', { detail: err.response.data }));
+      window.dispatchEvent(new CustomEvent('owner-subscription-blocked', { detail: err.response.data?.error || '' }));
+    }
     return Promise.reject(err);
   }
 );
@@ -584,20 +642,20 @@ const Card = ({ children, style, padded = true, interactive = false, className =
   <div
     className={`pown-card${interactive ? ' pown-card-hover' : ''}${className ? ' ' + className : ''}`}
     style={{
-      background: `linear-gradient(160deg, ${T.surfaceRaised} 0%, ${T.surface} 100%)`,
-      border: `1px solid ${T.border}`, borderRadius: 18, boxShadow: T.glow,
-      padding: padded ? '22px' : 0, ...style
+      background: `linear-gradient(165deg, ${T.surfaceRaised} 0%, ${T.surface} 100%)`,
+      border: `1px solid ${T.border}`, borderRadius: 16, boxShadow: T.glow,
+      padding: padded ? '20px 22px' : 0, ...style
     }}
     {...rest}
   >{children}</div>
 );
 
 const Label = ({ children, style }) => (
-  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.8, color: T.textLow, ...style }}>{children}</div>
+  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: T.textLow, ...style }}>{children}</div>
 );
 
 const SectionHeading = ({ icon: Icon, title, action }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       {Icon && (
         <div style={{
@@ -605,7 +663,7 @@ const SectionHeading = ({ icon: Icon, title, action }) => (
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
         }}><Icon size={14} color={T.primary} strokeWidth={2.25} /></div>
       )}
-      <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: T.textHigh, letterSpacing: -0.2 }}>{title}</h2>
+      <h2 style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 700, margin: 0, color: T.textHigh, letterSpacing: -0.2, lineHeight: 1.3, textAlign: 'left' }}>{title}</h2>
     </div>
     {action}
   </div>
@@ -694,10 +752,12 @@ const SkeletonGrid = ({ count = 4, h = 108 }) => (
 );
 
 const EmptyState = ({ icon: Icon = Boxes, title, subtitle }) => (
-  <div style={{ textAlign: 'center', padding: '46px 20px', color: T.textLow }}>
-    <Icon size={26} strokeWidth={1.5} style={{ marginBottom: 10, opacity: 0.6 }} />
-    <div style={{ fontSize: 13.5, fontWeight: 600, color: T.textMed }}>{title}</div>
-    {subtitle && <div style={{ fontSize: 12, marginTop: 4 }}>{subtitle}</div>}
+  <div style={{ textAlign: 'center', padding: '40px 20px', color: T.textLow }}>
+    <div style={{ width: 52, height: 52, borderRadius: 16, background: T.primarySoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+      <Icon size={24} strokeWidth={1.6} color={T.primary} />
+    </div>
+    <div style={{ fontSize: 14, fontWeight: 600, color: T.textHigh }}>{title}</div>
+    {subtitle && <div style={{ fontSize: 12.5, marginTop: 4, color: T.textLow }}>{subtitle}</div>}
   </div>
 );
 
@@ -877,10 +937,10 @@ const IconBtn = ({ icon: Icon, onClick, active, title }) => (
 );
 
 const PillTabs = ({ options, value, onChange }) => (
-  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+  <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
     {options.map(opt => (
-      <button type="button" key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
-        padding: '7px 13px', borderRadius: 100, fontSize: 12, fontWeight: 700,
+      <button type="button" role="tab" aria-selected={value === opt.value} key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
+        padding: '8px 14px', borderRadius: 100, fontSize: 12, fontWeight: 700,
         background: value === opt.value ? T.primary : 'transparent',
         color: value === opt.value ? '#0f0f11' : T.textMed,
         border: `1px solid ${value === opt.value ? T.primary : T.border}`
@@ -921,7 +981,7 @@ const Modal = ({ open, onClose, title, children, width = 420 }) => {
         border: `1px solid ${T.borderStrong}`, borderRadius: 18, padding: 22
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h3>
+          <h3 style={{ margin: 0, fontFamily: 'inherit', fontSize: 15, fontWeight: 700, color: T.textHigh, textAlign: 'left' }}>{title}</h3>
           <button type="button" onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textMed }}><X size={18} /></button>
         </div>
         {children}
@@ -1144,25 +1204,27 @@ const SetupScreen = () => {
 /* ════════════════════════════════════════════════════════════
    NAVIGATION CONFIG
    ════════════════════════════════════════════════════════════ */
+const NAV_GROUPS = ['Overview', 'Money', 'Operations', 'Guests & growth', 'Account'];
 const NAV_ITEMS = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { key: 'revenue', label: 'Revenue & Sales', icon: TrendingUp },
-  { key: 'pnl', label: 'P&L', icon: PieIcon },
-  { key: 'menu', label: 'Menu Intelligence', icon: UtensilsCrossed },
-  { key: 'inventory', label: 'Inventory & Stock', icon: Package },
-  { key: 'kitchen', label: 'Kitchen Performance', icon: ChefHat },
-  { key: 'staff', label: 'Staff & Payroll', icon: Users },
-  { key: 'customers', label: 'Customers', icon: UserCircle2 },
-  { key: 'listing', label: 'Guest Discovery', icon: Eye },
-  { key: 'insights', label: 'Executive Insights', icon: Gauge, badge: true },
-  { key: 'alerts', label: 'Alerts', icon: Bell },
-  { key: 'compliance', label: 'Compliance & GST', icon: ShieldCheck },
-  { key: 'reports', label: 'Reports & Exports', icon: ClipboardList },
-  { key: 'growth', label: 'Why Pratyeksha', icon: Rocket, badge: true },
-  { key: 'settings', label: 'Settings', icon: SettingsIcon },
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Overview', desc: 'Live sales, tables and kitchen at a glance' },
+  { key: 'alerts', label: 'Alerts', icon: Bell, group: 'Overview', desc: 'What needs your attention right now' },
+  { key: 'insights', label: 'Executive Insights', icon: Gauge, badge: true, group: 'Overview', desc: 'One-page snapshot across every part of the business' },
+  { key: 'revenue', label: 'Revenue & Sales', icon: TrendingUp, group: 'Money', desc: 'Where the money comes from, and how you are pacing' },
+  { key: 'pnl', label: 'P&L', icon: PieIcon, group: 'Money', desc: 'Profit after food cost, staff and GST' },
+  { key: 'compliance', label: 'Compliance & GST', icon: ShieldCheck, group: 'Money', desc: 'GST totals, invoice register and filing exports' },
+  { key: 'reports', label: 'Reports & Exports', icon: ClipboardList, group: 'Money', desc: 'Download daily, weekly and monthly reports' },
+  { key: 'menu', label: 'Menu Intelligence', icon: UtensilsCrossed, group: 'Operations', desc: 'Which dishes earn, which ones to fix or drop' },
+  { key: 'inventory', label: 'Inventory & Stock', icon: Package, group: 'Operations', desc: 'Stock health, run-out forecasts and wastage' },
+  { key: 'kitchen', label: 'Kitchen Performance', icon: ChefHat, group: 'Operations', desc: 'Prep times, delays and live tickets' },
+  { key: 'staff', label: 'Staff & Payroll', icon: Users, group: 'Operations', desc: 'Attendance, salaries and top performers' },
+  { key: 'customers', label: 'Customers', icon: UserCircle2, group: 'Guests & growth', desc: 'Who comes back, and who is slipping away' },
+  { key: 'listing', label: 'Guest Discovery', icon: Eye, group: 'Guests & growth', desc: 'How guests find and see your restaurant' },
+  { key: 'growth', label: 'Why Pratyeksha', icon: Rocket, badge: true, group: 'Guests & growth', desc: 'What Pratyeksha does for you, compared with doing it by hand' },
+  { key: 'settings', label: 'Settings', icon: SettingsIcon, group: 'Account', desc: 'Targets, hours, alerts, payments and password' },
 ];
 // Quick-access row on mobile; the 5th slot opens the full drawer with every tab.
 const BOTTOM_NAV_KEYS = ['dashboard', 'revenue', 'kitchen', 'alerts'];
+// (order here is the order on screen)
 
 /* ════════════════════════════════════════════════════════════
    LAYOUT — Sidebar (desktop) + Bottom Nav (mobile) + Top Bar
@@ -1243,6 +1305,30 @@ const InstallBanner = () => {
   );
 };
 
+/** One grouped tab list for desktop sidebar and mobile drawer, so the two can never drift apart. */
+const NavList = ({ tenantId, compact = false }) => (
+  <>
+    {NAV_GROUPS.map(group => (
+      <div key={group} role="group" aria-label={group}>
+        <div className="pown-nav-group">{group}</div>
+        {NAV_ITEMS.filter(i => i.group === group).map(item => (
+          <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
+            display: 'flex', alignItems: 'center', gap: 11, padding: compact ? '9px 12px' : '10px 12px', borderRadius: 11,
+            marginBottom: 2, fontSize: compact ? 13.5 : 13, fontWeight: 600,
+            background: isActive ? T.primarySoft : 'transparent',
+            color: isActive ? T.primary : T.textMed,
+            boxShadow: isActive ? `inset 2.5px 0 0 ${T.primary}` : 'none'
+          })}>
+            <item.icon size={16} strokeWidth={2} />
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+            {item.badge && <span aria-hidden="true" style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary, flexShrink: 0 }} />}
+          </NavLink>
+        ))}
+      </div>
+    ))}
+  </>
+);
+
 const Sidebar = () => {
   const { tenantId, ownerName, logout } = useOwner();
   return (
@@ -1269,20 +1355,8 @@ const Sidebar = () => {
       </div>
 
       {/* Only the tab list scrolls — header and footer stay put */}
-      <nav className="pown-scroll pown-scrollpane pown-sidebar-fade" style={{ padding: '6px 14px', flex: '1 1 auto', minHeight: 0 }}>
-        {NAV_ITEMS.map(item => (
-          <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
-            display: 'flex', alignItems: 'center', gap: 12, padding: '10.5px 13px', borderRadius: 12,
-            marginBottom: 3, fontSize: 13, fontWeight: 600,
-            background: isActive ? T.primarySoft : 'transparent',
-            color: isActive ? T.primary : T.textMed,
-            boxShadow: isActive ? `inset 2.5px 0 0 ${T.primary}` : 'none'
-          })}>
-            <item.icon size={15} strokeWidth={2} />
-            {item.label}
-            {item.badge && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary }} />}
-          </NavLink>
-        ))}
+      <nav aria-label="Main" className="pown-scroll pown-scrollpane pown-sidebar-fade" style={{ padding: '0 14px 8px', flex: '1 1 auto', minHeight: 0 }}>
+        <NavList tenantId={tenantId} />
       </nav>
 
       {/* Pinned footer — install / logout, never scrolls */}
@@ -1331,20 +1405,8 @@ const MobileDrawer = ({ open, onClose }) => {
             <div style={{ fontSize: 12, fontWeight: 700 }}>{ownerName}</div>
           </div>
         )}
-        <nav className="pown-scrollpane pown-sidebar-fade" style={{ padding: '4px 14px', flex: '1 1 auto', minHeight: 0 }}>
-          {NAV_ITEMS.map(item => (
-            <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
-              display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 12,
-              marginBottom: 3, fontSize: 13.5, fontWeight: 600,
-              background: isActive ? T.primarySoft : 'transparent',
-              color: isActive ? T.primary : T.textMed,
-              boxShadow: isActive ? `inset 2.5px 0 0 ${T.primary}` : 'none'
-            })}>
-              <item.icon size={16} strokeWidth={2} />
-              {item.label}
-              {item.badge && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary }} />}
-            </NavLink>
-          ))}
+        <nav aria-label="Main" className="pown-scrollpane pown-sidebar-fade" style={{ padding: '0 14px 8px', flex: '1 1 auto', minHeight: 0 }}>
+          <NavList tenantId={tenantId} compact />
         </nav>
         <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, flexShrink: 0, display: 'grid', gap: 10 }}>
           <SupportContact style={{ marginBottom: 0 }} />
@@ -1360,20 +1422,20 @@ const MobileDrawer = ({ open, onClose }) => {
 
 const BottomNav = ({ onMore }) => {
   const { tenantId } = useParams();
-  const items = NAV_ITEMS.filter(i => BOTTOM_NAV_KEYS.includes(i.key));
+  const items = BOTTOM_NAV_KEYS.map(k => NAV_ITEMS.find(i => i.key === k)).filter(Boolean);
   return (
-    <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: 'rgba(6,6,6,0.94)',
+    <nav aria-label="Quick tabs" style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: 'rgba(14,14,16,0.94)',
       backdropFilter: 'blur(18px)', borderTop: `1px solid ${T.border}`, display: 'flex', zIndex: 100,
       boxShadow: '0 -8px 24px -8px rgba(0,0,0,0.6)'
     }}>
       {items.map(item => (
         <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} style={({ isActive }) => ({
-          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, textDecoration: 'none',
           color: isActive ? T.primary : T.textLow, transition: 'color .18s ease'
         })}>
           <item.icon size={19} strokeWidth={2} />
-          <span style={{ fontSize: 9.5, fontWeight: 700 }}>{item.label.split(' ')[0]}</span>
+          <span style={{ fontSize: 10, fontWeight: 700 }}>{item.label.split(' ')[0]}</span>
         </NavLink>
       ))}
       <button type="button" onClick={onMore} className="pown-btn" style={{
@@ -1381,7 +1443,7 @@ const BottomNav = ({ onMore }) => {
         background: 'transparent', color: T.textLow
       }}>
         <LayoutGrid size={19} strokeWidth={2} />
-        <span style={{ fontSize: 9.5, fontWeight: 700 }}>More</span>
+        <span style={{ fontSize: 10, fontWeight: 700 }}>More</span>
       </button>
     </nav>
   );
@@ -1403,44 +1465,57 @@ const TopBar = ({ onMenu }) => {
     document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [outletMenuOpen]);
+  const navigate = useNavigate();
+  const switchOutlet = () => { try { localStorage.removeItem(LAST_TENANT_KEY); } catch (e) {} navigate('/owner'); };
   return (
     <header style={{
-      flexShrink: 0, zIndex: 50, background: 'rgba(6,6,6,0.72)', backdropFilter: 'blur(18px)',
-      borderBottom: `1px solid ${T.border}`, padding: '18px clamp(18px, 3vw, 40px)',
+      flexShrink: 0, zIndex: 50, background: 'rgba(14,14,16,0.78)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+      borderBottom: `1px solid ${T.border}`, padding: '14px clamp(14px, 3vw, 40px)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         {onMenu && (
-          <button type="button" onClick={onMenu} className="pown-btn" style={{
-            width: 36, height: 36, flexShrink: 0, borderRadius: 10, background: T.surfaceRaised,
+          <button type="button" onClick={onMenu} aria-label="Open menu" className="pown-btn" style={{
+            width: 40, height: 40, flexShrink: 0, borderRadius: 11, background: T.surfaceRaised,
             border: `1px solid ${T.border}`, color: T.textHigh, display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}><MenuIcon size={17} /></button>
+          }}><MenuIcon size={18} /></button>
         )}
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label || 'Dashboard'}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            <span className={connected ? 'pown-live-dot' : 'pown-pulse'} style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? T.primary : T.textLow, boxShadow: connected ? `0 0 0 3px ${T.primarySoft}` : 'none' }} />
-            <span style={{ fontSize: 11, color: T.textLow, fontWeight: 600 }}>{connected ? 'Live' : 'Reconnecting…'} · {tenantId}</span>
-          </div>
+          <h1 style={{ margin: 0, fontFamily: 'inherit', color: T.textHigh /* index.css styles every h1 (dark, 56px, big margins) */, fontSize: 19, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.25, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label || 'Dashboard'}</h1>
+          {current?.desc && <div style={{ fontSize: 12, color: T.textLow, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.desc}</div>}
         </div>
       </div>
-      <div ref={outletMenuRef} style={{ position: 'relative' }}>
-        <button type="button" onClick={() => setOutletMenuOpen(v => !v)} className="pown-btn" style={{
-          display: 'flex', alignItems: 'center', gap: 8, background: T.surfaceRaised, border: `1px solid ${T.border}`,
-          borderRadius: 12, padding: '9px 14px', color: T.textHigh, fontSize: 12.5, fontWeight: 700, boxShadow: T.glow
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <div role="status" title={connected ? 'Receiving live updates' : 'Trying to reconnect to live updates'} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 100,
+          background: connected ? T.primarySoft : 'rgba(255,255,255,0.05)', border: `1px solid ${connected ? T.borderStrong : T.border}`,
+          fontSize: 11.5, fontWeight: 700, color: connected ? T.primary : T.textMed
         }}>
-          <MapPin size={13} color={T.primary} /> <span className="pown-hide-mobile">{tenantId}</span> <ChevronDown size={13} />
-        </button>
-        {outletMenuOpen && (
-          <div className="pown-fade-in" style={{
-            position: 'absolute', right: 0, top: 46, width: 210, background: T.surfaceRaised,
-            border: `1px solid ${T.borderStrong}`, borderRadius: 13, padding: 6, zIndex: 60, boxShadow: T.glowHover
+          <span className={connected ? 'pown-live-dot' : 'pown-pulse'} style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? T.primary : T.textLow }} />
+          <span className="pown-hide-mobile">{connected ? 'Live' : 'Reconnecting…'}</span>
+        </div>
+        <div ref={outletMenuRef} style={{ position: 'relative' }}>
+          <button type="button" onClick={() => setOutletMenuOpen(v => !v)} aria-haspopup="menu" aria-expanded={outletMenuOpen} aria-label={`Outlet: ${tenantId}`} className="pown-btn" style={{
+            display: 'flex', alignItems: 'center', gap: 8, background: T.surfaceRaised, border: `1px solid ${T.border}`,
+            borderRadius: 12, padding: '9px 13px', color: T.textHigh, fontSize: 12.5, fontWeight: 700, minHeight: 40
           }}>
-            <div style={{ padding: '8px 10px', fontSize: 10.5, color: T.textLow, fontWeight: 800, letterSpacing: 1 }}>OUTLETS</div>
-            <div style={{ padding: '9px 10px', fontSize: 12.5, fontWeight: 600, color: T.primary, background: T.primarySoft, borderRadius: 9 }}>{tenantId} (current)</div>
-            <div style={{ padding: '9px 10px', fontSize: 12, color: T.textLow, cursor: 'not-allowed' }}>+ Add outlet</div>
-          </div>
-        )}
+            <MapPin size={14} color={T.primary} /> <span className="pown-hide-mobile" style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tenantId}</span> <ChevronDown size={13} />
+          </button>
+          {outletMenuOpen && (
+            <div role="menu" className="pown-fade-in" style={{
+              position: 'absolute', right: 0, top: 48, width: 230, background: T.surfaceRaised,
+              border: `1px solid ${T.borderStrong}`, borderRadius: 14, padding: 6, zIndex: 60, boxShadow: T.glowHover
+            }}>
+              <div style={{ padding: '8px 10px', fontSize: 10.5, color: T.textLow, fontWeight: 800, letterSpacing: 1 }}>CURRENT OUTLET</div>
+              <div style={{ padding: '9px 10px', fontSize: 12.5, fontWeight: 600, color: T.primary, background: T.primarySoft, borderRadius: 9, overflowWrap: 'anywhere' }}>{tenantId}</div>
+              {/* The old menu ended with a greyed-out "+ Add outlet" that did nothing; this one does what it says. */}
+              <button type="button" role="menuitem" onClick={switchOutlet} className="pown-btn" style={{
+                width: '100%', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, padding: '10px', borderRadius: 9,
+                background: 'transparent', color: T.textMed, fontSize: 12.5, fontWeight: 600, textAlign: 'left'
+              }}><ArrowLeftRight size={14} /> Switch outlet</button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -1523,8 +1598,10 @@ const OwnerShell = ({ children }) => {
             padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 56px' : '16px 14px 96px'
           }}>
           <RenewalReminder tenantId={ownerTenantId} />
-          <div key={`${location.pathname}-${refreshKey}`} className="pown-page-transition">
-            {children}
+          <div className="pown-content">
+            <div key={`${location.pathname}-${refreshKey}`} className="pown-page-transition">
+              {children}
+            </div>
           </div>
         </main>
       </div>
@@ -1538,7 +1615,7 @@ const OwnerShell = ({ children }) => {
    ════════════════════════════════════════════════════════════ */
 const KpiCard = ({ icon: Icon, label, value, sub, delta, tone = 'default', hero = false }) => (
   <Card interactive className="pown-kpi" style={{
-    display: 'flex', flexDirection: 'column', gap: 12, minHeight: hero ? 132 : 118, position: 'relative', overflow: 'hidden',
+    display: 'flex', flexDirection: 'column', gap: 12, minHeight: hero ? 136 : 120, position: 'relative', overflow: 'hidden',
     borderColor: hero ? T.borderStrong : T.border
   }}>
     <div style={{
@@ -1600,7 +1677,20 @@ const MiniBarChart = ({ data, dataKey = 'value', xKey = 'x', height = 64, color 
   </ResponsiveContainer>
 );
 
-const AxisTick = { fill: 'rgba(255,255,255,0.35)', fontSize: 10.5, fontFamily: T.mono };
+// Axis text was 35% white (hard to read on the dark cards); dates print as "25 Oct" and money as "₹34k" so ticks stop colliding.
+const AxisTick = { fill: 'rgba(255,255,255,0.62)', fontSize: 10.5, fontFamily: T.mono };
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtDay = (v) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? ''));
+  return m ? `${Number(m[3])} ${MONTHS_SHORT[Number(m[2]) - 1] || ''}` : String(v ?? '');
+};
+const fmtCompactINR = (v) => {
+  const n = Number(v) || 0, a = Math.abs(n);
+  if (a >= 10000000) return `₹${+(n / 10000000).toFixed(1)}Cr`;
+  if (a >= 100000) return `₹${+(n / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `₹${+(n / 1000).toFixed(a >= 10000 ? 0 : 1)}k`;
+  return `₹${Math.round(n)}`;
+};
 const chartTooltipStyle = {
   contentStyle: { background: '#1a1a1d', border: `1px solid ${T.borderStrong}`, borderRadius: 10, fontSize: 12, fontFamily: T.mono },
   labelStyle: { color: T.textMed }, itemStyle: { color: T.primary }
@@ -1724,7 +1814,7 @@ const DashboardPage = () => {
     <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
       <LiveClock />
       {/* Hero KPI row */}
-      <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+      <div className="pown-stagger pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
         <KpiCard hero icon={IndianRupee} label="TODAY REVENUE" value={`\u20B9${animatedRevenue.toLocaleString('en-IN')}`}
           delta={data.revenue.todayVsYday} sub="vs yesterday" />
         <KpiCard icon={LayoutGrid} label="LIVE TABLES" value={`${data.tables.occupied} / ${data.tables.total}`}
@@ -1736,7 +1826,7 @@ const DashboardPage = () => {
       </div>
 
       {/* Live activity strip */}
-      <Card style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '14px 20px' }}>
+      <Card className="pown-strip" style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '14px 20px' }}>
         <StripItem icon={ChefHat} label="Kitchen" value={`${data.orders.pendingInKDS} cooking`} tone={data.orders.pendingInKDS > 0 ? 'warning' : 'default'} />
         <Divider />
         <StripItem icon={PackageCheck} label="Ready" value={`${data.orders.readyForPickup} for pickup`} tone={data.orders.readyForPickup > 0 ? 'warning' : 'default'} />
@@ -1775,9 +1865,10 @@ const DashboardPage = () => {
           </Card>
           <Card>
             <Label style={{ marginBottom: 10 }}>STAFF ATTENDANCE</Label>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span className="pown-mono" style={{ fontSize: 20, fontWeight: 800 }}>{data.staffPresent} <span style={{ fontSize: 13, color: T.textLow, fontWeight: 600 }}>/ {data.staffTotal}</span></span>
-              <ProgressBar pct={data.staffTotal ? (data.staffPresent / data.staffTotal) * 100 : 0} height={7} />
+            {/* The bar used to squeeze the figure, so "11 / 14" wrapped onto two lines. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <span className="pown-mono" style={{ fontSize: 20, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 }}>{data.staffPresent} <span style={{ fontSize: 13, color: T.textLow, fontWeight: 600 }}>/ {data.staffTotal}</span></span>
+              <div style={{ flex: 1, minWidth: 40 }}><ProgressBar pct={data.staffTotal ? (data.staffPresent / data.staffTotal) * 100 : 0} height={7} /></div>
             </div>
           </Card>
         </div>
@@ -1800,7 +1891,7 @@ const StripItem = ({ icon: Icon, label, value, tone = 'default' }) => (
     <span className="pown-mono" style={{ fontSize: 12.5, fontWeight: 700, color: tone === 'danger' ? T.danger : tone === 'warning' ? T.warning : T.textHigh }}>{value}</span>
   </div>
 );
-const Divider = () => <div style={{ width: 1, height: 16, background: T.border }} />;
+const Divider = () => <div className="pown-strip-divider" style={{ width: 1, height: 16, background: T.border }} />;
 
 /* ════════════════════════════════════════════════════════════
    MODULE 2 — REVENUE & SALES
@@ -1849,10 +1940,10 @@ const RevenuePage = () => {
         emptyProps={{ icon: TrendingUp, title: 'No settled orders in this range' }}>
         {data && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               <KpiCard icon={IndianRupee} label="TOTAL REVENUE" value={`\u20B9${data.totalRevenue.toLocaleString('en-IN')}`} sub={`${data.orderCount} orders`} />
               <KpiCard icon={Receipt} label="AVG ORDER VALUE" value={`\u20B9${data.metrics.avgOrderValue}`} />
-              <KpiCard icon={Star} label="HIGHEST BILL" value={`\u20B9${data.metrics.highestBill.amount}`} sub={`Table ${data.metrics.highestBill.table}`} />
+              <KpiCard icon={Star} label="HIGHEST BILL" value={`\u20B9${Number(data.metrics.highestBill.amount || 0).toLocaleString('en-IN')}`} sub={`Table ${data.metrics.highestBill.table}`} />
               <KpiCard icon={LayoutGrid} label="TABLES TURNED" value={data.metrics.tablesTurned} sub={`\u20B9${data.metrics.revenuePerCover} / cover`} />
             </div>
 
@@ -1867,9 +1958,9 @@ const RevenuePage = () => {
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} />
-                  <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip {...chartTooltipStyle} />
+                  <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={fmtDay} minTickGap={22} interval="preserveStartEnd" />
+                  <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={50} tickFormatter={fmtCompactINR} />
+                  <Tooltip {...chartTooltipStyle} labelFormatter={fmtDay} formatter={(v) => [fmtINRc(v), 'Revenue']} />
                   <Area type="monotone" dataKey="revenue" stroke={T.primary} strokeWidth={2} fill="url(#revFill)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -1981,7 +2072,7 @@ const PnlPage = () => {
                 </Card>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+              <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
                 <KpiCard icon={Percent} label="GROSS MARGIN" value={`${data.grossMarginPct}%`} />
                 <KpiCard icon={Percent} label="NET MARGIN" value={`${data.netMarginPct}%`} />
                 <KpiCard icon={Target} label="MONTH PROJECTION" value={`\u20B9${data.projection.atCurrentMargin.toLocaleString('en-IN')}`} sub="net profit, if margin holds" />
@@ -1992,9 +2083,9 @@ const PnlPage = () => {
                 <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={data.revenueByDay}>
                     <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} />
-                    <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} />
-                    <Tooltip {...chartTooltipStyle} />
+                    <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={fmtDay} minTickGap={22} interval="preserveStartEnd" />
+                    <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={50} tickFormatter={fmtCompactINR} />
+                    <Tooltip {...chartTooltipStyle} labelFormatter={fmtDay} formatter={(v) => [fmtINRc(v), 'Profit']} />
                     <Line type="monotone" dataKey="profit" stroke={T.primary} strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -2145,7 +2236,7 @@ const RepriceForm = ({ item, onSave }) => {
       <Field label="NEW PRICE (₹)">
         <input type="number" min="0" step="0.01" value={price} onChange={e => { setPrice(e.target.value); setErr(''); }} style={inputStyle} />
       </Field>
-      <div style={{ fontSize: 11.5, color: T.textLow, marginBottom: 16 }}>Current: ₹{item.price} · {item.sold} sold this month</div>
+      <div style={{ fontSize: 11.5, color: T.textLow, marginBottom: 16 }}>Current: ₹{Number(item.price || 0).toLocaleString('en-IN')} · {item.sold} sold this month</div>
       {err && <div style={{ fontSize: 12, color: T.danger, marginBottom: 10 }}>{err}</div>}
       <PrimaryBtn icon={Check} disabled={busy} onClick={submit}>{busy ? 'Saving…' : 'Update Price'}</PrimaryBtn>
     </div>
@@ -2225,7 +2316,7 @@ const InventoryPage = () => {
 
             <Card>
               <SectionHeading icon={Flame} title="Wastage" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 14 }}>
+              <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 14 }}>
                 <KpiCard icon={Flame} label="TODAY" value={`\u20B9${data.wastage.today}`} />
                 <KpiCard icon={Flame} label="THIS MONTH" value={`\u20B9${data.wastage.month}`} />
                 <KpiCard icon={Percent} label="% OF REVENUE" value={`${data.wastage.pctOfRevenue}%`} tone={data.wastage.pctOfRevenue > 2 ? 'danger' : 'default'} />
@@ -2282,7 +2373,7 @@ const KitchenPage = () => {
               </div>
             </Card>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+            <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <KpiCard icon={Timer} label="TODAY AVG" value={`${data.trends.todayAvg}m`} />
               <KpiCard icon={Timer} label="YESTERDAY" value={`${data.trends.yesterdayAvg}m`} />
               <KpiCard icon={Timer} label="WEEK AVG" value={`${data.trends.weekAvg}m`} />
@@ -2388,7 +2479,7 @@ const StaffPage = () => {
       <DataBoundary skeleton={<SkStaff />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+            <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
               <KpiCard icon={UserCheck} label="PRESENT" value={data.attendanceToday.present} sub={`of ${data.attendanceToday.list.length}`} />
               <KpiCard icon={UserX} label="ABSENT" value={data.attendanceToday.absent} tone={data.attendanceToday.absent > 0 ? 'danger' : 'default'} />
               <KpiCard icon={Clock} label="LATE" value={data.attendanceToday.late} />
@@ -2545,7 +2636,7 @@ const CustomersPage = () => {
       <DataBoundary skeleton={<SkCustomers />} loading={loading} error={error} onRetry={refetch}>
         {data && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+            <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
               <KpiCard icon={Users} label="TOTAL CUSTOMERS" value={data.overview.total} sub={`+${data.overview.newThisMonth} this month`} />
               <KpiCard icon={ThumbsUp} label="RETURNING" value={`${data.overview.returningPct}%`} />
               <KpiCard icon={AlertTriangle} label="AT-RISK" value={data.overview.atRisk} tone={data.overview.atRisk > 0 ? 'danger' : 'default'} />
@@ -2967,7 +3058,7 @@ const ExecutiveInsightsPage = () => {
       </Card>
       <DataBoundary skeleton={<SkInsights />} loading={loading} error={error} onRetry={refetch}>
         {data && <>
-          <div className="pown-stagger" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(165px,1fr))', gap:12 }}>
+          <div className="pown-stagger pown-kpi-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(165px,1fr))', gap:12 }}>
             <KpiCard hero icon={IndianRupee} label="TODAY" value={`₹${Number(data.today.revenue||0).toLocaleString('en-IN')}`} sub={`${data.today.orders} settled bills`} />
             <KpiCard icon={TrendingUp} label="MONTH" value={`₹${Number(data.month.revenue||0).toLocaleString('en-IN')}`} sub={`${data.month.orders} settled orders`} />
             <KpiCard icon={Receipt} label="GST" value={`₹${Number(data.month.gst||0).toLocaleString('en-IN')}`} sub="stored invoice tax" />

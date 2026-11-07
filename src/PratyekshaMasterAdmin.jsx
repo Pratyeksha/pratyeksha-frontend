@@ -79,6 +79,31 @@ const GLOBAL_CSS = `
   input, select, textarea, button { font-family: 'Inter', sans-serif; font-size: 13px; }
   a { text-decoration: none; color: inherit; }
 
+  /* index.css centres text on the root and gives every h1/h2 a system font plus 32px margins; that centred restaurant names and
+     pushed page titles out of line with their subtitles. Inside this app text is left-aligned and headings use the app font (Inter). */
+  .p-main, .p-sidebar, .p-modal, .p-topbar { text-align: left; }
+  .p-main h1, .p-main h2, .p-main h3, .p-sidebar h1, .p-sidebar h2, .p-modal h1, .p-modal h2, .p-modal h3 {
+    font-family: inherit; margin: 0; text-align: left;
+  }
+
+  /* Keyboard focus: nav items and buttons had outline removed with nothing in its place */
+  .p-main button:focus-visible, .p-sidebar button:focus-visible, .p-modal button:focus-visible, .p-topbar button:focus-visible, .p-main a:focus-visible {
+    outline: 2px solid #d3bfa2; outline-offset: 2px;
+  }
+  input::placeholder, textarea::placeholder { color: #7d7d86; }
+  .p-nav-group { font-size: 10px; color: #7d7d86; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 10px 10px 4px; }
+
+  /* Clients table: columns keep their width from row to row (they used to shift with each row's button count) */
+  .p-clients-table { min-width: 480px; }
+  @media (min-width: 769px) {
+    .p-clients-table { table-layout: fixed; min-width: 1000px; }
+    .p-clients-table td { overflow: hidden; vertical-align: middle; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  }
+
   .p-sidebar {
     width: 256px; min-width: 256px; height: calc(100vh - 24px); margin: 12px 0 12px 12px;
     background: linear-gradient(180deg, rgba(34,34,38,0.92), rgba(22,22,25,0.96)); border: 1px solid rgba(211,191,162,0.16);
@@ -1086,11 +1111,11 @@ const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
     return (
       <button type="button" onClick={()=>onNav(id)} className="p-nav-item" style={{
         width:'100%', display:'flex', alignItems:'center', gap:9,
-        padding:'9px 10px', borderRadius:8, cursor:'pointer', border:'none',
+        padding:'7px 10px', borderRadius:8, cursor:'pointer', border:'none',
         background: isActive ? 'rgba(211,191,162,0.06)' : 'transparent',
         color: isActive ? '#d3bfa2' : C.textDim,
         fontSize:13, fontWeight: isActive ? 600 : 400,
-        textAlign:'left', outline:'none',
+        textAlign:'left',
         /* active left bar in light gold */
         borderLeft: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
         transition:'all 0.12s',
@@ -1113,6 +1138,7 @@ const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
 function PratyekshaMasterAdminInner() {
   useAdminGlobalStyles();
   const [activeSection, setActiveSection] = useState('demos');
+  const [sideClientsOpen, setSideClientsOpen] = useState(false); // the sidebar's ranked client list is collapsed by default so the whole menu fits
   const [docsClientId, setDocsClientId] = useState(null);
   const [clients,       setClients]       = useState([]);
   const [stats,         setStats]         = useState({ totalRevenue:0, grossRevenue:0, totalExpenses:0, netRevenue:0, activeCount:0, expiredCount:0, disabledCount:0, expiringSoon:0, topClients:[], totalClients:0 });
@@ -1576,7 +1602,7 @@ function PratyekshaMasterAdminInner() {
         <div className="p-sidebar-inner no-sb">
 
           {/* Brand — icon bg is light gold, text is near-white */}
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:28, paddingBottom:18, borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
             <div style={{ width:58, height:34, borderRadius:9, background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', padding:5, flexShrink:0 }}>
               <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
             </div>
@@ -1591,49 +1617,55 @@ function PratyekshaMasterAdminInner() {
               number   → light gold (#d3bfa2)
               sub-grid → status-colored numbers, dark bg
           */}
-          <div style={{ marginBottom:20, padding:'14px', background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10 }}>
+          <div style={{ marginBottom:10, padding:'12px', background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10, flexShrink:0 }}>
             <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'0.8px', textTransform:'uppercase', marginBottom:6 }}>Net Platform Revenue</div>
             <div style={{ fontSize:22, fontWeight:700, color:(stats.netRevenue ?? stats.totalRevenue ?? 0) >= 0 ? '#d3bfa2' : C.danger, lineHeight:1, marginBottom:6, fontFamily:'JetBrains Mono, monospace' }}>
               ₹{Math.abs(stats.netRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}{(stats.netRevenue ?? 0) < 0 ? ' (loss)' : ''}
             </div>
             <div style={{ fontSize:10.5, color:C.textDim, marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}</span><span>− Costs ₹{(stats.totalExpenses||0).toLocaleString('en-IN')}</span></div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:5 }}>
               {[
                 { val:stats.activeCount   ||0, lbl:'Active',   c:'#d3bfa2' },   /* light gold */
                 { val:stats.expiredCount  ||0, lbl:'Expired',  c:C.warning },
                 { val:stats.disabledCount ||0, lbl:'Disabled', c:C.danger  },
                 { val:stats.totalClients  ||0, lbl:'Total',    c:C.textMid },
               ].map(s => (
-                <div key={s.lbl} style={{ background:C.bgDark, padding:'7px 8px', borderRadius:7, border:`1px solid ${C.border}` }}>
-                  <div style={{ fontSize:16, fontWeight:700, color:s.c, lineHeight:1, fontFamily:'JetBrains Mono, monospace' }}>{s.val}</div>
-                  <div style={{ fontSize:10, color:C.textDim, marginTop:2 }}>{s.lbl}</div>
+                <div key={s.lbl} style={{ background:C.bgDark, padding:'7px 4px', borderRadius:7, border:`1px solid ${C.border}`, textAlign:'center' }}>
+                  <div style={{ fontSize:15, fontWeight:700, color:s.c, lineHeight:1, fontFamily:'JetBrains Mono, monospace' }}>{s.val}</div>
+                  <div style={{ fontSize:9.5, color:C.textDim, marginTop:3 }}>{s.lbl}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Nav */}
-          <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:6, paddingLeft:10, flexShrink:0 }}>Navigation</div>
-          <div className="no-sb" style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:12, overflowY:'auto', minHeight:0, flex:'0 1 auto', maxHeight:236, paddingRight:2 }}>
-            <NavItem active={activeSection} onNav={navTo} id="demos"     label="Demo Requests"   icon={CalendarClock} count={demoCounts.Pending} urgent />
-            <NavItem active={activeSection} onNav={navTo} id="dashboard" label="Dashboard"       icon={BarChart3} />
-            <NavItem active={activeSection} onNav={navTo} id="clients"   label="Client Partners" icon={Building2} count={clients.length} />
-            <NavItem active={activeSection} onNav={navTo} id="onboard"   label="Onboard Client"  icon={UserPlus} />
-            <NavItem active={activeSection} onNav={navTo} id="tracking" label="Tracking" icon={Radar} />
+          {/* Nav — grouped; it takes the free height and scrolls only if the window is very short */}
+          <nav aria-label="Main" className="no-sb" style={{ display:'flex', flexDirection:'column', gap:1, marginBottom:8, overflowY:'auto', minHeight:0, flex:'1 1 auto', paddingRight:2 }}>
+            <NavItem active={activeSection} onNav={navTo} id="dashboard" label="Dashboard" icon={BarChart3} />
+            <div className="p-nav-group">Sales pipeline</div>
+            <NavItem active={activeSection} onNav={navTo} id="demos" label="Demo Requests" icon={CalendarClock} count={demoCounts.Pending} urgent />
             <NavItem active={activeSection} onNav={navTo} id="crm" label="Lead CRM" icon={Users} />
-            <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
-            <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
+            <NavItem active={activeSection} onNav={navTo} id="tracking" label="Tracking" icon={Radar} />
+            <div className="p-nav-group">Clients</div>
+            <NavItem active={activeSection} onNav={navTo} id="clients" label="Client Partners" icon={Building2} count={clients.length} />
+            <NavItem active={activeSection} onNav={navTo} id="onboard" label="Onboard Client" icon={UserPlus} />
             <NavItem active={activeSection} onNav={navTo} id="documents" label="Documents" icon={FileText} />
             <NavItem active={activeSection} onNav={navTo} id="qrstudio" label="QR Studio" icon={QrCode} />
-          </div>
+            <div className="p-nav-group">Platform</div>
+            <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
+            <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
+          </nav>
 
           <Div />
 
           {/* Client list — scrollable and visible at the bottom of the control centre */}
-          <div style={{ fontSize:10, color:C.textFaint, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', marginBottom:10, paddingLeft:4, display:'flex', alignItems:'center', gap:5 }}>
-            <Trophy size={10} color={C.textFaint} /> Clients
-          </div>
-          <div className="no-sb" style={{ minHeight:70, maxHeight:150, overflowY:'auto', paddingRight:2, flexShrink:1 }}>
+          <button type="button" onClick={() => setSideClientsOpen(v => !v)} aria-expanded={sideClientsOpen} style={{
+            width:'100%', background:'transparent', border:'none', cursor:'pointer', padding:'2px 4px', marginBottom: sideClientsOpen ? 8 : 0,
+            fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', display:'flex', alignItems:'center', gap:5
+          }}>
+            <Trophy size={10} color={C.textDim} /> Top clients by revenue
+            <ChevronRight size={11} style={{ marginLeft:'auto', transform: sideClientsOpen ? 'rotate(90deg)' : 'none', transition:'transform .15s' }} />
+          </button>
+          {sideClientsOpen && <div className="no-sb" style={{ minHeight:70, maxHeight:150, overflowY:'auto', paddingRight:2, flexShrink:1 }}>
             {[...clients].sort((a,b)=>(b.totalPaidAmount||0)-(a.totalPaidAmount||0)).map(c => (
               <div key={c._id || c.tenantId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, padding:'7px 8px', borderRadius:7, background:C.bgCard, border:`1px solid ${C.border}` }}>
                 <div style={{ width:7, height:7, borderRadius:'50%', background:(STATE_META[subOf(c).state] || STATE_META.unset).color, flexShrink:0 }} />
@@ -1645,7 +1677,7 @@ function PratyekshaMasterAdminInner() {
               </div>
             ))}
             {clients.length === 0 && <div style={{ fontSize:11, color:C.textDim, padding:'12px 4px' }}>No clients yet.</div>}
-          </div>
+          </div>}
           <Div />
           <div style={{ display: 'grid', gap: 8 }}>
             <InstallButton />
@@ -2129,11 +2161,12 @@ function PratyekshaMasterAdminInner() {
 
             {/* Clients table */}
             <div className="p-scroll no-sb" style={{ padding:'14px 32px 40px', overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:'0 4px', minWidth:480 }}>
+              <table className="p-clients-table" style={{ width:'100%', borderCollapse:'separate', borderSpacing:'0 4px' }}>
                 <thead>
                   <tr style={{ fontSize:11, color:C.textDim, textTransform:'uppercase', letterSpacing:'0.8px' }}>
                     {['Partner','Type','Expiry','Status','Revenue','Actions'].map((h,i) => (
                       <th key={h} className={i===1||i===2||i===4?'hide-mob':''} style={{
+                        width: ['20%','9%','16%','9%','9%',undefined][i],
                         paddingLeft: i===0?14:0, paddingBottom:8,
                         textAlign: i===5?'right':'left', paddingRight: i===5?10:0,
                         fontWeight:600,
@@ -2190,7 +2223,7 @@ function PratyekshaMasterAdminInner() {
                           <span style={{ fontWeight:700, color:'#8a704d', fontSize:13, fontFamily:'JetBrains Mono, monospace' }}>₹{(client.totalPaidAmount||0).toLocaleString('en-IN')}</span>
                         </td>
                         <td style={{ textAlign:'right', paddingRight:10, borderRadius:'0 10px 10px 0' }}>
-                          <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center' }}>
+                          <div style={{ display:'flex', gap:6, justifyContent:'flex-end', alignItems:'center', flexWrap:'wrap' }}>
                             <button type="button" onClick={()=>{ setDocsClientId(String(client._id || client.tenantId)); navTo('documents'); }} title="Prepare welcome / invoice / agreement" style={{
                               padding:'5px 8px', borderRadius:7, fontSize:12, fontWeight:500,
                               cursor:'pointer', background:'transparent',

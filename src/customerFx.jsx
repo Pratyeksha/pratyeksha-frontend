@@ -235,7 +235,8 @@ if (isBrowser && !window.__pxhFxInstalled) {
 }
 
 // ── UI: the speaker toggle ──────────────────────────────────────────────────
-export function FxSoundToggle({ size = 16, style }) {
+export function FxSoundToggle({ size = 16, style, lang = 'en' }) {
+  const mr = lang === 'mr';
   const [on, setOn] = useState(soundOn);
   useEffect(() => { const fn = (v) => setOn(v); listeners.add(fn); return () => { listeners.delete(fn); }; }, []);
   return (
@@ -244,8 +245,8 @@ export function FxSoundToggle({ size = 16, style }) {
       className="fx-sound-btn"
       data-fx="off"
       aria-pressed={on}
-      aria-label={on ? 'Turn sounds off' : 'Turn sounds on'}
-      title={on ? 'Sounds on' : 'Sounds off'}
+      aria-label={mr ? (on ? 'आवाज बंद करा' : 'आवाज सुरू करा') : (on ? 'Turn sounds off' : 'Turn sounds on')}
+      title={mr ? (on ? 'आवाज सुरू' : 'आवाज बंद') : (on ? 'Sounds on' : 'Sounds off')}
       onClick={() => fx.setSound(!on)}
       style={style}
     >

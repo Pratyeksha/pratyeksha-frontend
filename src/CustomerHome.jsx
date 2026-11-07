@@ -41,7 +41,7 @@ const CACHE_KEY = 'px_home_cache';
 /* Marathi / English strings for the directory (the guest's choice is remembered). */
 const L = {
   en: {
-    morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening', search: 'Search', all: 'All', cafe: 'Café', dine: 'Dine',
+    heroLive: 'places live now', morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening', search: 'Search', all: 'All', cafe: 'Café', dine: 'Dine',
     pickup: 'Pickup', reservation: 'Reserve', waitlist: 'Waitlist', saved: 'Saved', offers: 'Offers', veg: 'Pure veg', nearMe: 'Near me',
     allAreas: 'All areas', place: 'place', places: 'places', nearest: ' · nearest first', list: 'List', map: 'Map', nothing: 'Nothing found',
     clear: 'Clear filters', retry: 'Retry', more: 'more', recent: 'Recent', clearRecent: 'Clear', saveHint: 'Tap the heart on a place to save it',
@@ -65,7 +65,7 @@ const L = {
     open24: 'Open 24 hours', monFri: 'Mon–Fri', satSun: 'Sat–Sun', closedOn: 'Closed on', minShort: 'min', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   },
   mr: {
-    morning: 'शुभ प्रभात', afternoon: 'शुभ दुपार', evening: 'शुभ संध्याकाळ', search: 'शोधा', all: 'सर्व', cafe: 'कॅफे', dine: 'डाइन',
+    heroLive: 'ठिकाणे आता सुरू', morning: 'शुभ प्रभात', afternoon: 'शुभ दुपार', evening: 'शुभ संध्याकाळ', search: 'शोधा', all: 'सर्व', cafe: 'कॅफे', dine: 'डाइन',
     pickup: 'पिकअप', reservation: 'आरक्षण', waitlist: 'प्रतीक्षा', saved: 'आवडते', offers: 'ऑफर्स', veg: 'शुद्ध शाकाहारी', nearMe: 'जवळ',
     allAreas: 'सर्व भाग', place: 'ठिकाण', places: 'ठिकाणे', nearest: ' · सर्वात जवळचे आधी', list: 'यादी', map: 'नकाशा', nothing: 'काहीही सापडले नाही',
     clear: 'फिल्टर काढा', retry: 'पुन्हा प्रयत्न', more: 'आणखी', recent: 'अलीकडील', clearRecent: 'पुसा', saveHint: 'आवडते ठिकाण जतन करण्यासाठी हृदयावर टॅप करा',
@@ -464,6 +464,85 @@ const fmtKm = (km) => {
   return `${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
 };
 
+// ── Hero: 15 short, catchy lines that replace the old "Good morning" greeting ──────────────────────────────
+// A new line is picked on every visit (never the same one twice in a row) and the line rotates while the guest browses.
+const HERO_EN = [
+  "Hungry? We've got you.",
+  'Good food is one tap away.',
+  'Your next favourite bite is here.',
+  'Skip the queue. Savour the moment.',
+  'Scan. Order. Enjoy.',
+  'Cravings, meet your match.',
+  "Tonight's mood: delicious.",
+  'Find the table. Find the flavour.',
+  'Eat well. Wait less.',
+  'Where are we eating today?',
+  'Fresh picks, fired up for you.',
+  'Treat yourself, you deserve it.',
+  'One scan away from dinner.',
+  'Taste the neighbourhood.',
+  'Make today a delicious one.',
+];
+const HERO_MR = [
+  'भूक लागली? आम्ही आहोत ना!',
+  'चविष्ट जेवण, फक्त एका टॅपवर.',
+  'तुमची पुढची आवडती डिश इथेच.',
+  'रांग नको, फक्त चव!',
+  'स्कॅन करा. ऑर्डर करा. आनंद घ्या.',
+  'खवय्यांसाठी खास मेजवानी.',
+  'आजचा मूड: चविष्ट!',
+  'टेबल शोधा, चव शोधा.',
+  'मनसोक्त खा, कमी थांबा.',
+  'आज जेवायला कुठे जायचं?',
+  'ताजे पदार्थ, खास तुमच्यासाठी.',
+  'स्वतःला द्या एक छान ट्रीट!',
+  'जेवण फक्त एका स्कॅनवर.',
+  'आपल्या शहराची चव चाखा.',
+  'आजचा दिवस करा चविष्ट!',
+];
+const HERO_LAST_KEY = 'pxh_hero_last';
+const HERO_EVERY_MS = 4600;
+const nextHeroIndex = (avoid, n) => {
+  if (n < 2) return 0;
+  let i;
+  do { i = Math.floor(Math.random() * n); } while (i === avoid);
+  return i;
+};
+let heroFirst = null; // picked once per page load, so StrictMode's double render can't pick two different lines
+const firstHeroIndex = () => {
+  if (heroFirst !== null) return heroFirst;
+  let last = -1;
+  try { const raw = localStorage.getItem(HERO_LAST_KEY); const v = Number(raw); if (raw !== null && Number.isInteger(v)) last = v; } catch { /* storage blocked */ }
+  heroFirst = nextHeroIndex(last, HERO_EN.length);
+  try { localStorage.setItem(HERO_LAST_KEY, String(heroFirst)); } catch { /* storage blocked */ }
+  return heroFirst;
+};
+function HeroLine({ lang }) {
+  const lines = lang === 'mr' ? HERO_MR : HERO_EN;
+  const [i, setI] = useState(firstHeroIndex);
+  useEffect(() => {
+    let reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* old browser */ }
+    if (reduce) return undefined;
+    const id = setInterval(() => {
+      if (document.hidden) return; // don't churn while the tab is in the background
+      setI((prev) => { const n = nextHeroIndex(prev, HERO_EN.length); try { localStorage.setItem(HERO_LAST_KEY, String(n)); } catch { /* storage blocked */ } return n; });
+    }, HERO_EVERY_MS);
+    return () => clearInterval(id);
+  }, []);
+  const words = (lines[i % lines.length] || '').split(' ');
+  return (
+    <div>
+      <h1 key={`${lang}-${i}`} className="pxh-hl" lang={lang} aria-live="off">
+        {words.map((w, k) => (
+          <span key={k} className="pxh-w" style={{ animationDelay: `${k * 70}ms` }}>{w}{k < words.length - 1 ? ' ' : ''}</span>
+        ))}
+      </h1>
+      <div className="pxh-bar" aria-hidden="true"><i key={i} /></div>
+    </div>
+  );
+}
+
 const css = `
 html,body{scrollbar-width:none;-ms-overflow-style:none}
 html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;height:0;display:none}
@@ -540,6 +619,28 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-card.pxh-sk-card,.pxh-card.pxh-sk-card:hover{transform:none;box-shadow:none;border-color:rgba(211,191,162,.13);pointer-events:none}
 .pxh-sk-in{animation:pxhSkIn .35s ease both}
 @keyframes pxhSkIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.pxh-hero{position:relative;padding:22px 0 14px}
+.pxh-hero>*:not(.pxh-orb){position:relative;z-index:1}
+.pxh-orb{position:absolute;border-radius:50%;filter:blur(46px);pointer-events:none;z-index:0;opacity:.55;animation:pxhFloat 9s ease-in-out infinite}
+.pxh-orb.a{width:190px;height:190px;left:-60px;top:-34px;background:rgba(211,191,162,.22)}
+.pxh-orb.b{width:150px;height:150px;right:0;top:46px;background:rgba(138,112,77,.3);animation-delay:-4.5s}
+@keyframes pxhFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(14px,-12px)}}
+.pxh-eyebrow{display:flex;align-items:center;gap:8px;min-height:22px;font-size:11px;font-weight:800;color:rgba(211,191,162,.9)}
+.pxh-eyebrow.en{letter-spacing:.14em;text-transform:uppercase}
+.pxh-live{width:7px;height:7px;border-radius:50%;background:#7bd88f;flex:0 0 auto;animation:pxhLive 1.8s ease-out infinite}
+@keyframes pxhLive{0%{box-shadow:0 0 0 0 rgba(123,216,143,.6)}70%,100%{box-shadow:0 0 0 7px rgba(123,216,143,0)}}
+.pxh-hl{margin:10px 0 0;min-height:2.3em;color:#f7f3eb;text-align:left;font-family:Georgia,serif;font-weight:500;font-size:clamp(28px,7.4vw,44px);line-height:1.14;letter-spacing:-.01em;max-width:18em}
+.pxh-hl:lang(mr){letter-spacing:0;line-height:1.3}
+.pxh-w{display:inline-block;animation:pxhWord .55s cubic-bezier(.2,.8,.3,1) both}
+@keyframes pxhWord{from{opacity:0;transform:translateY(14px);filter:blur(5px)}to{opacity:1;transform:none;filter:none}}
+.pxh-bar{width:64px;height:3px;border-radius:3px;margin-top:12px;background:rgba(211,191,162,.18);overflow:hidden}
+.pxh-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#d3bfa2,#f1e3c6);transform-origin:left;animation:pxhBar 4.6s linear forwards}
+@keyframes pxhBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.pxh-grid>.pxh-card{animation:pxhCardIn .5s cubic-bezier(.2,.8,.3,1) both}
+.pxh-grid>.pxh-card:nth-child(2){animation-delay:.05s}.pxh-grid>.pxh-card:nth-child(3){animation-delay:.1s}.pxh-grid>.pxh-card:nth-child(4){animation-delay:.15s}
+.pxh-grid>.pxh-card:nth-child(5){animation-delay:.2s}.pxh-grid>.pxh-card:nth-child(n+6){animation-delay:.25s}
+@keyframes pxhCardIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.pxh-orb,.pxh-live,.pxh-w,.pxh-bar i,.pxh-grid>.pxh-card{animation:none!important}.pxh-bar{display:none}}
 @media(prefers-reduced-motion:reduce){.pxh-spin{animation:none}.pxh-sk::after{animation:none;display:none}.pxh-sk-in{animation:none}.pxh-card{transition:none}}
 `;
 
@@ -1266,17 +1367,25 @@ export default function CustomerHome() {
         )}
 
         {/* ── Greeting + search ── */}
-        <section style={{ padding: '26px 0 14px' }}>
-          {/* The install button used to sit in the top bar; with logo + language + scan + offers it pushed the offers button off a 390px screen. */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <h1 style={{ margin: 0, color: '#f7f3eb', textAlign: 'left', fontFamily: 'Georgia, serif', fontWeight: 500, fontSize: 'clamp(30px,7vw,46px)', lineHeight: 1.05, letterSpacing: '-.01em' }}>
-              {greetingLine}<span style={{ color: GOLD }}>.</span>
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+        <section className="pxh-hero">
+          <span className="pxh-orb a" aria-hidden="true" />
+          <span className="pxh-orb b" aria-hidden="true" />
+          {/* Eyebrow: live count of places (or the time-of-day greeting + name for a returning guest), with install / sound on the right.
+              The install button used to sit in the top bar, where it pushed the offers button off a 390px screen. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div className={`pxh-eyebrow ${lang === 'mr' ? 'mr' : 'en'}`}>
+              {guestName
+                ? <span>{greetingLine}</span>
+                : (!loading && tenants.length > 0)
+                  ? <><i className="pxh-live" /><span>{tenants.length} {tenants.length === 1 && lang !== 'mr' ? 'place live now' : tr.heroLive}</span></>
+                  : null}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
               <PwaInstallButton kind="customer" compact />
-              <FxSoundToggle />
+              <FxSoundToggle lang={lang} />
             </div>
           </div>
+          <HeroLine lang={lang} />
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
               <b style={{ color: '#d3bfa2' }}>Audit mode</b>

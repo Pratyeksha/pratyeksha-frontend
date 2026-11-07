@@ -5592,7 +5592,7 @@ if (qrCheck === 'unverified') {
 ) : (
   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
     <Package size={10} color="rgba(211,191,162,0.4)" strokeWidth={1.5} />
-    <span style={{ fontSize: '0.66rem', fontWeight: '900', color: '#d3bfa2' }}>Pickup Order</span>
+    <span style={{ fontSize: '0.66rem', fontWeight: '900', color: '#d3bfa2' }}>{language === 'mr' ? 'पिकअप ऑर्डर' : 'Pickup Order'}</span>
   </div>
 )}
           </div>
@@ -5735,7 +5735,7 @@ if (qrCheck === 'unverified') {
         <div style={language === 'mr' ? { ...styles.poweredBy, letterSpacing: 0, fontSize: '0.7rem' } : styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
         {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
-        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><FxSoundToggle /></div>
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><FxSoundToggle lang={language} /></div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
   const typeConfig = {
@@ -6360,6 +6360,26 @@ if (qrCheck === 'unverified') {
   );
 })()}
 
+{/* Empty state: a search (or filter) with no matches used to leave a blank page under the category tabs. */}
+{!isLoading && filteredMenuItems.length === 0 && (
+  <div role="status" className="fx-rise" style={{ margin: '36px 24px', padding: '28px 20px', textAlign: 'center', borderRadius: 20, border: '1px dashed rgba(211,191,162,0.25)', background: 'rgba(255,255,255,0.02)' }}>
+    <Search size={26} color="rgba(211,191,162,0.5)" strokeWidth={1.6} style={{ marginBottom: 10 }} />
+    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f7f3eb' }}>
+      {searchQuery.trim()
+        ? (language === 'mr' ? `"${searchQuery.trim()}" साठी काहीही सापडले नाही` : `No dishes found for "${searchQuery.trim()}"`)
+        : (language === 'mr' ? 'या विभागात सध्या काही उपलब्ध नाही' : 'Nothing available here right now')}
+    </div>
+    <div style={{ fontSize: '0.72rem', color: 'rgba(247,243,235,0.55)', marginTop: 6 }}>
+      {language === 'mr' ? 'दुसरा शब्द वापरून पहा किंवा दुसरा विभाग निवडा.' : 'Try a different word, or pick another category.'}
+    </div>
+    {searchQuery.trim() && (
+      <button type="button" onClick={() => setSearchQuery('')} style={{ marginTop: 14, padding: '9px 20px', borderRadius: 999, border: '1px solid rgba(211,191,162,0.35)', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.5px', cursor: 'pointer' }}>
+        {language === 'mr' ? 'शोध साफ करा' : 'CLEAR SEARCH'}
+      </button>
+    )}
+  </div>
+)}
+
 {filteredMenuItems.map((item) => (
               <div key={item._id} style={{...styles.menuCard, background: cardBg, borderColor: borderColor}}>
 <div style={styles.tagContainer}>
@@ -6483,38 +6503,25 @@ if (qrCheck === 'unverified') {
     </span>
   )}
 </div>
-  {/* 📋 PREMIUM INGREDIENTS LAYOUT BADGE ARRAYS */}
-  <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-    <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-      {t[language].ingredients}
-    </span>
-    
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
-      {language === 'mr' ? (
-        /* 🚀 FIXED: Using bracket notation to safely extract the array from MongoDB object mapping profiles */
-        item.ingredients && item.ingredients['mr'] && item.ingredients['mr'].length > 0 ? (
-          item.ingredients['mr'].map((ing, idx) => (
+  {/* Ingredient chips. Marathi falls back to the English list; a dish with no ingredient data shows no empty "INGREDIENTS – No data provided" block at all. */}
+  {(() => {
+    const ingList = ((language === 'mr' && item.ingredients?.mr?.length) ? item.ingredients.mr : item.ingredients?.en) || [];
+    if (!Array.isArray(ingList) || ingList.length === 0) return null;
+    return (
+      <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <span style={{ fontSize: '0.6rem', color: '#555', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          {t[language].ingredients}
+        </span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+          {ingList.map((ing, idx) => (
             <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '4px', color: '#aaa', fontWeight: '500' }}>
               {ing}
             </span>
-          ))
-        ) : (
-          <span style={{ fontSize: '0.65rem', color: '#444', fontStyle: 'italic' }}>माहिती उपलब्ध नाही</span>
-        )
-      ) : (
-        /* 🚀 FIXED: Using bracket notation to safely extract the array from MongoDB object mapping profiles */
-        item.ingredients && item.ingredients['en'] && item.ingredients['en'].length > 0 ? (
-          item.ingredients['en'].map((ing, idx) => (
-            <span key={idx} style={{ fontSize: '0.62rem', padding: '3px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '4px', color: '#aaa', fontWeight: '500' }}>
-              {ing}
-            </span>
-          ))
-        ) : (
-          <span style={{ fontSize: '0.65rem', color: '#444', fontStyle: 'italic' }}>No data provided</span>
-        )
-      )}
-    </div>
-  </div>
+          ))}
+        </div>
+      </div>
+    );
+  })()}
 
   <div style={styles.priceContainer}>
     {!item.priceHalf ? (
@@ -6953,7 +6960,7 @@ if (qrCheck === 'unverified') {
                   </div>
                 </div>
               </div>
-              <button type="button" onClick={() => setIsWaiterModalOpen(false)} aria-label="Close"
+              <button type="button" onClick={() => setIsWaiterModalOpen(false)} aria-label={language === 'mr' ? 'बंद करा' : 'Close'}
                 style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: `1px solid ${PX.line}`, color: '#d3bfa2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={18} />
               </button>
@@ -6974,9 +6981,9 @@ if (qrCheck === 'unverified') {
                       </div>
                       <p style={styles.waiterLabel}>{t[language][id]}</p>
                       <div style={styles.countControls}>
-                        <button type="button" aria-label="Less" style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={15} /></button>
+                        <button type="button" aria-label={language === 'mr' ? 'कमी करा' : 'Less'} style={styles.countBtn} onClick={() => updateWaiterCount(id, -1)}><Minus size={15} /></button>
                         <span style={styles.countDisplay}>{convertToMrNumber(n)}</span>
-                        <button type="button" aria-label="More" style={{ ...styles.countBtn, background: PX.gold, color: '#14110c' }} onClick={() => updateWaiterCount(id, 1)}><Plus size={15} /></button>
+                        <button type="button" aria-label={language === 'mr' ? 'जास्त करा' : 'More'} style={{ ...styles.countBtn, background: PX.gold, color: '#14110c' }} onClick={() => updateWaiterCount(id, 1)}><Plus size={15} /></button>
                       </div>
                     </motion.div>
                   );
@@ -7273,7 +7280,7 @@ if (qrCheck === 'unverified') {
               {extraItemSearchQuery && (
                 <button type="button" onClick={() => setExtraItemSearchQuery('')}
                   style={{ padding: '8px 18px', borderRadius: '20px', background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer' }}>
-                  CLEAR SEARCH
+                  {language === 'mr' ? 'शोध साफ करा' : 'CLEAR SEARCH'}
                 </button>
               )}
             </div>
@@ -7866,7 +7873,7 @@ if (qrCheck === 'unverified') {
       <>
 {ap && ap.discountTotal > 0 && (
           <>
-            <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}><span>Items total</span><span>₹{ap.base.toFixed(2)}</span></div>
+            <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#666' }}><span>{language === 'mr' ? 'वस्तूंची एकूण रक्कम' : 'Items total'}</span><span>₹{ap.base.toFixed(2)}</span></div>
             {(ap.offers || []).map((o, i) => <div key={i} style={{ ...styles.billLine, fontSize: '0.78rem', color: '#7fc79a' }}><span>Offer: {o.title}</span><span>-₹{o.amount.toFixed(2)}</span></div>)}
             {ap.manual && ap.manual.amount > 0 && <div style={{ ...styles.billLine, fontSize: '0.78rem', color: '#7fc79a' }}><span>Discount{ap.manual.type === 'percent' ? ` (${ap.manual.value}%)` : ''}</span><span>-₹{ap.manual.amount.toFixed(2)}</span></div>}
           </>
@@ -7971,7 +7978,7 @@ if (qrCheck === 'unverified') {
       <div style={{ padding: '15px 0', fontSize: '0.85rem', color: '#000000', borderBottom: '2px solid #000' }}>
         {ap && ap.discountTotal > 0 && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Items total</span><span>₹{ap.base.toFixed(2)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>{language === 'mr' ? 'वस्तूंची एकूण रक्कम' : 'Items total'}</span><span>₹{ap.base.toFixed(2)}</span></div>
             {(ap.offers || []).map((o, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Offer: {o.title}</span><span>-₹{o.amount.toFixed(2)}</span></div>)}
             {ap.manual && ap.manual.amount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Discount{ap.manual.type === 'percent' ? ` (${ap.manual.value}%)` : ''}</span><span>-₹{ap.manual.amount.toFixed(2)}</span></div>}
           </>
@@ -8022,7 +8029,7 @@ if (qrCheck === 'unverified') {
                        }}
                      >
                        <ReceiptText size={18} color="#0c0c0c" strokeWidth={2.5} />
-                       DOWNLOAD TAX INVOICE
+                       {language === 'mr' ? 'टॅक्स इनव्हॉइस डाउनलोड करा' : 'DOWNLOAD TAX INVOICE'}
                      </button>
 
                      {/* GOLD — Continue to Feedback */}
@@ -8355,7 +8362,7 @@ if (qrCheck === 'unverified') {
         <Sparkles size={11} color="#d3bfa2" strokeWidth={1.6}/>
         {language==='mr' ? 'यांसोबत छान लागेल' : 'Goes well with your order'}
       </div>
-      <button type="button" aria-label="Hide suggestions" onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(247,243,235,0.35)', cursor:'pointer', padding:2, display:'flex' }}>
+      <button type="button" aria-label={language === 'mr' ? 'सूचना लपवा' : 'Hide suggestions'} onClick={() => setShowComboStrip(false)} style={{ background:'none', border:'none', color:'rgba(247,243,235,0.35)', cursor:'pointer', padding:2, display:'flex' }}>
         <X size={13}/>
       </button>
     </div>
@@ -8560,7 +8567,7 @@ if (qrCheck === 'unverified') {
       {/* Close */}
       <button
         type="button"
-        aria-label="Close 3D dish view"
+        aria-label={language === 'mr' ? '३डी दृश्य बंद करा' : 'Close 3D dish view'}
         onClick={() => { stopSpeech(); setSpokenText(''); setActiveModel(null); }}
         style={{ width: '36px', height: '36px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: '12px' }}
       >
@@ -8622,7 +8629,7 @@ if (qrCheck === 'unverified') {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 0 4px', background: '#080808' }}>
         <ChevronDown size={12} color="rgba(211,191,162,0.25)" strokeWidth={2} style={{ animation: 'bounceY 1.4s ease-in-out infinite' }} />
         <span style={{ fontSize: '0.46rem', color: 'rgba(211,191,162,0.62)', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          Scroll for details
+          {language === 'mr' ? 'तपशीलासाठी स्क्रोल करा' : 'Scroll for details'}
         </span>
         <ChevronDown size={12} color="rgba(211,191,162,0.25)" strokeWidth={2} style={{ animation: 'bounceY 1.4s ease-in-out 0.2s infinite' }} />
       </div>
@@ -8823,7 +8830,7 @@ if (qrCheck === 'unverified') {
  
               {/* Stop */}
               {speakingItemId === activeModel._id && (
-                <button type="button" aria-label="Stop"
+                <button type="button" aria-label={language === 'mr' ? 'थांबवा' : 'Stop'}
                   onClick={() => { stopSpeech(); setSpokenText(''); }}
                   style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', outline: 'none' }}
                 >
