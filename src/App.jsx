@@ -17,6 +17,21 @@ import {
 } from 'lucide-react'; 
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+
+// 3D viewer: ~0.5 MB of script plus a WebGL context. Only fetched the first time a guest opens a 3D dish (or hovers / focuses the button).
+const MODEL_VIEWER_SRC = 'https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js';
+let __mvPromise = null;
+const ensureModelViewer = () => {
+  if (typeof window === 'undefined' || window.customElements?.get('model-viewer')) return Promise.resolve();
+  if (__mvPromise) return __mvPromise;
+  __mvPromise = new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.type = 'module'; s.src = MODEL_VIEWER_SRC; s.async = true;
+    s.onload = () => resolve(); s.onerror = () => { __mvPromise = null; resolve(); };
+    document.head.appendChild(s);
+  });
+  return __mvPromise;
+};
 import { startInvoicePdf } from './invoicePdf.js';
 
 import SpoonForkIcon from './SpoonForkIcon.jsx';
@@ -223,7 +238,7 @@ const GuestIdentityBlock = ({ language, info, onName, onPhone, locked, onForget 
 
 const GuestLegalLinks = ({ language, onOpen, style }) => {
   const mr = language === 'mr';
-  const btn = { background: 'none', border: 0, padding: '4px 2px', cursor: 'pointer', color: 'rgba(211,191,162,0.62)', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Poppins, sans-serif', letterSpacing: '0.3px' };
+  const btn = { background: 'none', border: 0, padding: '10px 6px', cursor: 'pointer', color: 'rgba(211,191,162,0.62)', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Poppins, sans-serif', letterSpacing: '0.3px' };
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', ...style }}>
       <ShieldCheck size={11} color="rgba(211,191,162,0.55)" />
@@ -313,6 +328,9 @@ const PratyekshaPremiumMenu = () => {
   
   const [filterVegOnly, setFilterVegOnly] = useState(true);
   const [recentSearches, setRecentSearches] = useState([]);
+  const [phIdx, setPhIdx] = useState(0);
+  const [socketLive, setSocketLive] = useState(true);
+  const dietCounts = useMemo(() => { let veg = 0; let nonVeg = 0; for (const i of allMenuItems) { if (i.isAvailable === false) continue; if (i.isVeg === true) veg += 1; else nonVeg += 1; } return { veg, nonVeg }; }, [allMenuItems]);
   const [searchFocus, setSearchFocus] = useState(false);
   
   const [language, setLanguage] = useState('en'); 
@@ -684,6 +702,7 @@ useEffect(() => {
   try { const v = JSON.parse(localStorage.getItem(`px_menu_favs_${tenantId}`) || '[]'); setFavIds(Array.isArray(v) ? v : []); } catch { setFavIds([]); }
   try { const r = JSON.parse(localStorage.getItem(`px_menu_recent_${tenantId}`) || '[]'); setRecentSearches(Array.isArray(r) ? r.filter((x) => typeof x === 'string').slice(0, 5) : []); } catch { setRecentSearches([]); }
   try { if (localStorage.getItem(`px_menu_diet_${tenantId}`) === 'all') setFilterVegOnly(false); } catch { /* blocked */ }
+  try { const sm = localStorage.getItem(`px_menu_sort_${tenantId}`); if (sm === 'asc' || sm === 'desc') setSortMode(sm); } catch { /* blocked */ }
   try { const m = JSON.parse(localStorage.getItem(`px_last_meal_${tenantId}`) || 'null'); setLastMeal(m && m.items && Object.keys(m.items).length ? m : null); } catch { setLastMeal(null); }
   favLoaded.current = true;
 }, [tenantId]);
@@ -691,6 +710,19 @@ useEffect(() => {
   if (!tenantId || !favLoaded.current) return;
   try { localStorage.setItem(`px_menu_favs_${tenantId}`, JSON.stringify(favIds)); } catch { /* storage blocked */ }
 }, [favIds, tenantId]);
+const phNames = useMemo(() => {
+  const seen = new Set(); const out = [];
+  for (const i of allMenuItems) { const n = String(i?.name || '').trim(); if (n && n.length <= 22 && i.isAvailable !== false && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n); if (out.length >= 6) break; } }
+  return out;
+}, [allMenuItems]);
+useEffect(() => {
+  if (phNames.length < 2 || searchFocus || searchQuery) return undefined;
+  const id = setInterval(() => { if (!document.hidden) setPhIdx((n) => n + 1); }, 3200);
+  return () => clearInterval(id);
+}, [phNames.length, searchFocus, searchQuery]);
+const phText = (phNames.length && !searchFocus && !searchQuery)
+  ? (language === 'mr' ? `शोधा "${phNames[phIdx % phNames.length]}"…` : `Search "${phNames[phIdx % phNames.length]}"…`)
+  : t[language].searchPlaceholder;
 const rememberSearch = (q) => {
   const v = String(q || '').trim();
   if (v.length < 2 || !tenantId) return;
@@ -719,7 +751,7 @@ const shareDish = async (item) => {
   const text = `${(language === 'mr' && item.name_mr) || item.name} — ₹${item.priceFull || item.price || item.priceHalf || ''}${restaurantData?.name ? ` at ${restaurantData.name}` : ''}`;
   try { await navigator.share({ title: item.name, text, url: window.location.href.split('&qr=')[0] }); fx.success(); } catch { /* cancelled */ }
 };
-const toggleDishFav = (id) => { setFavIds(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id])); fx.like(); };
+const toggleDishFav = (id) => { const adding = !favIds.includes(id); setFavIds(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id])); fx.like(); if (adding) fx.toast(language === 'mr' ? 'आवडत्यात जोडले' : 'Saved to favourites', { label: language === 'mr' ? 'पहा' : 'View', onClick: () => { setQuickFilter('fav'); window.scrollTo({ top: 0, behavior: 'smooth' }); } }); };
 useEffect(() => () => { surpriseTimers.current.forEach(clearTimeout); }, []);
 const surpriseMe = () => {
   const pool = allMenuItems.filter(i => i.isAvailable !== false && (filterVegOnly ? i.isVeg === true : i.isVeg !== true));
@@ -1804,6 +1836,27 @@ useEffect(() => {
   }
 }, [selectedCategoryId, allMenuItems, isOnlyVegTenant, filterVegOnly]);
 
+// Keep the cart through an accidental refresh or the phone reclaiming the tab (this visit only, per restaurant).
+const cartRestored = useRef(false);
+useEffect(() => {
+  if (cartRestored.current || !tenantId || !allMenuItems.length) return;
+  if (tableRole === null && tableNumber && tableNumber !== 'Counter') return; // wait until we know whether this guest may order
+  cartRestored.current = true;
+  if (tableRole === 'viewer' || tableRole === 'invalid') return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(`px_cart_${tenantId}`) || 'null');
+    if (!saved || typeof saved !== 'object') return;
+    const ok = new Set(allMenuItems.filter(i => i.isAvailable !== false).map(i => String(i._id)));
+    const next = {};
+    Object.entries(saved).forEach(([k, q]) => { const n = Math.floor(Number(q)); if (n > 0 && n < 100 && ok.has(String(k).replace(/-(Half|Full)$/, ''))) next[k] = n; });
+    if (Object.keys(next).length) setCartRaw((cur) => (Object.keys(cur).length ? cur : next));
+  } catch { /* ignore */ }
+}, [tenantId, allMenuItems, tableRole, tableNumber]);
+useEffect(() => {
+  if (!tenantId || !cartRestored.current) return;
+  try { if (Object.keys(cart).length) sessionStorage.setItem(`px_cart_${tenantId}`, JSON.stringify(cart)); else sessionStorage.removeItem(`px_cart_${tenantId}`); } catch { /* ignore */ }
+}, [cart, tenantId]);
+
 // 🚀 UNIFIED ENGINE: HANDLES INITIAL HTTP REST CONTENT LOADS & LIVE REAL-TIME SOCKET BROADCASTS
   useEffect(() => {
     if (!tenantId) return;
@@ -1811,40 +1864,71 @@ useEffect(() => {
     // 1. PHASE A: EXECUTE INITIAL REST DATA FETCH ON MOUNT
 let _disposedMenu = false;
 let _menuReqSeq = 0;
+const _ctrl = new AbortController();
+const _menuCacheKey = `px_menu_cache_${tenantId}`;
+let _gotLive = false;
+// Instant paint from this visit's last copy; the network answer below replaces it a moment later.
+try {
+  const c = JSON.parse(sessionStorage.getItem(_menuCacheKey) || 'null');
+  if (c && Array.isArray(c.menu) && c.menu.length && Date.now() - c.t < 30 * 60 * 1000) {
+    setRestaurantData(c.tenant); setCategoryList(c.cats); setAllMenuItems(c.menu); setExtraItems(c.extras || []); setIsLoading(false);
+  }
+} catch { /* ignore */ }
 const fetchMenuContent = async () => {
   const mySeq = ++_menuReqSeq;
+  const opt = { signal: _ctrl.signal };
   try {
-    const [res, cat, extras, combosRes] = await Promise.all([
-      axios.get(`${BASE_URL}/tenant/${tenantId}`),
-      axios.get(`${BASE_URL}/categories/${tenantId}`),
-      axios.get(`${BASE_URL}/extra-items/${tenantId}`).catch(() => ({ data: [] })),
-      axios.get(`${BASE_URL}/combos/${tenantId}`).catch(() => ({ data: [] })),
+    // One round-trip, not two: the dish list used to wait for the four requests before it.
+    const [res, cat, extras, combosRes, menuRes] = await Promise.all([
+      axios.get(`${BASE_URL}/tenant/${tenantId}`, opt),
+      axios.get(`${BASE_URL}/categories/${tenantId}`, opt),
+      axios.get(`${BASE_URL}/extra-items/${tenantId}`, opt).catch((e) => { if (axios.isCancel(e)) throw e; return { data: [] }; }),
+      axios.get(`${BASE_URL}/combos/${tenantId}`, opt).catch((e) => { if (axios.isCancel(e)) throw e; return { data: [] }; }),
+      axios.get(`${BASE_URL}/menu/engineered/${tenantId}`, opt).catch((e) => { if (axios.isCancel(e)) throw e; return axios.get(`${BASE_URL}/menu/${tenantId}`, opt); }),
     ]);
     const comboList = Array.isArray(combosRes.data) ? combosRes.data : [];
-
-    // Try engineered order, fall back to plain menu
-    const menuRes = await axios.get(`${BASE_URL}/menu/engineered/${tenantId}`)
-      .catch(() => axios.get(`${BASE_URL}/menu/${tenantId}`));
-
     if (_disposedMenu || mySeq !== _menuReqSeq) return;
+    const cats = [...(comboList.length ? [COMBO_CATEGORY] : []), ...(Array.isArray(cat.data) ? cat.data : [])];
+    const menu = [...(Array.isArray(menuRes.data) ? menuRes.data : []), ...comboList.map(comboToMenuItem)];
+    const extraList = Array.isArray(extras.data) ? extras.data : [];
     setRestaurantData(res.data);
-    setCategoryList([...(comboList.length ? [COMBO_CATEGORY] : []), ...(Array.isArray(cat.data) ? cat.data : [])]);
-    setAllMenuItems([...(Array.isArray(menuRes.data) ? menuRes.data : []), ...comboList.map(comboToMenuItem)]);
-    setExtraItems(Array.isArray(extras.data) ? extras.data : []);
+    setCategoryList(cats);
+    setAllMenuItems(menu);
+    setExtraItems(extraList);
+    try {
+      const blob = JSON.stringify({ t: Date.now(), tenant: res.data, cats, menu, extras: extraList });
+      sessionStorage.setItem(_menuCacheKey, blob);
+      if (blob.length < 900000) localStorage.setItem(`px_menu_offline_${tenantId}`, blob); // survives closing the tab: used only when the network fails
+    } catch { /* quota: fine, just no cache */ }
+    _gotLive = true;
     // If the browser reports offline but we still got real data back, it came
     // from the service worker's menu cache, not a live network round-trip.
     setServingFromCache(!navigator.onLine);
   } catch (error) {
+    if (axios.isCancel(error) || _disposedMenu) return;
     console.error("Setup error:", error);
     // Unknown / removed outlet: the API answers 404 { error: 'Tenant not found' }. Previously the guest got an empty menu shell.
-    if (!_disposedMenu && error?.response?.status === 404) setSessionBlocked(true);
+    if (error?.response?.status === 404) { setSessionBlocked(true); try { sessionStorage.removeItem(_menuCacheKey); } catch { /* ignore */ } }
     // Offline with nothing cached yet for this tenant — surface it plainly
     // instead of leaving the customer on a blank/loading screen forever.
-    if (!navigator.onLine) setIsOffline(true);
+    // Network trouble (not a 404): fall back to the last menu saved on this phone, up to a week old, and say so.
+    let _usedOffline = false;
+    if (!_gotLive && (!error?.response || error.response.status >= 500)) {
+      try {
+        const o = JSON.parse(localStorage.getItem(`px_menu_offline_${tenantId}`) || 'null');
+        if (o && Array.isArray(o.menu) && o.menu.length && Date.now() - o.t < 7 * 86400000) {
+          setRestaurantData(o.tenant); setCategoryList(o.cats); setAllMenuItems(o.menu); setExtraItems(o.extras || []); setServingFromCache(true); _usedOffline = true;
+        }
+      } catch { /* ignore */ }
+    }
+    if (!navigator.onLine && !_usedOffline) setIsOffline(true);
   } finally {
     if (!_disposedMenu) setIsLoading(false);
   }
 };
+// Socket bursts (several menu / combo edits in a row) trigger ONE refetch instead of one each.
+let _refetchTimer = 0;
+const refetchSoon = () => { window.clearTimeout(_refetchTimer); _refetchTimer = window.setTimeout(fetchMenuContent, 350); };
     fetchMenuContent();
 
     // 2. PHASE B: SPIN UP LONG-LIVED WEB SOCKET CHANNELS FOR LIVE DATA SYNCING
@@ -1853,12 +1937,14 @@ const fetchMenuContent = async () => {
     // Join the tenant room on initial connect and every reconnect. Socket.IO rooms are lost on reconnect.
     const joinRestaurant = () => socket.emit("join_restaurant", tenantId);
     socket.on('connect', joinRestaurant);
+    socket.on('connect', () => setSocketLive(true));
+    socket.on('disconnect', () => setSocketLive(false));
     if (socket.connected) joinRestaurant();
     // Menu/availability changes missed while offline are never replayed: refetch on RE-connect.
     let _seenConnect = socket.connected;
-    socket.on('connect', () => { if (_seenConnect) fetchMenuContent(); _seenConnect = true; });
+    socket.on('connect', () => { if (_seenConnect) refetchSoon(); _seenConnect = true; });
 
-socket.on("combos_updated", () => { fetchMenuContent(); });
+socket.on("combos_updated", () => { refetchSoon(); });
 
 socket.on("menu_updated", (updatedItem) => {
   if (updatedItem && updatedItem.tenantId === tenantId) {
@@ -1969,6 +2055,8 @@ socket.on('kds_item_timing_updated', (data) => {
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
 return () => {
   _disposedMenu = true;
+  _ctrl.abort();
+  window.clearTimeout(_refetchTimer);
   socket.off("menu_updated");
   socket.off("combos_updated");
   socket.off('menu_bulk_updated');
@@ -3002,6 +3090,12 @@ const notifyWaiter = async (serviceType = "Custom") => {
   };
 
   const totalItemsInCart = Object.values(cart).reduce((a, b) => a + b, 0);
+  const baseTitleRef = useRef(typeof document !== 'undefined' ? document.title : '');
+  useEffect(() => {
+    const base = baseTitleRef.current.replace(/^\(\d+\)\s*/, '');
+    document.title = totalItemsInCart > 0 ? `(${totalItemsInCart}) ${base}` : base;
+    return () => { document.title = base; };
+  }, [totalItemsInCart]);
 
   const getCartTotal = () => {
     return Object.entries(cart).reduce((acc, [key, qty]) => {
@@ -5731,7 +5825,7 @@ if (qrCheck === 'unverified') {
         
 {hasNonVegInView && (
   <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 5 }}>
-    <DietToggle vegOnly={filterVegOnly} onChange={(v) => { setFilterVegOnly(v); try { if (tenantId) localStorage.setItem(`px_menu_diet_${tenantId}`, v ? 'veg' : 'all'); } catch { /* blocked */ } }} language={language} />
+    <DietToggle vegOnly={filterVegOnly} counts={dietCounts} onChange={(v) => { setFilterVegOnly(v); try { if (tenantId) localStorage.setItem(`px_menu_diet_${tenantId}`, v ? 'veg' : 'all'); } catch { /* blocked */ } }} language={language} />
   </div>
 )}
         <h1 style={{...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
@@ -5744,7 +5838,7 @@ if (qrCheck === 'unverified') {
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
         {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
         <div style={{ textAlign: 'center', marginTop: 8 }}><TimeGreeting lang={language} style={language === 'mr' ? { letterSpacing: 0, textTransform: 'none' } : undefined} /></div>
-        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', flexWrap: 'wrap', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><SeatedTimer language={language} /></div>
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', flexWrap: 'wrap', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><SeatedTimer language={language} /><span className={`fx-live${socketLive ? '' : ' off'}`} title={language === 'mr' ? (socketLive ? 'मेनू थेट अपडेट होतो' : 'पुन्हा जोडत आहे…') : (socketLive ? 'Menu updates live' : 'Reconnecting…')}><i />{language === 'mr' ? (socketLive ? 'थेट' : 'जोडत आहे') : (socketLive ? 'Live' : 'Reconnecting')}</span></div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
   const typeConfig = {
@@ -6047,14 +6141,14 @@ if (qrCheck === 'unverified') {
       <Search size={18} color={primaryColor} />
       <input
         type="text"
-        placeholder={t[language].searchPlaceholder}
+        placeholder={phText}
         style={styles.searchInput}
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
         onFocus={() => setSearchFocus(true)}
         onBlur={() => { setTimeout(() => setSearchFocus(false), 150); rememberSearch(searchQuery); }}
         onKeyDown={e => { if (e.key === 'Enter') { rememberSearch(searchQuery); e.currentTarget.blur(); } }}
-        enterKeyHint="search"
+        enterKeyHint="search" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false}
       />
       {speechCtor && searchQuery.length === 0 && (
         <button type="button" onClick={startVoice} aria-label={language === 'mr' ? 'बोलून शोधा' : 'Search by voice'} aria-pressed={listening}
@@ -6353,11 +6447,11 @@ if (qrCheck === 'unverified') {
           {favIds.length > 0 && (
             <button type="button" data-fx="select" aria-pressed={quickFilter === 'fav'} className={`qf-chip${quickFilter === 'fav' ? ' on' : ''}`}
               onClick={() => setQuickFilter(prev => (prev === 'fav' ? 'none' : 'fav'))}>
-              <Heart size={12} fill={quickFilter === 'fav' ? 'currentColor' : 'none'} />{language === 'mr' ? 'आवडते' : 'Favourites'}
+              <Heart size={12} fill={quickFilter === 'fav' ? 'currentColor' : 'none'} />{language === 'mr' ? 'आवडते' : 'Favourites'}<b className="qf-n">{favIds.length}</b>
             </button>
           )}
           <button type="button" data-fx="select" className={`qf-chip${sortMode !== 'rec' ? ' on' : ''}`}
-            onClick={() => setSortMode(m => (m === 'rec' ? 'asc' : m === 'asc' ? 'desc' : 'rec'))}
+            onClick={() => { const nx = sortMode === 'rec' ? 'asc' : sortMode === 'asc' ? 'desc' : 'rec'; setSortMode(nx); try { if (tenantId) localStorage.setItem(`px_menu_sort_${tenantId}`, nx); } catch { /* blocked */ } }}
             aria-label={language === 'mr' ? 'क्रमवारी बदला' : 'Change sort order'}>
             <ArrowDownUp size={12} />
             {sortMode === 'rec' ? (language === 'mr' ? 'शिफारस केलेले' : 'Recommended') : sortMode === 'asc' ? (language === 'mr' ? 'किंमत ↑' : 'Price: low to high') : (language === 'mr' ? 'किंमत ↓' : 'Price: high to low')}
@@ -6365,6 +6459,12 @@ if (qrCheck === 'unverified') {
           <button type="button" className="qf-chip qf-surprise" onClick={surpriseMe}>
             <Shuffle size={12} />{language === 'mr' ? 'काहीतरी खास!' : 'Surprise me'}
           </button>
+        </div>
+      )}
+      {(quickFilter !== 'none' || searchQuery.trim()) && shownItems.length > 0 && (
+        <div className="px-count" role="status">
+          <span>{language === 'mr' ? `${convertToMrNumber(shownItems.length)} पदार्थ` : `${shownItems.length} ${shownItems.length === 1 ? 'dish' : 'dishes'}`}</span>
+          <button type="button" onClick={() => { setQuickFilter('none'); setSearchQuery(''); fx.select(); }}>{language === 'mr' ? 'सर्व काढा' : 'Clear all'}</button>
         </div>
       )}
       {quickFilter !== 'none' && !searchQuery && shownItems.length === 0 && (
@@ -6675,7 +6775,7 @@ if (qrCheck === 'unverified') {
     )}
   </div>
                </div>
-                <button type="button" style={{...styles.view3dBtn, background: primaryColor}} onClick={() => setActiveModel(item)}>{t[language].view3d}</button>
+                <button type="button" style={{...styles.view3dBtn, background: primaryColor}} onClick={() => { ensureModelViewer(); setActiveModel(item); }} onPointerEnter={ensureModelViewer} onFocus={ensureModelViewer}>{t[language].view3d}</button>
               </div>
             ))}
           </motion.div>
@@ -8678,7 +8778,7 @@ if (qrCheck === 'unverified') {
                   : 'Enter your number and we\'ll show your last order.'}
               </p>
             </div>
-            <button type="button" onClick={() => { setShowPhonePrompt(false); setWelcomeDismissed(true); }} style={{
+            <button type="button" aria-label={language === 'mr' ? 'बंद करा' : 'Close'} onClick={() => { setShowPhonePrompt(false); setWelcomeDismissed(true); }} style={{
               width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
               background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
               color: '#444', cursor: 'pointer',

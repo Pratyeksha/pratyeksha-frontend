@@ -13,7 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, WifiOff, Wifi, Volume2, VolumeX, Type, SlidersHorizontal, Vibrate, Wind, Minus, Plus, MonitorSmartphone, Trash2 } from 'lucide-react';
+import { Bug, Sunrise, Sun, Sunset, MoonStar, ArrowUp, WifiOff, Wifi, Moon, Rows3, RotateCcw, Volume2, VolumeX, Type, SlidersHorizontal, Vibrate, Wind, Minus, Plus, MonitorSmartphone, Trash2 } from 'lucide-react';
 import './customerFx.css';
 
 const SOUND_KEY = 'pxh_fx_sound';
@@ -27,6 +27,32 @@ const readFlag = (k, dflt) => { try { const v = localStorage.getItem(k); return 
 let hapticOn = isBrowser ? readFlag(HAPTIC_KEY, true) : true;
 const applyMotion = (on) => { try { if (on) document.documentElement.setAttribute('data-reduce-motion', '1'); else document.documentElement.removeAttribute('data-reduce-motion'); } catch { /* no DOM */ } };
 if (isBrowser) applyMotion(readFlag(MOTION_KEY, false));
+// Low-data mode: on Data Saver or a 2G link, calm the animations automatically (unless the guest chose a motion setting themselves).
+if (isBrowser) { try { const cn = navigator.connection; if (cn && (cn.saveData || /(^|-)2g$/.test(cn.effectiveType || '')) && localStorage.getItem(MOTION_KEY) === null) applyMotion(true); } catch { /* ignore */ } }
+// A small local error log so a guest can copy diagnostics for support; nothing is sent anywhere.
+const ERR_KEY = 'px_err_log';
+const logErr = (msg, src) => {
+  try {
+    const cur = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');
+    cur.push({ t: new Date().toISOString(), m: String(msg || '').slice(0, 240), s: String(src || '').slice(0, 120) });
+    localStorage.setItem(ERR_KEY, JSON.stringify(cur.slice(-15)));
+  } catch { /* blocked */ }
+};
+if (isBrowser && !window.__pxErrHook) {
+  window.__pxErrHook = true;
+  window.addEventListener('error', (e) => logErr(e.message, `${(e.filename || '').split('/').pop()}:${e.lineno || ''}`));
+  window.addEventListener('unhandledrejection', (e) => logErr(e.reason?.message || e.reason, 'promise'));
+}
+const copyDiagnostics = async () => {
+  let errs = []; try { errs = JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch { /* ignore */ }
+  const d = { when: new Date().toISOString(), page: window.location.pathname, ua: navigator.userAgent, screen: `${window.innerWidth}x${window.innerHeight}@${window.devicePixelRatio}`, online: navigator.onLine, net: navigator.connection?.effectiveType || '', saveData: !!navigator.connection?.saveData, lang: document.documentElement.lang, errors: errs };
+  const text = JSON.stringify(d, null, 1);
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+};
+const DIM_KEY = 'px_night_dim';
+const DENSITY_KEY = 'px_compact';
+const applyFlagAttr = (attr, on) => { try { if (on) document.documentElement.setAttribute(attr, '1'); else document.documentElement.removeAttribute(attr); } catch { /* no DOM */ } };
+if (isBrowser) { applyFlagAttr('data-dim', readFlag(DIM_KEY, false)); applyFlagAttr('data-compact', readFlag(DENSITY_KEY, false)); }
 const listeners = new Set();
 
 const reducedMotion = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
@@ -198,7 +224,25 @@ const burstHearts = (x, y) => {
 };
 
 // ── public API ──────────────────────────────────────────────────────────────
+// A small snackbar with one optional action ("Saved to favourites · View"). One at a time, auto-dismisses.
+let __toastEl = null; let __toastTimer = 0;
+const toast = (text, action) => {
+  if (typeof document === 'undefined') return;
+  if (__toastEl) { __toastEl.remove(); window.clearTimeout(__toastTimer); }
+  const el = document.createElement('div');
+  el.className = 'fx-toast'; el.setAttribute('role', 'status');
+  const span = document.createElement('span'); span.textContent = text; el.appendChild(span);
+  if (action?.label) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = action.label;
+    b.addEventListener('click', () => { try { action.onClick?.(); } finally { el.remove(); } });
+    el.appendChild(b);
+  }
+  document.body.appendChild(el); __toastEl = el;
+  __toastTimer = window.setTimeout(() => { el.classList.add('out'); window.setTimeout(() => el.remove(), 260); }, 3200);
+};
+
 export const fx = {
+  toast,
   play,
   tap: () => play('tap'),
   // the cart button mounts on the first add, so give React a moment to render it before aiming at it
@@ -275,7 +319,7 @@ const holdAwake = async () => {
   try { if (navigator.wakeLock && !document.hidden) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener?.('release', () => { wakeLock = null; }); } } catch { /* denied or unsupported */ }
 };
 const releaseAwake = async () => { try { await wakeLock?.release(); } catch { /* none */ } wakeLock = null; };
-const PRIVATE_KEYS = [/^px_menu_favs_/, /^px_last_meal_/, /^px_menu_recent_/, /^px_menu_diet_/, /^px_last_place$/, /^px_home_recent$/, /^px_home_favs$/];
+const PRIVATE_KEYS = [/^px_menu_favs_/, /^px_last_meal_/, /^px_menu_recent_/, /^px_menu_diet_/, /^px_menu_sort_/, /^px_err_log$/, /^px_menu_offline_/, /^px_last_place$/, /^px_home_recent$/, /^px_home_favs$/];
 const clearSavedData = () => { try { Object.keys(localStorage).filter((k) => PRIVATE_KEYS.some((r) => r.test(k))).forEach((k) => localStorage.removeItem(k)); } catch { /* blocked */ } };
 
 export function PrefsMenu({ lang = 'en', size = 16, style }) {
@@ -286,6 +330,8 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
   const [rm, setRm] = useState(() => readFlag(MOTION_KEY, false));
   const [scale, setScale] = useState(readTextScale);
   const [awake, setAwake] = useState(() => readFlag(AWAKE_KEY, false));
+  const [dim, setDim] = useState(() => readFlag(DIM_KEY, false));
+  const [compact, setCompact] = useState(() => readFlag(DENSITY_KEY, false));
   const [confirmClear, setConfirmClear] = useState(false);
   const canWake = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
   const box = React.useRef(null);
@@ -307,14 +353,20 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
   const setKeepAwake = (on) => { setAwake(on); try { localStorage.setItem(AWAKE_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } };
   const setVibration = (on) => { hapticOn = on; setVib(on); try { localStorage.setItem(HAPTIC_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } if (on && navigator.vibrate && lastPointer.t) { try { navigator.vibrate(18); } catch { /* unsupported */ } } };
   const setMotion = (on) => { setRm(on); applyMotion(on); try { localStorage.setItem(MOTION_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } };
+  const setDimmer = (on) => { setDim(on); applyFlagAttr('data-dim', on); try { localStorage.setItem(DIM_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } };
+  const setDense = (on) => { setCompact(on); applyFlagAttr('data-compact', on); try { localStorage.setItem(DENSITY_KEY, on ? 'on' : 'off'); } catch { /* blocked */ } };
+  const resetPrefs = () => {
+    fx.setSound(true); setVibration(true); setMotion(false); setDimmer(false); setDense(false); setKeepAwake(false);
+    setScale(100); applyTextScale(100); try { localStorage.setItem(TEXT_KEY, '100'); } catch { /* blocked */ }
+  };
   const step = (d) => {
     const i = Math.max(0, Math.min(TEXT_STEPS.length - 1, TEXT_STEPS.indexOf(scale) + d));
     const n = TEXT_STEPS[i]; setScale(n); applyTextScale(n);
     try { localStorage.setItem(TEXT_KEY, String(n)); } catch { /* blocked */ }
   };
   const L = mr
-    ? { title: 'माझ्या आवडीनिवडी', sound: 'आवाज', vib: 'कंपन', size: 'अक्षरांचा आकार', motion: 'कमी हालचाल', awake: 'स्क्रीन सुरू ठेवा', clear: 'माझा जतन केलेला डेटा पुसा', clearAsk: 'नक्की पुसायचे?', yes: 'हो, पुसा', no: 'नको', open: 'आवडीनिवडी' }
-    : { title: 'My preferences', sound: 'Sounds', vib: 'Vibration', size: 'Text size', motion: 'Reduce motion', awake: 'Keep screen on', clear: 'Clear my saved data', clearAsk: 'Remove favourites and last orders from this phone?', yes: 'Yes, clear', no: 'Cancel', open: 'Preferences' };
+    ? { title: 'माझ्या आवडीनिवडी', sound: 'आवाज', vib: 'कंपन', size: 'अक्षरांचा आकार', motion: 'कमी हालचाल', awake: 'स्क्रीन सुरू ठेवा', dim: 'रात्री मंद प्रकाश', diag: 'सपोर्टसाठी माहिती कॉपी करा', copied: 'कॉपी झाले', copyFail: 'कॉपी होऊ शकले नाही', dense: 'कॉम्पॅक्ट यादी', reset: 'डीफॉल्ट सेटिंग्ज', clear: 'माझा जतन केलेला डेटा पुसा', clearAsk: 'नक्की पुसायचे?', yes: 'हो, पुसा', no: 'नको', open: 'आवडीनिवडी' }
+    : { title: 'My preferences', sound: 'Sounds', vib: 'Vibration', size: 'Text size', motion: 'Reduce motion', awake: 'Keep screen on', dim: 'Night dim', diag: 'Copy info for support', copied: 'Copied', copyFail: "Couldn't copy", dense: 'Compact list', reset: 'Reset to defaults', clear: 'Clear my saved data', clearAsk: 'Remove favourites and last orders from this phone?', yes: 'Yes, clear', no: 'Cancel', open: 'Preferences' };
   const Row = ({ icon, label, on, set }) => (
     <button type="button" className="fx-pref-row" role="switch" aria-checked={on} onClick={() => set(!on)}>
       <span className="fx-pref-ico">{icon}</span><span className="fx-pref-lbl">{label}</span><span className={`fx-switch${on ? ' on' : ''}`}><i /></span>
@@ -331,6 +383,8 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
           <Row icon={snd ? <Volume2 size={15} /> : <VolumeX size={15} />} label={L.sound} on={snd} set={(v) => fx.setSound(v)} />
           <Row icon={<Vibrate size={15} />} label={L.vib} on={vib} set={setVibration} />
           <Row icon={<Wind size={15} />} label={L.motion} on={rm} set={setMotion} />
+          <Row icon={<Moon size={15} />} label={L.dim} on={dim} set={setDimmer} />
+          <Row icon={<Rows3 size={15} />} label={L.dense} on={compact} set={setDense} />
           {canWake && <Row icon={<MonitorSmartphone size={15} />} label={L.awake} on={awake} set={setKeepAwake} />}
           <div className="fx-pref-row static">
             <span className="fx-pref-ico"><Type size={15} /></span><span className="fx-pref-lbl">{L.size}</span>
@@ -340,6 +394,8 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
               <button type="button" data-fx="select" onClick={() => step(1)} disabled={scale === TEXT_STEPS[TEXT_STEPS.length - 1]} aria-label="+"><Plus size={13} /></button>
             </span>
           </div>
+          <button type="button" className="fx-pref-clear fx-pref-reset" onClick={async () => { const ok = await copyDiagnostics(); fx.toast(ok ? L.copied : L.copyFail); }}><Bug size={13} />{L.diag}</button>
+          <button type="button" className="fx-pref-clear fx-pref-reset" onClick={resetPrefs}><RotateCcw size={13} />{L.reset}</button>
           {!confirmClear ? (
             <button type="button" className="fx-pref-clear" onClick={() => setConfirmClear(true)}><Trash2 size={13} />{L.clear}</button>
           ) : (
@@ -355,11 +411,12 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
 }
 
 /** Small guest-side niceties, mounted once per page: an offline / back-online banner and a back-to-top button. */
-export function CustomerExtras({ lang = 'en', banner = true }) {
+export function CustomerExtras({ lang = 'en', banner = true, topButton = true }) {
   const mr = lang === 'mr';
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [back, setBack] = useState(false);
   const [top, setTop] = useState(false);
+  const bar = React.useRef(null);
   useEffect(() => {
     let t = 0;
     const off = () => { window.clearTimeout(t); setBack(false); setOnline(false); };
@@ -369,12 +426,73 @@ export function CustomerExtras({ lang = 'en', banner = true }) {
   }, []);
   useEffect(() => {
     let raf = 0;
-    const h = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setTop(window.scrollY > 700); }); };
+    const h = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setTop(window.scrollY > 700); const d = document.documentElement; const max = d.scrollHeight - window.innerHeight; if (bar.current) bar.current.style.transform = `scaleX(${max > 300 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0})`; }); };
     h(); window.addEventListener('scroll', h, { passive: true });
     return () => { window.removeEventListener('scroll', h); if (raf) cancelAnimationFrame(raf); };
   }, []);
+  useEffect(() => {
+    const key = (e) => {
+      const el = document.activeElement; const tag = el?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable;
+      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !document.querySelector('[role="dialog"], [aria-modal="true"]')) {
+        const q = document.querySelector('input[type="text"], input[type="search"]');
+        if (q) { e.preventDefault(); q.focus(); q.scrollIntoView({ block: 'center', behavior: 'auto' }); }
+      } else if (e.key === 'Escape' && tag === 'INPUT' && (el.type === 'text' || el.type === 'search') && el.value) {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (set) { set.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); }
+      }
+    };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, []);
+  useEffect(() => {
+    // Paused tabs shouldn't keep animating glows and orbs in the background (battery + memory).
+    const vis = () => { try { if (document.hidden) document.documentElement.setAttribute('data-hidden', '1'); else document.documentElement.removeAttribute('data-hidden'); } catch { /* no DOM */ } };
+    document.addEventListener('visibilitychange', vis); vis();
+    const calm = () => document.documentElement.hasAttribute('data-reduce-motion') || !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const puff = (cls, x, y, html, ms) => {
+      const el = document.createElement('div');
+      el.className = cls; el.style.left = `${x}px`; el.style.top = `${y}px`; if (html) el.innerHTML = html; el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el); window.setTimeout(() => el.remove(), ms);
+    };
+    // A soft ring where a finger lands, and double-tap on a dish to save it (like a photo app).
+    let last = { t: 0, x: 0, y: 0 };
+    const down = (e) => {
+      if (calm() || e.button > 0) return;
+      if (e.target.closest?.('button, a, [role="button"], .px-dish, label, summary')) puff('fx-ring', e.clientX, e.clientY, '', 620);
+    };
+    const up = (e) => {
+      const card = e.target.closest?.('.px-dish');
+      if (!card || e.target.closest('button, a, input, textarea, select, label, summary, [role="button"]')) return;
+      const now = Date.now();
+      const near = Math.hypot(e.clientX - last.x, e.clientY - last.y) < 36;
+      if (now - last.t < 320 && near) {
+        const heart = card.querySelector('.px-heart:not(.px-share)');
+        if (heart) {
+          if (!heart.classList.contains('on')) heart.click();
+          if (!calm()) puff('fx-bigheart', e.clientX, e.clientY, '<svg viewBox="0 0 24 24" width="64" height="64"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 5 6.4 5c2 0 3.6 1 4.6 2.6C12 6 13.6 5 15.6 5 19 5 21.1 8.4 21.600 11.8 19.500 16.4 12 21 12 21z" fill="#e8a39a" stroke="#fff" stroke-opacity=".5"/></svg>', 900);
+        }
+        last = { t: 0, x: 0, y: 0 };
+      } else last = { t: now, x: e.clientX, y: e.clientY };
+    };
+    // Gentle nudge: after ~25 s of nothing, the "Surprise me" chip does one little wiggle.
+    let idleT = 0;
+    const arm = () => {
+      window.clearTimeout(idleT);
+      idleT = window.setTimeout(() => {
+        if (calm() || document.hidden) return;
+        const chip = document.querySelector('.qf-surprise');
+        if (chip && !document.querySelector('.fx-pop')) { chip.classList.add('fx-wiggle'); window.setTimeout(() => chip.classList.remove('fx-wiggle'), 1400); }
+      }, 25000);
+    };
+    arm();
+    ['pointerdown', 'keydown', 'scroll'].forEach((ev) => window.addEventListener(ev, arm, { passive: true, capture: true }));
+    document.addEventListener('pointerdown', down, { passive: true });
+    document.addEventListener('pointerup', up, { passive: true });
+    return () => { window.clearTimeout(idleT); ['pointerdown', 'keydown', 'scroll'].forEach((ev) => window.removeEventListener(ev, arm, true)); document.removeEventListener('visibilitychange', vis); document.removeEventListener('pointerdown', down); document.removeEventListener('pointerup', up); };
+  }, []);
   if (typeof document === 'undefined') return null;
-  const goTop = () => { const calm = document.documentElement.getAttribute('data-reduce-motion') === 'on' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); fx.tap(); };
+  const goTop = () => { const calm = document.documentElement.hasAttribute('data-reduce-motion') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); fx.tap(); };
   return createPortal(
     <>
       {banner && (!online || back) && (
@@ -383,17 +501,19 @@ export function CustomerExtras({ lang = 'en', banner = true }) {
           <span>{online ? (mr ? 'पुन्हा ऑनलाइन' : 'Back online') : (mr ? 'इंटरनेट नाही — तुम्ही ऑफलाइन आहात' : "You're offline — some things may not load")}</span>
         </div>
       )}
-      <button type="button" className={`fx-top${top ? ' show' : ''}`} onClick={goTop} aria-label={mr ? 'वर जा' : 'Back to top'} tabIndex={top ? 0 : -1} data-fx="silent"><ArrowUp size={17} /></button>
+      <div className="fx-progress" aria-hidden="true"><i ref={bar} /></div>
+      {topButton && <button type="button" className={`fx-top${top ? ' show' : ''}`} onClick={goTop} aria-label={mr ? 'वर जा' : 'Back to top'} tabIndex={top ? 0 : -1} data-fx="silent"><ArrowUp size={17} /></button>}
     </>, document.body);
 }
 
 /** "Good evening" by the guest's clock, one quiet line for the header. */
-export function TimeGreeting({ lang = 'en', style }) {
+export function TimeGreeting({ lang = 'en', style, name = '' }) {
   const [h, setH] = useState(() => new Date().getHours());
   useEffect(() => { const id = window.setInterval(() => setH(new Date().getHours()), 300000); return () => window.clearInterval(id); }, []);
   const k = h < 5 ? 'n' : h < 12 ? 'm' : h < 17 ? 'a' : h < 21 ? 'e' : 'n';
   const T = { en: { m: 'Good morning', a: 'Good afternoon', e: 'Good evening', n: 'Late-night cravings?' }, mr: { m: 'शुभ प्रभात', a: 'शुभ दुपार', e: 'शुभ संध्याकाळ', n: 'रात्रीची भूक?' } };
-  return <span className="fx-greet" style={style}>{(T[lang] || T.en)[k]}</span>;
+  const Ico = k === 'm' ? Sunrise : k === 'a' ? Sun : k === 'e' ? Sunset : MoonStar;
+  return <span className="fx-greet" style={style}><Ico size={13} className="fx-greet-i" aria-hidden="true" />{(T[lang] || T.en)[k]}{name && k !== 'n' ? `, ${name}` : ''}</span>;
 }
 
 export function FxSoundToggle({ size = 16, style, lang = 'en' }) {

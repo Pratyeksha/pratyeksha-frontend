@@ -197,3 +197,71 @@ html[data-reduce-motion] .fx-layer { display: none; }
 .px-recent-l{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(211,191,162,.6);margin-right:2px}
 .px-recent-c{max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 12px;border-radius:999px;font-size:12px;color:#e6d6b8;background:rgba(211,191,162,.1);border:1px solid rgba(211,191,162,.28);cursor:pointer}
 .px-recent-x{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:rgba(211,191,162,.7);background:transparent;border:1px solid rgba(211,191,162,.2);cursor:pointer}
+
+.fx-progress{position:fixed;top:0;left:0;right:0;height:2px;z-index:100001;pointer-events:none}
+.fx-progress i{display:block;height:100%;width:100%;transform-origin:0 50%;transform:scaleX(0);background:linear-gradient(90deg,#b99f78,#f1e3c6);box-shadow:0 0 8px rgba(230,214,184,.6);transition:transform .12s linear}
+html[data-dim]::after{content:"";position:fixed;inset:0;z-index:2147483000;pointer-events:none;background:rgba(8,6,4,.32)}
+html[data-customer] ::selection{background:rgba(211,191,162,.38);color:#fff}
+html[data-customer] :focus-visible{outline:2px solid #e6d6b8;outline-offset:2px}
+html[data-customer] button,html[data-customer] a,html[data-customer] [role="button"]{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.fx-pref-reset{margin-top:2px}
+html[data-compact] .px-dish{padding-top:10px !important;padding-bottom:10px !important;margin-bottom:8px !important;gap:6px !important}
+html[data-compact] .px-dish p{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.dt-n{font-style:normal;font-size:10px;font-weight:700;opacity:.62;margin-left:1px;font-variant-numeric:tabular-nums}
+.px-count{display:flex;align-items:center;gap:8px;margin:2px 18px 10px;font-size:12px;color:rgba(211,191,162,.75)}
+.px-count button{background:none;border:0;padding:2px 0;color:#e6d6b8;text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:12px}
+.qf-n{font-size:10px;font-weight:700;min-width:16px;height:16px;padding:0 4px;border-radius:99px;display:inline-grid;place-items:center;background:rgba(211,191,162,.22);color:inherit;font-variant-numeric:tabular-nums}
+.qf-chip.on .qf-n{background:rgba(20,17,12,.2)}
+@media (max-width: 359px){.dt-n{display:none}}
+
+.fx-ring{position:fixed;z-index:100002;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid rgba(230,214,184,.7);pointer-events:none;animation:fxRing .6s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes fxRing{from{transform:scale(.4);opacity:.9}to{transform:scale(3.6);opacity:0}}
+.fx-bigheart{position:fixed;z-index:100002;width:64px;height:64px;margin:-32px 0 0 -32px;pointer-events:none;filter:drop-shadow(0 6px 14px rgba(0,0,0,.45));animation:fxBigHeart .9s cubic-bezier(.2,.9,.3,1.2) forwards}
+@keyframes fxBigHeart{0%{transform:scale(.2) rotate(-12deg);opacity:0}25%{transform:scale(1.15) rotate(6deg);opacity:1}55%{transform:scale(.95) rotate(0);opacity:1}100%{transform:translateY(-46px) scale(1);opacity:0}}
+.fx-greet{display:inline-flex;align-items:center;gap:6px}
+.fx-greet-i{color:#e6d6b8;animation:fxBob 3.2s ease-in-out infinite}
+@keyframes fxBob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(8deg)}}
+html[data-hidden] *,html[data-hidden] *::before,html[data-hidden] *::after{animation-play-state:paused !important}
+@supports (animation-timeline: view()){
+  @media (prefers-reduced-motion: no-preference){
+    html:not([data-reduce-motion]) .px-dish{animation:pxReveal linear both;animation-timeline:view();animation-range:entry 0% entry 38%}
+    html:not([data-reduce-motion]) .px-dish.px-hl{animation:pxDishGlow 1.1s ease-in-out 3;animation-timeline:auto;animation-range:normal}
+    html:not([data-reduce-motion]) .pxh-orb{animation:pxhFloat 9s ease-in-out infinite}
+  }
+}
+@keyframes pxReveal{from{opacity:.0;transform:translateY(22px) scale(.985)}to{opacity:1;transform:none}}
+html[data-reduce-motion] .fx-ring,html[data-reduce-motion] .fx-bigheart{display:none}
+@media (prefers-reduced-motion: reduce){.fx-greet-i{animation:none}}
+
+.fx-toast{position:fixed;left:50%;bottom:calc(168px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:100003;white-space:nowrap;display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);padding:10px 12px 10px 16px;border-radius:999px;font-size:13px;font-weight:600;color:#f4ece0;background:rgba(24,20,14,.95);border:1px solid rgba(211,191,162,.4);box-shadow:0 12px 30px rgba(0,0,0,.5);animation:fxToastIn .32s cubic-bezier(.2,.9,.3,1.15) both}
+.fx-toast.out{animation:fxToastOut .26s ease forwards}
+.fx-toast button{border:0;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:800;letter-spacing:.04em;color:#14110c;background:linear-gradient(135deg,#e6d6b8,#c9b38d);cursor:pointer}
+@keyframes fxToastIn{from{opacity:0;transform:translate(-50%,16px) scale(.94)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes fxToastOut{to{opacity:0;transform:translate(-50%,10px) scale(.96)}}
+.fx-live{display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:rgba(168,214,182,.9)}
+.fx-live i{position:relative;width:7px;height:7px;border-radius:50%;background:#6fcf97}
+.fx-live i::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid rgba(111,207,151,.65);animation:fxLive 2s ease-out infinite}
+.fx-live.off{color:rgba(224,160,140,.9)}.fx-live.off i{background:#e0907c}.fx-live.off i::after{animation:none;opacity:0}
+@keyframes fxLive{from{transform:scale(.5);opacity:1}to{transform:scale(1.7);opacity:0}}
+[lang="mr"] .fx-live,.fx-live:lang(mr){letter-spacing:0;text-transform:none}
+.fx-wiggle{animation:fxWiggle 1.2s ease both}
+@keyframes fxWiggle{0%,100%{transform:rotate(0)}15%{transform:rotate(-6deg) scale(1.06)}30%{transform:rotate(5deg) scale(1.06)}45%{transform:rotate(-4deg)}60%{transform:rotate(3deg)}80%{transform:rotate(0)}}
+.px-dish{content-visibility:auto;contain-intrinsic-size:auto 210px}
+.dt:active .dt-thumb{scale:1.07 .9}
+.dt-thumb{transition:transform .42s cubic-bezier(.3,1.35,.5,1),scale .18s ease}
+.qf-row>*{animation:fxChipIn .45s cubic-bezier(.2,.8,.3,1) both}
+.qf-row>*:nth-child(1){animation-delay:.02s}.qf-row>*:nth-child(2){animation-delay:.07s}.qf-row>*:nth-child(3){animation-delay:.12s}.qf-row>*:nth-child(4){animation-delay:.17s}.qf-row>*:nth-child(5){animation-delay:.22s}.qf-row>*:nth-child(6){animation-delay:.27s}.qf-row>*:nth-child(n+7){animation-delay:.32s}
+@keyframes fxChipIn{from{opacity:0;transform:translateX(14px) scale(.94)}to{opacity:1;transform:none}}
+.pxh-btn svg{transition:translate .2s ease}
+@media (hover:hover){.pxh-btn:hover svg{translate:3px 0}}
+@supports (animation-timeline: scroll()){
+  @media (prefers-reduced-motion: no-preference){
+    html:not([data-reduce-motion]) .pxh-orb{animation:pxhFloat 9s ease-in-out infinite,fxParallax linear both;animation-timeline:auto,scroll(root);animation-range:normal,0 600px}
+  }
+}
+@keyframes fxParallax{to{translate:0 -70px}}
+html[data-reduce-motion] .qf-row>*,html[data-reduce-motion] .fx-wiggle{animation:none}
+@media (prefers-reduced-motion: reduce){.qf-row>*,.fx-wiggle,.fx-toast{animation:none}}
+
+.pxh-heart::after,.pxh-share::after{content:"";position:absolute;inset:-8px}
+.pxh-share{position:relative}

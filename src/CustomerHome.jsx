@@ -8,7 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
-import { fx, FxSoundToggle, TextSizeToggle } from './customerFx.jsx';
+import { fx, PrefsMenu, CustomerExtras, TimeGreeting } from './customerFx.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import OffersExplorer from './OffersExplorer.jsx';
 
@@ -44,6 +44,7 @@ const L = {
     heroLive: 'places live now', morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening', search: 'Search', all: 'All', cafe: 'Café', dine: 'Dine',
     pickup: 'Pickup', reservation: 'Reserve', waitlist: 'Waitlist', saved: 'Saved', offers: 'Offers', veg: 'Pure veg', nearMe: 'Near me',
     allAreas: 'All areas', place: 'place', places: 'places', nearest: ' · nearest first', list: 'List', map: 'Map', nothing: 'Nothing found',
+    welcomeBack: 'Welcome back', pickUp: 'Open menu', dismiss: 'Dismiss',
     clear: 'Clear filters', retry: 'Retry', more: 'more', recent: 'Recent', clearRecent: 'Clear', saveHint: 'Tap the heart on a place to save it',
     offlineCached: "Couldn't refresh — showing your last saved list", offline: "You're offline", directions: 'Directions', openMenu: 'Open menu', call: 'Call',
     loadFail: 'Unable to load restaurants.', locDenied: 'Allow location access to sort by distance', locTimeout: 'Could not get your location in time — try again',
@@ -68,6 +69,7 @@ const L = {
     heroLive: 'ठिकाणे आता सुरू', morning: 'शुभ प्रभात', afternoon: 'शुभ दुपार', evening: 'शुभ संध्याकाळ', search: 'शोधा', all: 'सर्व', cafe: 'कॅफे', dine: 'डाइन',
     pickup: 'पिकअप', reservation: 'आरक्षण', waitlist: 'प्रतीक्षा', saved: 'आवडते', offers: 'ऑफर्स', veg: 'शुद्ध शाकाहारी', nearMe: 'जवळ',
     allAreas: 'सर्व भाग', place: 'ठिकाण', places: 'ठिकाणे', nearest: ' · सर्वात जवळचे आधी', list: 'यादी', map: 'नकाशा', nothing: 'काहीही सापडले नाही',
+    welcomeBack: 'पुन्हा स्वागत', pickUp: 'मेनू उघडा', dismiss: 'बंद करा',
     clear: 'फिल्टर काढा', retry: 'पुन्हा प्रयत्न', more: 'आणखी', recent: 'अलीकडील', clearRecent: 'पुसा', saveHint: 'आवडते ठिकाण जतन करण्यासाठी हृदयावर टॅप करा',
     offlineCached: 'रिफ्रेश झाले नाही — शेवटची जतन केलेली यादी दाखवत आहे', offline: 'तुम्ही ऑफलाइन आहात', directions: 'दिशा', openMenu: 'मेनू उघडा', call: 'कॉल',
     loadFail: 'रेस्टॉरंट लोड करता आले नाहीत.', locDenied: 'अंतरानुसार क्रमवारीसाठी लोकेशनची परवानगी द्या', locTimeout: 'लोकेशन वेळेत मिळाले नाही — पुन्हा प्रयत्न करा',
@@ -575,6 +577,8 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-seg{display:inline-flex;border:1px solid rgba(211,191,162,.18);border-radius:13px;padding:3px;background:rgba(255,255,255,.03)}
 .pxh-seg button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:rgba(255,255,255,.55);font-size:11px;font-weight:800;padding:7px 12px;border-radius:10px;cursor:pointer;font-family:inherit}
 .pxh-seg button.on{background:linear-gradient(135deg,#d3bfa2,#bda88a);color:#101010}
+.pxh-sticky{position:sticky;top:0;z-index:60;margin:calc(-14px - env(safe-area-inset-top,0px)) -16px 0;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;background:rgba(14,14,14,.82);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);transition:border-color .25s,box-shadow .25s;border-bottom:1px solid transparent}
+.pxh-sticky.stuck{border-bottom-color:rgba(211,191,162,.16);box-shadow:0 10px 24px rgba(0,0,0,.35)}
 .pxh-nav{position:absolute;right:10px;bottom:10px;width:32px;height:32px;border-radius:11px;border:1px solid rgba(211,191,162,.25);background:rgba(211,191,162,.1);color:#d3bfa2;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:all .18s}
 .pxh-nav:hover{background:rgba(211,191,162,.2)}
 .pxh-mapwrap{display:grid;gap:14px;grid-template-columns:1fr}
@@ -618,6 +622,13 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 @keyframes pxhSweep{to{transform:translateX(100%)}}
 .pxh-card.pxh-sk-card,.pxh-card.pxh-sk-card:hover{transform:none;box-shadow:none;border-color:rgba(211,191,162,.13);pointer-events:none}
 .pxh-sk-in{animation:pxhSkIn .35s ease both}
+.pxh-welcome{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:11px 10px 11px 12px;border-radius:18px;background:linear-gradient(135deg,rgba(211,191,162,.15),rgba(255,255,255,.03));border:1px solid rgba(211,191,162,.3);animation:pxhWord .5s cubic-bezier(.2,.8,.3,1) both}
+.pxh-welcome-ico{flex:0 0 auto;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#14110c;background:linear-gradient(135deg,#e6d6b8,#b99f78)}
+.pxh-welcome-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pxh-welcome-txt small{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(211,191,162,.75)}
+.pxh-welcome-txt b{font-size:14px;font-weight:700;color:#f7f3eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pxh-welcome .pxh-btn{flex:0 0 auto;padding:9px 12px}
+.pxh-welcome-x{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:0;cursor:pointer;color:rgba(247,243,235,.5);background:rgba(255,255,255,.05)}
 @keyframes pxhSkIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .pxh-hero{position:relative;padding:22px 0 14px}
 .pxh-hero>*:not(.pxh-orb){position:relative;z-index:1}
@@ -809,6 +820,7 @@ export default function CustomerHome() {
   const [notification, setNotification] = useState(null);
   const [favs, setFavs] = useState(() => readList(FAV_KEY));
   const [recent, setRecent] = useState(() => readList(RECENT_KEY));
+  const [lastPlace, setLastPlace] = useState(() => { try { const v = JSON.parse(localStorage.getItem('px_last_place') || 'null'); return v && v.tenantId ? v : null; } catch { return null; } });
   const [showAllOffers, setShowAllOffers] = useState(false);
   const [allOffers, setAllOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(false);
@@ -819,6 +831,7 @@ export default function CustomerHome() {
   const [sort, setSort] = useState(() => { try { return localStorage.getItem(SORT_KEY) || 'recommended'; } catch { return 'recommended'; } });
   const [guestName] = useState(readGuestFirstName);
   const [showTop, setShowTop] = useState(false);
+  const [stuck, setStuck] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searches, setSearches] = useState(() => readList(SEARCHES_KEY));
   const [pos, setPos] = useState(null);
@@ -850,6 +863,17 @@ export default function CustomerHome() {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const hadCache = useRef(tenants.length > 0);
+  const menuCtrl = useRef(null);
+  // The menu screen is a separate download now; fetch it quietly while the guest browses so tapping a restaurant is instant.
+  useEffect(() => {
+    const save = navigator.connection?.saveData;
+    if (save) return undefined;
+    const idle = typeof window.requestIdleCallback === 'function';
+    const go = () => { import('./App.jsx').catch(() => {}); };
+    const id = idle ? window.requestIdleCallback(go, { timeout: 5000 }) : setTimeout(go, 3500);
+    return () => { if (idle) window.cancelIdleCallback(id); else clearTimeout(id); };
+  }, []);
+  useEffect(() => () => { menuCtrl.current?.abort(); }, []);
 
   const load = useCallback((signal, silent = false) => {
     if (!silent) { setLoading(true); setLoadError(''); }
@@ -885,18 +909,21 @@ export default function CustomerHome() {
   const ensureMenu = useCallback(() => {
     if (menuReq.current) return;
     menuReq.current = true;
-    axios.get(`${BASE_URL}/tenants/menu-index`, { timeout: 12000 })
+    menuCtrl.current = new AbortController();
+    axios.get(`${BASE_URL}/tenants/menu-index`, { timeout: 12000, signal: menuCtrl.current.signal })
       .then((res) => {
         if (!alive.current || !res.data || typeof res.data !== 'object') return;
         setMenuLookup(buildMenuLookup(res.data));
         try { sessionStorage.setItem(MENU_CACHE_KEY, JSON.stringify({ t: Date.now(), data: res.data })); } catch { /* ignore */ }
       })
-      .catch(() => { menuReq.current = false; }); // search keeps working on names / areas; try again on the next focus
+      .catch((err) => { if (!axios.isCancel(err)) menuReq.current = false; }); // search keeps working on names / areas; try again on the next focus
   }, []);
   useEffect(() => {
     if (loading || !tenants.length) return undefined;
-    const id = setTimeout(ensureMenu, 2500);
-    return () => clearTimeout(id);
+    // Wait for an idle moment (or 2.5 s at most) so the dish index never competes with first paint.
+    const idle = typeof window.requestIdleCallback === 'function';
+    const id = idle ? window.requestIdleCallback(ensureMenu, { timeout: 2500 }) : setTimeout(ensureMenu, 2500);
+    return () => { if (idle) window.cancelIdleCallback(id); else clearTimeout(id); };
   }, [loading, tenants.length, ensureMenu]);
 
   // Refresh when the guest comes back to the tab or the connection returns (at most once a minute), and track online state.
@@ -1065,7 +1092,7 @@ export default function CustomerHome() {
   }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
 
   useEffect(() => {
-    const onScroll = () => setShowTop(window.scrollY > 520);
+    const onScroll = () => { setShowTop(window.scrollY > 520); setStuck(window.scrollY > 8); };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -1337,7 +1364,7 @@ export default function CustomerHome() {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 28px' }}>
 
         {/* ── Top bar: install · logo · scan · offers ── */}
-        <header style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <header className={`pxh-sticky${stuck ? ' stuck' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ background: '#f7f3eb', borderRadius: 12, padding: '5px 9px', display: 'flex', alignItems: 'center' }}>
             <img src={logo} alt="Pratyeksha" style={{ width: 132, height: 'auto', display: 'block' }} />
           </div>
@@ -1382,9 +1409,10 @@ export default function CustomerHome() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
               <PwaInstallButton kind="customer" compact />
-              <TextSizeToggle lang={lang} /><FxSoundToggle lang={lang} />
+              <PrefsMenu lang={lang} /><CustomerExtras lang={lang} banner={false} topButton={false} />
             </div>
           </div>
+          {!guestName && <div style={{ margin: '2px 0 6px' }}><TimeGreeting lang={lang} /></div>}
           <HeroLine lang={lang} />
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
@@ -1451,6 +1479,21 @@ export default function CustomerHome() {
             ))}
           </div>
         )}
+
+        {/* ── Welcome back: the place the guest last ordered from ── */}
+        {(() => {
+          if (!lastPlace) return null;
+          const place = tenants.find((x) => x.tenantId === lastPlace.tenantId);
+          if (!place) return null;
+          return (
+            <div className="pxh-welcome" role="region" aria-label={tr.welcomeBack}>
+              <div className="pxh-welcome-ico"><History size={18} /></div>
+              <div className="pxh-welcome-txt"><small>{tr.welcomeBack}</small><b>{(lang === 'mr' && place.name_mr) || place.name || lastPlace.name}</b></div>
+              <button type="button" className="pxh-btn" onClick={() => openTenant(place, 'resume')}>{tr.pickUp} <ChevronRight size={14} /></button>
+              <button type="button" className="pxh-welcome-x" aria-label={tr.dismiss} onClick={() => { setLastPlace(null); try { localStorage.removeItem('px_last_place'); } catch { /* blocked */ } }}><X size={14} /></button>
+            </div>
+          );
+        })()}
 
         {/* ── Filter chips (single scrollable row) ── */}
         <div className="pxh-chips" role="toolbar" aria-label="Filters">

@@ -493,6 +493,13 @@ const fetchExpenses = async () => {
   try { const r = await axios.get(`${BASE_URL}/admin/expenses/${tenantId}?month=${todayISTForm().slice(0, 7)}`); setExpenseList(r.data); }
   catch { showNotif('Could not load running costs', 'error'); }
 };
+// Dialogs belong to the screen they were opened on. Switching tabs closes them, so a dialog never sits over another tab.
+useEffect(() => {
+  setShowAddDishModal(false); setEditDishModal(null); setActiveTableTicket(null); setAssignTableModal(null);
+  setPickupPaymentModal(null); setReservationEditModal(null); setPurchaseHistoryItem(null); setPurchaseOrderModal(null);
+  setPayPrompt(null); setSalaryEditModal(null); setExtraItemEditModal(null); setExtraRestockModal(null);
+  setActivePriceEditItem(null); setPendingDeleteDish(null);
+}, [activeTab]);
 const fetchPayables = async () => {
   try { const r = await axios.get(`${BASE_URL}/admin/payables/${tenantId}`); setPayables(r.data); }
   catch { showNotif('Could not load payables', 'error'); }
@@ -5763,7 +5770,7 @@ const renderMonthHeatmap = () => {
     }}
     onMouseUp={() => setDraggingTable(null)}
     onMouseLeave={() => setDraggingTable(null)}
-    style={{ position:'relative', width:'100%', height: 'clamp(180px, 22vw, 240px)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'12px', overflow:'hidden' }}>
+    style={{ position:'relative', width:'100%', height: 'clamp(230px, 28vw, 300px)', borderRadius:'14px', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'12px', overflow:'hidden' }}>
 
     {/* Connector lines between joined tables */}
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
@@ -5785,6 +5792,7 @@ const renderMonthHeatmap = () => {
       const isJoined = !!t.groupId;
       const isSelectedForJoin = pendingJoinSelection.includes(t.tableNumber);
       const isReserved = (reservationEntries || []).some(r => r.status === 'confirmed' && r.assignedTable?.toString() === t.tableNumber);
+      const tileStatus = orderStatus ? String(orderStatus).replace(/_/g, ' ') : isReserved ? 'Reserved' : 'Free';
 
       return (
         <div key={t.tableNumber}
@@ -5796,8 +5804,8 @@ const renderMonthHeatmap = () => {
           }}
           title={`Table ${t.tableNumber}${t.seats ? ` · ${t.seats} seats` : ''} — ₹${rev.toLocaleString()} today`}
           style={{
-            position:'absolute', left:`clamp(34px, ${t.x}%, calc(100% - 34px))`, top:`clamp(34px, ${t.y}%, calc(100% - 34px))`, transform:'translate(-50%,-50%)',
-            width: 'clamp(50px, 7.5vw, 62px)', height: 'clamp(50px, 7.5vw, 62px)', borderRadius:'14px',
+            position:'absolute', left:`clamp(44px, ${t.x}%, calc(100% - 44px))`, top:`clamp(44px, ${t.y}%, calc(100% - 44px))`, transform:'translate(-50%,-50%)',
+            width: 'clamp(66px, 8vw, 80px)', height: 'clamp(66px, 8vw, 80px)', borderRadius:'16px', padding:'6px',
             background: colors.bg,
             border: `2.5px solid ${isSelectedForJoin ? '#d3bfa2' : orderStatus ? ORDER_STATUS_RING[orderStatus] : isReserved ? '#8a704d' : colors.border}`,
             display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
@@ -5815,18 +5823,12 @@ const renderMonthHeatmap = () => {
           {isJoined && !floorEditMode && (
             <Link2 size={11} color="#d3bfa2" style={{ position:'absolute', top:-6, left:-6, background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', borderRadius:'50%', padding:2 }} />
           )}
-          <span style={{ fontSize:'1.05rem', fontWeight:'900', color: colors.text, lineHeight:1 }}>{t.tableNumber}</span>
-          {isReserved && !orderStatus && (
-            <span style={{ fontSize:'0.4rem', fontWeight:'900', color:'#8a704d', letterSpacing:'0.3px', marginTop:'1px', display:'flex', alignItems:'center', gap:'2px' }}>
-              <CalendarClock size={8}/> RESERVED
-            </span>
-          )}
-          {t.seats > 0 && (
-            <span style={{ fontSize:'0.63rem', fontWeight:'800', color: colors.text, opacity:0.75, display:'flex', alignItems:'center', gap:'2px', marginTop:'2px' }}>
-              <Users size={9}/> {t.seats}
-            </span>
-          )}
-          {rev > 0 && <span style={{ fontSize:'0.6rem', fontWeight:'800', color: colors.text, opacity:0.9, marginTop:'2px' }}>₹{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev}</span>}
+          <span style={{ fontFamily:'ui-monospace, Consolas, monospace', fontSize:'1.12rem', fontWeight:'900', color: colors.text, lineHeight:1 }}>{t.tableNumber}</span>
+          <span style={{ marginTop:'5px', fontSize:'0.44rem', fontWeight:'900', letterSpacing:'0.9px', textTransform:'uppercase', color: tileStatus === 'Reserved' ? '#8a704d' : colors.text, opacity:0.9, whiteSpace:'nowrap' }}>{tileStatus}</span>
+          <span style={{ marginTop:'3px', display:'flex', alignItems:'center', gap:'5px', fontSize:'0.58rem', fontWeight:'800', color: colors.text, opacity:0.75 }}>
+            {t.seats > 0 && <span style={{ display:'flex', alignItems:'center', gap:'2px' }}><Users size={8}/>{t.seats}</span>}
+            {rev > 0 && <span style={{ fontFamily:'ui-monospace, Consolas, monospace' }}>₹{rev >= 1000 ? `${(rev/1000).toFixed(1)}k` : rev}</span>}
+          </span>
 
           {/* Seats stepper — edit mode only */}
           {floorEditMode && (
@@ -5848,6 +5850,12 @@ const renderMonthHeatmap = () => {
       <span style={{ fontSize:'0.5rem', color:'#969696', fontWeight:'700' }}>SPEND</span>
       <div style={{ width:'50px', height:'6px', borderRadius:'3px', background:'linear-gradient(90deg, rgba(211,191,162,0.06), rgba(211,191,162,0.85))' }} />
     </div>
+    {[['#8a8a8a','Free'],['#8a704d','Reserved']].map(([c, label]) => (
+      <div key={label} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+        <div style={{ width:'8px', height:'8px', borderRadius:'3px', border:`2px solid ${c}` }} />
+        <span style={{ fontSize:'0.55rem', color:'#b4b4b4', fontWeight:'700' }}>{label}</span>
+      </div>
+    ))}
     {Object.entries(ORDER_STATUS_RING).map(([status, color]) => (
       <div key={status} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
         <div style={{ width:'8px', height:'8px', borderRadius:'3px', border:`2px solid ${color}` }} />
@@ -7139,7 +7147,7 @@ const renderMonthHeatmap = () => {
                     </div>
                     <span style={{ fontFamily: 'monospace', fontSize: '0.74rem', color: '#d3bfa2', fontWeight: '800' }}>{money(b.amount)}</span>
                     <span style={{ fontFamily: 'monospace', fontSize: '0.66rem', color: '#B4B4B4' }}>{new Date(b.dueDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })}</span>
-                    <span style={{ justifySelf: 'start', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', padding: '4px 9px', borderRadius: '999px', textTransform: 'uppercase',
+                    <span style={{ justifySelf: 'start', whiteSpace: 'nowrap', fontSize: '0.56rem', fontWeight: '900', letterSpacing: '0.6px', padding: '4px 9px', borderRadius: '999px', textTransform: 'uppercase',
                       color: st.hot ? '#0c0c0c' : '#B4B4B4', background: st.hot ? '#d3bfa2' : 'rgba(255,255,255,0.04)', border: `1px solid ${st.hot ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{st.text}</span>
                     <div style={{ display: 'flex', gap: '6px', justifySelf: 'end' }}>
                       <button type="button" onClick={() => toggle(b)}
@@ -9390,6 +9398,9 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           <span style={{ fontSize: '1rem', fontWeight: '900', lineHeight: 1 }}>
             T{n}
           </span>
+          <span style={{ marginTop: 3, fontSize: '0.44rem', fontWeight: 900, letterSpacing: '0.9px', textTransform: 'uppercase', lineHeight: 1, opacity: 0.85 }}>
+            {hasChk ? 'Bill requested' : isOcc ? 'Occupied' : 'Free'}
+          </span>
 
           {/* ── PER-TABLE ELAPSED TIMER ── */}
           {timerVisible && (
@@ -11107,7 +11118,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div><div style={P.label}>Dish profitability, this month</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>Best margin: {byMargin[0]?.name || '-'} · lowest: {byMargin[byMargin.length - 1]?.name || '-'}</div></div>
+        <div><div style={P.label}>Dish profitability, this month</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{list.length === 0 ? 'Map a recipe to a dish to see its margin' : `Best margin: ${byMargin[0]?.name} · lowest: ${byMargin[byMargin.length - 1]?.name}`}</div></div>
         {csvButton(exportRows, 'Export dish profitability')}
       </div>
     </div>
@@ -11283,7 +11294,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
     )}
 
     {/* ════ KPI STRIP ════ */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px,1fr))', gap: '10px', marginBottom: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: '10px', marginBottom: '24px' }}>
       <SC label="Monthly Revenue"  value={`₹${stats.revenue.toLocaleString()}`}   sub={viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})} accent c="#d3bfa2" />
       <SC label="Today Revenue"    value={`₹${todayRev.toLocaleString()}`}         sub="Live settlements" />
       <SC label="Total Orders"     value={monthOrders.toLocaleString()}             sub={`Settled bills · ${viewDate.toLocaleString('en-IN',{month:'short',year:'numeric'})}`} />
@@ -12594,7 +12605,8 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
   const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
   const logs = auditLogs || [];
   const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
-  const todays = logs.filter(l => new Date(l.createdAt).toISOString().slice(0, 10) === today).length;
+  const istDay = (d) => new Date(new Date(d).getTime() + 330 * 60000).toISOString().slice(0, 10);
+  const todays = logs.filter(l => istDay(l.createdAt) === istDay(Date.now())).length;
   const exportRows = () => downloadCsv('audit-log.csv', ['When (IST)', 'Action', 'Who', 'Category', 'Entity', 'Note', 'Before', 'After'], logs.map(l => [new Date(l.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), l.action || '', l.actorName || '', l.category || '', l.entity || '', l.note || '', l.before ? JSON.stringify(l.before) : '', l.after ? JSON.stringify(l.after) : '']));
   if (logs.length === 0) return null;
   return (
@@ -12665,8 +12677,8 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
             {(auditExpanded[key] ? sectionLogs : sectionLogs.slice(0, 8)).map((log, idx) => {
               const ts = new Date(log.createdAt);
               const timeStr = ts.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
-              const beforeStr = log.before ? JSON.stringify(log.before).replace(/[{}"]/g, '').slice(0, 50) : null;
-              const afterStr  = log.after  ? JSON.stringify(log.after).replace(/[{}"]/g, '').slice(0, 50)  : null;
+              const beforeStr = log.before ? JSON.stringify(log.before).replace(/,/g, ' · ').replace(/:/g, ': ').replace(/[{}"]/g, '').slice(0, 160) : null;
+              const afterStr  = log.after  ? JSON.stringify(log.after).replace(/,/g, ' · ').replace(/:/g, ': ').replace(/[{}"]/g, '').slice(0, 160)  : null;
 
               return (
                 <div key={log._id || idx} style={{ background: '#070707', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '12px 16px', transition: 'border-color 0.15s' }}>
@@ -15036,7 +15048,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
       </div>
 
       {/* Cards grid */}
-      <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+      <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', textAlign: 'left' }}>
         {menuItems
           .filter(m => m.name.toLowerCase().includes((recipeSearchQuery || '').toLowerCase()))
           .map(dish => {
@@ -16481,7 +16493,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           </div>
 
           {/* ACTIONS */}
-          <div style={{display:'flex',gap:'12px',marginTop:'8px',paddingTop:'20px',borderTop:'1px solid rgba(211,191,162,0.12)'}}>
+          <div style={{display:'flex',gap:'12px',marginTop:'8px',paddingTop:'20px',borderTop:'1px solid rgba(211,191,162,0.12)',position:'sticky',bottom:0,background:'#0c0c0c',paddingBottom:'6px',zIndex:2}}>
             <button type="button"
               onClick={()=>{setShowAddDishModal(false);setNewDish({name:'',name_mr:'',categoryId:'',price:'',priceHalf:'',priceFull:'',isVeg:false,isChefSpecial:false,isAvailable:true,ingredients:{en:'',mr:''},spicylevel:'',tags:'',_priceMode:'single'});}}
               style={styles.cancelBtn}>

@@ -1,17 +1,20 @@
-import React, { StrictMode, useEffect, useState } from 'react'
+import React, { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import './index.css'
 import './themeScroll.css'
-import App from './App.jsx'
-import OperatorPortal from './OperatorPortal.jsx'
-import KitchenView from './KitchenView.jsx'
-import PratyekshaMasterAdmin from './PratyekshaMasterAdmin.jsx'
-import Pratyeksha from './Pratyeksha.jsx'
-import OwnerApp, { OwnerLauncher } from './OwnerApp.jsx'
-import CustomerHome from './CustomerHome.jsx'
-import FeedbackSuiteFrame from './FeedbackSuiteFrame.jsx'
+// Every screen is its own download: a guest opening the menu no longer pulls the owner dashboard, kitchen board or admin tools.
+const App = lazy(() => import('./App.jsx'))
+const OperatorPortal = lazy(() => import('./OperatorPortal.jsx'))
+const KitchenView = lazy(() => import('./KitchenView.jsx'))
+const PratyekshaMasterAdmin = lazy(() => import('./PratyekshaMasterAdmin.jsx'))
+const Pratyeksha = lazy(() => import('./Pratyeksha.jsx'))
+const OwnerApp = lazy(() => import('./OwnerApp.jsx'))
+const OwnerLauncher = lazy(() => import('./OwnerApp.jsx').then((m) => ({ default: m.OwnerLauncher })))
+const CustomerHome = lazy(() => import('./CustomerHome.jsx'))
+const FeedbackSuiteFrame = lazy(() => import('./FeedbackSuiteFrame.jsx'))
 import { configurePwa } from './pwa.js'
+import API_BASE_URL from './apiBase.js'
 import { BrandLoader } from './PremiumUI.jsx'
 import { loaderMessageFor } from './loaderMessages.js'
 import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
@@ -75,8 +78,40 @@ else if (initialPath.startsWith('/kitchen')) configurePwa('kitchen');
 else if (initialPath === '/' || (!initialPath.startsWith('/landing') && !initialPath.startsWith('/master-admin') && !initialPath.startsWith('/owner'))) configurePwa('customer');
 
 function KitchenLauncher() {
-  const tenantId = typeof window !== 'undefined' ? localStorage.getItem('kitchen_tenant_id') : '';
-  return tenantId ? <Navigate to={`/kitchen/${encodeURIComponent(tenantId)}`} replace /> : <Navigate to="/" replace />;
+  const [saved] = useState(() => { try { return localStorage.getItem('kitchen_tenant_id') || ''; } catch { return ''; } });
+  const [id, setId] = useState('');
+  const [go, setGo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if (saved) return <Navigate to={`/kitchen/${encodeURIComponent(saved)}`} replace />;
+  if (go) return <Navigate to={`/kitchen/${encodeURIComponent(go)}`} replace />;
+  // First visit on this device: ask for the outlet ID instead of silently dumping kitchen staff on the guest home page.
+  // The outlet is checked before it is remembered, so a typo cannot trap this device on a dead kitchen board.
+  const submit = async (e) => {
+    e.preventDefault();
+    const v = id.trim().toLowerCase();
+    if (!v || busy) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch(`${API_BASE_URL}/tenant/${encodeURIComponent(v)}`);
+      if (r.status === 404) setErr('No restaurant found with that outlet ID. Check it and try again.');
+      else if (!r.ok) setErr('Could not reach the server. Please try again.');
+      else setGo(v);
+    } catch { setErr('Could not reach the server. Check your internet connection.'); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#0e0e0e', color: '#f7f3eb', fontFamily: 'system-ui, sans-serif' }}>
+      <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, display: 'grid', gap: 14, textAlign: 'center' }}>
+        <h1 style={{ margin: 0, fontSize: 22 }}>Kitchen display</h1>
+        <p style={{ margin: 0, fontSize: 13, opacity: 0.65 }}>Enter your outlet ID to open this restaurant's kitchen board. This device will remember it.</p>
+        <input value={id} onChange={(e) => { setId(e.target.value); setErr(''); }} placeholder="Outlet ID" autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(211,191,162,.35)', background: 'rgba(255,255,255,.05)', color: '#f7f3eb', fontSize: 16, outline: 'none' }} />
+        {err && <div role="alert" style={{ fontSize: 12.5, color: '#f0a89a' }}>{err}</div>}
+        <button type="submit" disabled={!id.trim() || busy} style={{ padding: '14px 16px', borderRadius: 12, border: 0, background: '#d3bfa2', color: '#14110c', fontWeight: 800, fontSize: 14, cursor: id.trim() && !busy ? 'pointer' : 'not-allowed', opacity: id.trim() && !busy ? 1 : 0.5 }}>{busy ? 'Checking…' : 'Open kitchen'}</button>
+      </form>
+    </div>
+  );
 }
 
 createRoot(document.getElementById('root')).render(
@@ -85,6 +120,7 @@ createRoot(document.getElementById('root')).render(
       <SplashGate>
       <BrowserRouter>
       <SurfaceFlag />
+      <Suspense fallback={<BrandLoader message={loaderMessageFor(window.location.pathname)} />}>
       <Routes>
         {/* 1. 🌐 Pratyeksha Landing Page */}
         <Route path="/landing" element={<Pratyeksha />} />
@@ -120,6 +156,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>
+      </Suspense>
       </BrowserRouter>
       </SplashGate>
     </AppErrorBoundary>
