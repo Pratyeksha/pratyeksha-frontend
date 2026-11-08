@@ -182,9 +182,10 @@ const GlobalStyles = () => (
     .pown table tbody tr:last-child td { border-bottom: none; }
 
     /* ── Navigation ── */
-    .pown-nav-group { font-size: 10px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: ${T.textLow}; padding: 14px 13px 6px; }
-    .pown-nav-link:hover { background: rgba(255,255,255,0.045) !important; color: ${T.textHigh} !important; }
-    .pown-nav-link.active:hover { background: ${T.primarySoft} !important; color: ${T.primary} !important; }
+    .pown-nav-group { font-size: 10px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; color: rgba(211,191,162,0.72); padding: 14px 12px 6px; }
+    .pown-nav-link:hover { background: rgba(255,255,255,0.045) !important; color: #f1ede4 !important; }
+    .pown-nav-link.active { background: linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06)) !important; color: #f7f3eb !important; }
+    .pown-nav-link.active svg { color: ${T.primary}; }
 
     /* ── Touch devices: comfortable targets for the small icon-only and pill controls ── */
     @media (pointer: coarse) { .pown-btn { min-height: 38px; } }
@@ -199,7 +200,6 @@ const GlobalStyles = () => (
     @media (max-width: 520px) {
       .pown-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
       .pown-kpi-grid .pown-kpi { padding: 14px !important; min-height: 104px !important; }
-      .pown-kpi-grid .pown-kpi-icon { display: none !important; }
       .pown-kpi-grid .pown-kpi > .pown-mono { font-size: 21px !important; }
     }
 
@@ -642,8 +642,10 @@ const Card = ({ children, style, padded = true, interactive = false, className =
   <div
     className={`pown-card${interactive ? ' pown-card-hover' : ''}${className ? ' ' + className : ''}`}
     style={{
-      background: `linear-gradient(165deg, ${T.surfaceRaised} 0%, ${T.surface} 100%)`,
-      border: `1px solid ${T.border}`, borderRadius: 16, boxShadow: T.glow,
+      /* Tracking-tab card: glass gradient, gold-tinted hairline, soft inner highlight */
+      background: 'linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.016))',
+      border: '1px solid rgba(211,191,162,0.16)', borderRadius: 18,
+      boxShadow: '0 18px 44px -22px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
       padding: padded ? '20px 22px' : 0, ...style
     }}
     {...rest}
@@ -656,15 +658,10 @@ const Label = ({ children, style }) => (
 
 const SectionHeading = ({ icon: Icon, title, action }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      {Icon && (
-        <div style={{
-          width: 28, height: 28, borderRadius: 9, background: T.primarySoft,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-        }}><Icon size={14} color={T.primary} strokeWidth={2.25} /></div>
-      )}
-      <h2 style={{ fontFamily: 'inherit', fontSize: 15, fontWeight: 700, margin: 0, color: T.textHigh, letterSpacing: -0.2, lineHeight: 1.3, textAlign: 'left' }}>{title}</h2>
-    </div>
+    <h2 style={{
+      fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase', margin: 0, lineHeight: 1.3,
+      color: T.primary, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8
+    }}>{Icon && <Icon size={13} color={T.primary} strokeWidth={2} />}{title}</h2>
     {action}
   </div>
 );
@@ -720,16 +717,16 @@ const Delta = ({ pct }) => {
 
 const Badge = ({ children, tone = 'neutral' }) => {
   const tones = {
-    neutral: { bg: 'rgba(255,255,255,0.06)', c: T.textMed },
-    gold: { bg: T.primarySoft, c: T.primary },
-    danger: { bg: T.dangerSoft, c: T.danger },
-    warning: { bg: T.warningSoft, c: T.warning },
+    neutral: { c: 'rgba(255,255,255,0.7)', bg: 'rgba(255,255,255,0.06)', bd: 'rgba(255,255,255,0.14)' },
+    gold: { c: T.primary, bg: 'rgba(211,191,162,0.12)', bd: 'rgba(211,191,162,0.3)' },
+    danger: { c: T.danger, bg: T.dangerSoft, bd: 'rgba(226,154,88,0.35)' },
+    warning: { c: T.warning, bg: T.warningSoft, bd: 'rgba(226,154,88,0.3)' },
   };
-  const s = tones[tone];
+  const s = tones[tone] || tones.neutral;
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 100,
-      fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: s.bg, color: s.c, textTransform: 'uppercase'
+      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 100,
+      fontSize: 10, fontWeight: 800, letterSpacing: 0.5, background: s.bg, color: s.c, border: `1px solid ${s.bd}`, textTransform: 'uppercase'
     }}>{children}</span>
   );
 };
@@ -737,8 +734,8 @@ const Badge = ({ children, tone = 'neutral' }) => {
 const ProgressBar = ({ pct, tone = 'gold', height = 8 }) => {
   const colors = { gold: T.primary, danger: T.danger, warning: T.warning };
   return (
-    <div style={{ width: '100%', height, borderRadius: 100, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-      <div style={{ width: `${Math.min(100, Math.max(0, Number(pct) || 0))}%`, height: '100%', background: colors[tone], borderRadius: 100, transition: 'width .5s ease' }} />
+    <div style={{ width: '100%', height, borderRadius: 100, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+      <div style={{ width: `${Math.min(100, Math.max(0, Number(pct) || 0))}%`, height: '100%', background: `linear-gradient(90deg, #8a704d, ${colors[tone] || T.primary})`, borderRadius: 100, transition: 'width .5s ease' }} />
     </div>
   );
 };
@@ -938,14 +935,17 @@ const IconBtn = ({ icon: Icon, onClick, active, title }) => (
 
 const PillTabs = ({ options, value, onChange }) => (
   <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-    {options.map(opt => (
-      <button type="button" role="tab" aria-selected={value === opt.value} key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
-        padding: '8px 14px', borderRadius: 100, fontSize: 12, fontWeight: 700,
-        background: value === opt.value ? T.primary : 'transparent',
-        color: value === opt.value ? '#0f0f11' : T.textMed,
-        border: `1px solid ${value === opt.value ? T.primary : T.border}`
-      }}>{opt.label}</button>
-    ))}
+    {options.map(opt => {
+      const on = value === opt.value;
+      return (
+        <button type="button" role="tab" aria-selected={on} key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
+          padding: '9px 14px', borderRadius: 13, fontSize: 12, fontWeight: 700,
+          border: `1px solid ${on ? 'rgba(211,191,162,0.5)' : 'rgba(211,191,162,0.16)'}`,
+          background: on ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
+          color: on ? '#f7f3eb' : 'rgba(255,255,255,0.55)'
+        }}>{opt.label}</button>
+      );
+    })}
   </div>
 );
 
@@ -998,23 +998,23 @@ const Field = ({ label, children }) => (
 );
 
 const inputStyle = {
-  width: '100%', background: '#101012', border: `1px solid ${T.border}`, borderRadius: 10,
-  padding: '10px 12px', color: T.textHigh, fontSize: 13, fontFamily: T.font, outline: 'none'
+  width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(211,191,162,0.16)', borderRadius: 11,
+  padding: '10px 12px', color: T.textHigh, fontSize: 13, fontFamily: T.font, outline: 'none', colorScheme: 'dark'
 };
 
 const PrimaryBtn = ({ children, onClick, icon: Icon, disabled, style, type = 'button' }) => (
-  <button type={type} onClick={onClick} disabled={disabled} className={`pown-btn${disabled ? '' : ' pown-shimmer-btn'}`} style={{
-    background: disabled ? 'rgba(211,191,162,0.35)' : `linear-gradient(135deg, #e2d3ba, ${T.primary} 55%, #c2a97e)`,
-    color: '#0f0f11', border: 'none', boxShadow: disabled ? 'none' : '0 8px 20px -8px rgba(211,191,162,0.55)',
-    borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 800, display: 'inline-flex',
-    alignItems: 'center', gap: 7, opacity: disabled ? 0.6 : 1, ...style
+  <button type={type} onClick={onClick} disabled={disabled} className="pown-btn" style={{
+    background: disabled ? 'rgba(211,191,162,0.35)' : 'linear-gradient(135deg,#e6d6b8,#d3bfa2)',
+    color: '#14110c', border: 'none',
+    borderRadius: 11, padding: '9px 15px', fontSize: 12, fontWeight: 800, display: 'inline-flex',
+    alignItems: 'center', gap: 7, opacity: disabled ? 0.6 : 1, cursor: disabled ? 'not-allowed' : 'pointer', ...style
   }}>{Icon && <Icon size={14} />}{children}</button>
 );
 
 const GhostBtn = ({ children, onClick, icon: Icon, style, disabled }) => (
   <button type="button" onClick={onClick} disabled={disabled} className="pown-btn" style={{
-    background: 'transparent', color: T.textMed, border: `1px solid ${T.border}`,
-    borderRadius: 11, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, display: 'inline-flex',
+    background: 'rgba(255,255,255,0.03)', color: '#e8e2d8', border: '1px solid rgba(211,191,162,0.16)',
+    borderRadius: 11, padding: '9px 14px', fontSize: 12, fontWeight: 700, display: 'inline-flex',
     alignItems: 'center', gap: 7, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer', ...style
   }}>{Icon && <Icon size={14} className={Icon === Loader2 ? 'pown-pulse' : ''} />}{children}</button>
 );
@@ -1305,6 +1305,20 @@ const InstallBanner = () => {
   );
 };
 
+/** Same page header as the Tracking tab: gold eyebrow with icon, serif title, quiet description. Rendered once by the shell for every tab. */
+const OwnerPageHeader = ({ item }) => (
+  <div style={{ marginBottom: 18 }}>
+    <div style={{ fontSize: 10, letterSpacing: 2.4, color: T.primary, fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 7 }}>
+      <item.icon size={13} /> {item.group}
+    </div>
+    <h1 style={{
+      fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(26px,3.2vw,36px)', fontWeight: 700, margin: '8px 0 4px',
+      color: '#f7f3eb', letterSpacing: 0.3, lineHeight: 1.15, textAlign: 'left'
+    }}>{item.label}</h1>
+    {item.desc && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{item.desc}</div>}
+  </div>
+);
+
 /** One grouped tab list for desktop sidebar and mobile drawer, so the two can never drift apart. */
 const NavList = ({ tenantId, compact = false }) => (
   <>
@@ -1313,13 +1327,13 @@ const NavList = ({ tenantId, compact = false }) => (
         <div className="pown-nav-group">{group}</div>
         {NAV_ITEMS.filter(i => i.group === group).map(item => (
           <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
-            display: 'flex', alignItems: 'center', gap: 11, padding: compact ? '9px 12px' : '10px 12px', borderRadius: 11,
-            marginBottom: 2, fontSize: compact ? 13.5 : 13, fontWeight: 600,
-            background: isActive ? T.primarySoft : 'transparent',
-            color: isActive ? T.primary : T.textMed,
-            boxShadow: isActive ? `inset 2.5px 0 0 ${T.primary}` : 'none'
+            display: 'flex', alignItems: 'center', gap: 11, padding: compact ? '9px 12px' : '9px 12px', borderRadius: 12,
+            marginBottom: 3, fontSize: compact ? 13.5 : 12.5, fontWeight: 700,
+            border: `1px solid ${isActive ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
+            background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
+            color: isActive ? '#f7f3eb' : 'rgba(255,255,255,0.58)'
           })}>
-            <item.icon size={16} strokeWidth={2} />
+            <item.icon size={16} strokeWidth={2} color={undefined} />
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
             {item.badge && <span aria-hidden="true" style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary, flexShrink: 0 }} />}
           </NavLink>
@@ -1469,21 +1483,19 @@ const TopBar = ({ onMenu }) => {
   const switchOutlet = () => { try { localStorage.removeItem(LAST_TENANT_KEY); } catch (e) {} navigate('/owner'); };
   return (
     <header style={{
-      flexShrink: 0, zIndex: 50, background: 'rgba(14,14,16,0.78)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-      borderBottom: `1px solid ${T.border}`, padding: '14px clamp(14px, 3vw, 40px)',
+      flexShrink: 0, zIndex: 50, background: 'transparent',
+      padding: onMenu ? '12px 14px' : '14px clamp(18px, 3vw, 40px) 0',
+      borderBottom: onMenu ? `1px solid ${T.border}` : 'none',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         {onMenu && (
           <button type="button" onClick={onMenu} aria-label="Open menu" className="pown-btn" style={{
-            width: 40, height: 40, flexShrink: 0, borderRadius: 11, background: T.surfaceRaised,
-            border: `1px solid ${T.border}`, color: T.textHigh, display: 'flex', alignItems: 'center', justifyContent: 'center'
+            width: 40, height: 40, flexShrink: 0, borderRadius: 12, background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(211,191,162,0.16)', color: T.textHigh, display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}><MenuIcon size={18} /></button>
         )}
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: 'inherit', color: T.textHigh /* index.css styles every h1 (dark, 56px, big margins) */, fontSize: 19, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1.25, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label || 'Dashboard'}</h1>
-          {current?.desc && <div style={{ fontSize: 12, color: T.textLow, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.desc}</div>}
-        </div>
+        {onMenu && <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 17, fontWeight: 700, color: '#f7f3eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label || 'Dashboard'}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <div role="status" title={connected ? 'Receiving live updates' : 'Trying to reconnect to live updates'} style={{
@@ -1572,7 +1584,10 @@ const OwnerShell = ({ children }) => {
   };
 
   return (
-    <div className="pown" style={{ display: 'flex', width: '100%', height: '100vh' }}>
+    <div className="pown" style={{
+      display: 'flex', width: '100%', height: '100vh',
+      background: 'radial-gradient(1100px 520px at 12% -8%, rgba(211,191,162,0.09), transparent 62%), radial-gradient(900px 480px at 100% 105%, rgba(211,191,162,0.05), transparent 60%), #101012'
+    }}>
       {isDesktop && <Sidebar />}
       {!isDesktop && <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -1600,6 +1615,7 @@ const OwnerShell = ({ children }) => {
           <RenewalReminder tenantId={ownerTenantId} />
           <div className="pown-content">
             <div key={`${location.pathname}-${refreshKey}`} className="pown-page-transition">
+              {(() => { const page = NAV_ITEMS.find(i => i.key === location.pathname.split('/')[3]); return page ? <OwnerPageHeader item={page} /> : null; })()}
               {children}
             </div>
           </div>
@@ -1615,28 +1631,21 @@ const OwnerShell = ({ children }) => {
    ════════════════════════════════════════════════════════════ */
 const KpiCard = ({ icon: Icon, label, value, sub, delta, tone = 'default', hero = false }) => (
   <Card interactive className="pown-kpi" style={{
-    display: 'flex', flexDirection: 'column', gap: 12, minHeight: hero ? 136 : 120, position: 'relative', overflow: 'hidden',
-    borderColor: hero ? T.borderStrong : T.border
+    display: 'flex', flexDirection: 'column', minHeight: hero ? 130 : 112, padding: '16px 16px 14px',
+    // (not `borderColor: undefined`: React then clears the colour the card's border shorthand set, leaving a white outline)
+    ...(hero ? { borderColor: T.borderStrong } : {})
   }}>
-    <div style={{
-      position: 'absolute', top: -30, right: -30, width: hero ? 130 : 100, height: hero ? 130 : 100, borderRadius: '50%',
-      background: `radial-gradient(circle, ${tone === 'danger' ? T.dangerSoft : T.primarySoft} 0%, transparent 70%)`, pointerEvents: 'none'
-    }} />
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-      <Label>{label}</Label>
-      <div className="pown-kpi-icon" style={{
-        width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-        background: tone === 'danger' ? T.dangerSoft : T.primarySoft,
-        display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}><Icon size={15} color={tone === 'danger' ? T.danger : T.primary} strokeWidth={2} /></div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase' }}>
+      <span className="pown-kpi-icon" style={{ display: 'inline-flex' }}><Icon size={13} color={tone === 'danger' ? T.danger : T.primary} strokeWidth={2} /></span>
+      {label}
     </div>
-    <div className={`pown-mono${hero && tone !== 'danger' ? ' pown-gradient-text' : ''}`} style={{
-      fontSize: hero ? 32 : 25, fontWeight: 800, color: tone === 'danger' ? T.danger : T.textHigh,
-      lineHeight: 1, position: 'relative', letterSpacing: -0.8
+    <div className="pown-mono" style={{
+      marginTop: 10, fontSize: hero ? 30 : 26, fontWeight: 700, color: tone === 'danger' ? T.danger : '#f7f3eb',
+      lineHeight: 1.05, letterSpacing: -0.5
     }}>{value}</div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
       {delta !== undefined && <Delta pct={delta} />}
-      {sub && <span style={{ fontSize: 11.5, color: T.textLow }}>{sub}</span>}
+      {sub && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{sub}</span>}
     </div>
   </Card>
 );
@@ -1655,12 +1664,12 @@ const LiveClock = () => {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 2 }}>
       <div>
-        <div className="pown-gradient-text" style={{ fontSize: 21, fontWeight: 800, letterSpacing: -0.4 }}>{greetingFor(hour)}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.2, color: '#f1ede4' }}>{greetingFor(hour)}</div>
         <div style={{ fontSize: 12, color: T.textLow, fontWeight: 600, marginTop: 2 }}>{dateStr}</div>
       </div>
       <div className="pown-mono" style={{
-        fontSize: 13, fontWeight: 700, color: T.primary, background: T.primarySoft,
-        padding: '7px 13px', borderRadius: 100, border: `1px solid ${T.borderStrong}`
+        fontSize: 12.5, fontWeight: 700, color: T.primary, background: 'rgba(211,191,162,0.12)',
+        padding: '6px 12px', borderRadius: 100, border: '1px solid rgba(211,191,162,0.3)'
       }}>{time} IST</div>
     </div>
   );
@@ -1762,7 +1771,7 @@ const HBarChart = ({ data, valueFormat = (v) => v, color = T.primary, rowHeight 
       <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 18, bottom: 0, left: 0 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.05)" horizontal={false} />
         <XAxis type="number" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={valueFormat} />
-        <YAxis type="category" dataKey="label" width={nameWidth} tick={{ ...AxisTick, fill: 'rgba(255,255,255,0.62)' }} tickFormatter={(v) => clipLabel(v)} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="label" width={nameWidth} interval={0} tick={{ ...AxisTick, fill: 'rgba(255,255,255,0.62)' }} tickFormatter={(v) => clipLabel(v)} axisLine={false} tickLine={false} />
         <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [valueFormat(v), '']} />
         <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={16} isAnimationActive={false} />
       </BarChart>

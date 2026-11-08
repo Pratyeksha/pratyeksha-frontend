@@ -91,7 +91,8 @@ const GLOBAL_CSS = `
     outline: 2px solid #d3bfa2; outline-offset: 2px;
   }
   input::placeholder, textarea::placeholder { color: #7d7d86; }
-  .p-nav-group { font-size: 10px; color: #7d7d86; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 10px 10px 4px; }
+  .p-nav-group { font-size: 10px; color: rgba(211,191,162,0.72); font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; padding: 9px 11px 3px; }
+  .p-nav-item:not([aria-current]):hover { background: rgba(255,255,255,0.045) !important; color: #f1ede4 !important; }
 
   /* Clients table: columns keep their width from row to row (they used to shift with each row's button count) */
   .p-clients-table { min-width: 480px; }
@@ -1171,26 +1172,24 @@ const AdminSkeleton = () => (
 const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
     const isActive = active===id;
     return (
-      <button type="button" onClick={()=>onNav(id)} className="p-nav-item" style={{
-        width:'100%', display:'flex', alignItems:'center', gap:9,
-        padding:'7px 10px', borderRadius:8, cursor:'pointer', border:'none',
-        background: isActive ? 'rgba(211,191,162,0.06)' : 'transparent',
-        color: isActive ? '#d3bfa2' : C.textDim,
-        fontSize:13, fontWeight: isActive ? 600 : 400,
-        textAlign:'left',
-        /* active left bar in light gold */
-        borderLeft: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
-        transition:'all 0.12s',
+      <button type="button" onClick={()=>onNav(id)} className="p-nav-item" aria-current={isActive ? 'page' : undefined} style={{
+        width:'100%', display:'flex', alignItems:'center', gap:10,
+        padding:'6px 11px', borderRadius:11, cursor:'pointer', fontFamily:'inherit',
+        /* same pill language as the Tracking tab's section tabs: gold outline + soft gold wash when selected */
+        border:`1px solid ${isActive ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
+        background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
+        color: isActive ? '#f7f3eb' : 'rgba(255,255,255,0.58)',
+        fontSize:12.5, fontWeight:700,
+        textAlign:'left', transition:'all 0.12s',
       }}>
-        <Icon size={15} strokeWidth={isActive ? 2 : 1.5} style={{ flexShrink:0 }} />
+        <Icon size={15} strokeWidth={isActive ? 2 : 1.7} color={isActive ? '#d3bfa2' : undefined} style={{ flexShrink:0 }} />
         <span style={{ flex:1 }}>{label}</span>
         {count !== undefined && count > 0 && (
           <span style={{
-            fontSize:11, fontWeight:700, padding:'1px 7px', borderRadius:99,
-            /* urgent badge: dark amber bg, light gold text */
-            background: urgent ? 'rgba(138,112,77,0.15)' : C.bgCard2,
-            color: urgent ? '#d3bfa2' : C.textDim,
-            border: `1px solid ${urgent ? 'rgba(211,191,162,0.22)' : C.border}`,
+            fontSize:10, fontWeight:800, letterSpacing:0.4, padding:'2px 8px', borderRadius:99,
+            background: urgent ? 'rgba(211,191,162,0.14)' : 'rgba(255,255,255,0.05)',
+            color: urgent ? '#d3bfa2' : 'rgba(255,255,255,0.55)',
+            border: `1px solid ${urgent ? 'rgba(211,191,162,0.35)' : LINE}`,
           }}>{count}</span>
         )}
       </button>
@@ -1663,13 +1662,13 @@ function PratyekshaMasterAdminInner() {
         <div className="p-sidebar-inner no-sb">
 
           {/* Brand — icon bg is light gold, text is near-white */}
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, paddingBottom:10, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
             <div style={{ width:58, height:34, borderRadius:9, background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', padding:5, flexShrink:0 }}>
               <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
             </div>
             <div>
-              <div style={{ fontSize:13, fontWeight:700, color:C.text, letterSpacing:'0.3px', lineHeight:1.2 }}>Pratyeksha</div>
-              <div style={{ fontSize:10, color:C.textDim, marginTop:2 }}>Control Centre</div>
+              <div style={{ fontFamily:SERIF, fontSize:17, fontWeight:700, color:'#f7f3eb', letterSpacing:0.3, lineHeight:1.15 }}>Pratyeksha</div>
+              <div style={{ fontSize:9.5, color:GOLD, marginTop:3, fontWeight:800, letterSpacing:2, textTransform:'uppercase' }}>Control centre</div>
             </div>
           </div>
 
@@ -1678,9 +1677,9 @@ function PratyekshaMasterAdminInner() {
               number   → light gold (#d3bfa2)
               sub-grid → status-colored numbers, dark bg
           */}
-          <div style={{ marginBottom:10, padding:'12px', background:C.bgCard, border:`1px solid ${C.border}`, borderRadius:10, flexShrink:0 }}>
-            <div style={{ fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'0.8px', textTransform:'uppercase', marginBottom:6 }}>Net Platform Revenue</div>
-            <div style={{ fontSize:22, fontWeight:700, color:(stats.netRevenue ?? stats.totalRevenue ?? 0) >= 0 ? '#d3bfa2' : C.danger, lineHeight:1, marginBottom:6, fontFamily:'JetBrains Mono, monospace' }}>
+          <div style={{ ...CARD, borderRadius:16, marginBottom:6, padding:'11px 12px 10px', flexShrink:0 }}>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.5)', fontWeight:800, letterSpacing:1.4, textTransform:'uppercase', marginBottom:8, display:'flex', alignItems:'center', gap:7 }}><Wallet size={12} color={GOLD} /> Net platform revenue</div>
+            <div style={{ fontSize:22, fontWeight:700, color:(stats.netRevenue ?? stats.totalRevenue ?? 0) >= 0 ? '#f7f3eb' : COPPER, lineHeight:1, marginBottom:7, fontFamily:MONO, letterSpacing:-0.5 }}>
               ₹{Math.abs(stats.netRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}{(stats.netRevenue ?? 0) < 0 ? ' (loss)' : ''}
             </div>
             <div style={{ fontSize:10.5, color:C.textDim, marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}</span><span>− Costs ₹{(stats.totalExpenses||0).toLocaleString('en-IN')}</span></div>
@@ -1691,7 +1690,7 @@ function PratyekshaMasterAdminInner() {
                 { val:stats.disabledCount ||0, lbl:'Disabled', c:C.danger  },
                 { val:stats.totalClients  ||0, lbl:'Total',    c:C.textMid },
               ].map(s => (
-                <div key={s.lbl} style={{ background:C.bgDark, padding:'7px 4px', borderRadius:7, border:`1px solid ${C.border}`, textAlign:'center' }}>
+                <div key={s.lbl} style={{ background:'rgba(255,255,255,0.03)', padding:'7px 4px', borderRadius:10, border:`1px solid ${LINE}`, textAlign:'center' }}>
                   <div style={{ fontSize:15, fontWeight:700, color:s.c, lineHeight:1, fontFamily:'JetBrains Mono, monospace' }}>{s.val}</div>
                   <div style={{ fontSize:9.5, color:C.textDim, marginTop:3 }}>{s.lbl}</div>
                 </div>
@@ -1721,9 +1720,9 @@ function PratyekshaMasterAdminInner() {
           {/* Client list — scrollable and visible at the bottom of the control centre */}
           <button type="button" onClick={() => setSideClientsOpen(v => !v)} aria-expanded={sideClientsOpen} style={{
             width:'100%', background:'transparent', border:'none', cursor:'pointer', padding:'2px 4px', marginBottom: sideClientsOpen ? 8 : 0,
-            fontSize:10, color:C.textDim, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', display:'flex', alignItems:'center', gap:5
+            fontSize:10, color:'rgba(211,191,162,0.72)', fontWeight:800, letterSpacing:'1.6px', textTransform:'uppercase', display:'flex', alignItems:'center', gap:6
           }}>
-            <Trophy size={10} color={C.textDim} /> Top clients by revenue
+            <Trophy size={11} color={GOLD} /> Top clients
             <ChevronRight size={11} style={{ marginLeft:'auto', transform: sideClientsOpen ? 'rotate(90deg)' : 'none', transition:'transform .15s' }} />
           </button>
           {sideClientsOpen && <div className="no-sb" style={{ minHeight:70, maxHeight:150, overflowY:'auto', paddingRight:2, flexShrink:1 }}>
@@ -1743,9 +1742,7 @@ function PratyekshaMasterAdminInner() {
           <div style={{ display: 'grid', gap: 8 }}>
             <InstallButton />
             <button type="button" onClick={refresh} style={{
-              width:'100%', padding:'9px', background:C.bgCard, border:`1px solid ${C.border}`,
-              color:C.textDim, borderRadius:8, fontSize:12, fontWeight:500, cursor:'pointer',
-              display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              ...ghost, width:'100%', padding:'9px', justifyContent:'center',
             }}>
               <RefreshCcw size={12} /> Refresh
             </button>

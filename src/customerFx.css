@@ -265,3 +265,11 @@ html[data-reduce-motion] .qf-row>*,html[data-reduce-motion] .fx-wiggle{animation
 
 .pxh-heart::after,.pxh-share::after{content:"";position:absolute;inset:-8px}
 .pxh-share{position:relative}
+.fx-pref-pop{width:min(268px,calc(100vw - 24px))}
+.fx-pref-lbl{white-space:nowrap}
+.fx-pref-row.static{gap:8px}
+.fx-pref-row.static .fx-step{margin-left:auto;flex-shrink:0}
+.fx-step b{min-width:34px}
+
+.pxh-hero>*:has(.fx-prefs){z-index:40 !important}
+.fx-prefs{position:relative}

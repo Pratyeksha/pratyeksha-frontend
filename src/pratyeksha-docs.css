@@ -217,3 +217,36 @@
   body.pxd-printing .pxd-print-root .document-paper::after, body.pxd-printing .pxd-print-root .paper-motif { display: none !important; }
   body.pxd-printing .pxd-print-root * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
+
+/* ═══ Studio chrome in the shared Tracking-tab theme (dark glass + gold) ═══
+   Only the controls around the document change. The printable paper (.paper, .document-paper and everything inside it) stays on
+   the light champagne theme on purpose: it is what gets printed or saved as PDF. */
+.pxd.pxd-studio { background: transparent; color: #f1ede4; }
+.pxd.pxd-studio .pxd-bar { background: rgba(16,16,18,.9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(211,191,162,.16); box-shadow: none; padding: 20px clamp(14px,2.4vw,34px) 14px; }
+.pxd.pxd-studio .pxd-title strong { font: 700 clamp(26px,3.2vw,36px)/1.15 'Playfair Display', Georgia, serif; letter-spacing: .3px; color: #f7f3eb; }
+.pxd.pxd-studio .pxd-title span { color: #d3bfa2; font-size: 10px; font-weight: 800; letter-spacing: .24em; }
+.pxd.pxd-studio .primary-button { background: linear-gradient(135deg,#e6d6b8,#d3bfa2); color: #14110c; box-shadow: none; font-weight: 800; }
+.pxd.pxd-studio .primary-button:hover:not(:disabled) { background: linear-gradient(135deg,#efe1c6,#dcc9aa); }
+.pxd.pxd-studio .secondary-button, .pxd.pxd-studio .icon-button { background: rgba(255,255,255,.03); color: #e8e2d8; border: 1px solid rgba(211,191,162,.16); font-weight: 700; }
+.pxd.pxd-studio .pxd-seg { background: rgba(255,255,255,.03); border: 1px solid rgba(211,191,162,.16); }
+.pxd.pxd-studio .pxd-seg button { color: rgba(255,255,255,.55); font-weight: 700; }
+.pxd.pxd-studio .pxd-seg button.on { background: linear-gradient(135deg, rgba(211,191,162,.22), rgba(211,191,162,.06)); color: #f7f3eb; box-shadow: inset 0 0 0 1px rgba(211,191,162,.5); }
+.pxd.pxd-studio .pxd-chip, .pxd.pxd-studio .pxd-pick { background: rgba(255,255,255,.03); border-color: rgba(211,191,162,.16); color: #e8e2d8; color-scheme: dark; }
+.pxd.pxd-studio .pxd-chip.on { background: rgba(211,191,162,.12); border-color: rgba(211,191,162,.4); color: #f7f3eb; }
+.pxd.pxd-studio .pxd-chip input { accent-color: #d3bfa2; }
+.pxd.pxd-studio .pxd-pick:focus { border-color: #d3bfa2; box-shadow: 0 0 0 3px rgba(211,191,162,.1); }
+.pxd.pxd-studio .pxd-pick option { background: #1c1c1f; color: #f1ede4; }
+.pxd.pxd-studio .pxd-doc-tabs button { border: 1px solid rgba(211,191,162,.16); background: transparent; color: rgba(255,255,255,.55); border-radius: 13px; font-weight: 700; box-shadow: none; }
+.pxd.pxd-studio .pxd-doc-tabs button.on { border-color: rgba(211,191,162,.5); background: linear-gradient(135deg, rgba(211,191,162,.22), rgba(211,191,162,.06)); color: #f7f3eb; }
+.pxd.pxd-studio .pxd-subbar .lbl { color: rgba(211,191,162,.72); }
+.pxd.pxd-studio .document-editor { background: linear-gradient(160deg, rgba(255,255,255,.055), rgba(255,255,255,.016)), #19191b; border: 1px solid rgba(211,191,162,.16); box-shadow: 0 18px 44px -22px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05); color: #f1ede4; }
+.pxd.pxd-studio .document-editor h2 { font: 700 24px/1.15 'Playfair Display', Georgia, serif; color: #f7f3eb; }
+.pxd.pxd-studio .document-editor .eyebrow { color: #d3bfa2; font-weight: 800; letter-spacing: .2em; }
+.pxd.pxd-studio .document-field > span { color: rgba(255,255,255,.68); }
+.pxd.pxd-studio .document-field small { color: rgba(255,255,255,.4); }
+.pxd.pxd-studio .document-field input, .pxd.pxd-studio .document-field textarea, .pxd.pxd-studio .document-field select {
+  background: rgba(255,255,255,.03); border: 1px solid rgba(211,191,162,.16); color: #f1ede4; border-radius: 11px; color-scheme: dark;
+}
+.pxd.pxd-studio .document-field input:focus, .pxd.pxd-studio .document-field textarea:focus, .pxd.pxd-studio .document-field select:focus { border-color: #d3bfa2; box-shadow: 0 0 0 3px rgba(211,191,162,.1); }
+.pxd.pxd-studio .document-field select option { background: #1c1c1f; color: #f1ede4; }
+.pxd.pxd-studio .editor-note { background: rgba(211,191,162,.07); border-color: rgba(211,191,162,.2); color: rgba(255,255,255,.65); }

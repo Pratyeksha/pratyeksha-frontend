@@ -8,7 +8,10 @@ import { detectTemplate, renderCard, decodeCard, cardFileName } from './qrCompos
 
 // Master Admin ▸ QR Studio: one click makes a print-ready, signed QR card for every table of a restaurant (1..tableCount) plus a counter card ("CT").
 // The template is auto-detected (QR placeholder + table-number box), so replacing the template image needs no code change.
-const GOLD = '#d3bfa2', GOLD2 = '#8a704d', BG = '#1b1b1e', BG2 = '#232327', BORDER = '#2e2e34', INPUT = '#17171a';
+// Same palette and surfaces as the Tracking tab: gold-tinted hairlines, glass-gradient cards, soft field fills
+const GOLD = '#d3bfa2', GOLD2 = '#d3bfa2', BORDER = 'rgba(211,191,162,0.16)', INPUT = 'rgba(255,255,255,0.03)', BG2 = 'rgba(255,255,255,0.03)';
+const BG = 'linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.016))';
+const GOLD_GRAD = 'linear-gradient(135deg,#e6d6b8,#d3bfa2)';
 const DEFAULT_TEMPLATE = '/qr-template.png';
 const FONT = '"Roboto Condensed", "Arial Narrow", sans-serif';
 
@@ -17,10 +20,10 @@ const makeCanvas = (w, h) => { const c = document.createElement('canvas'); c.wid
 const toBlob = (canvas) => new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Could not create the image'))), 'image/png'));
 const yieldUi = () => new Promise((r) => setTimeout(r, 0));
 
-const card = { background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 18 };
-const label = { fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: GOLD2, textTransform: 'uppercase', marginBottom: 6, display: 'block' };
-const input = { width: '100%', boxSizing: 'border-box', background: INPUT, color: '#f1ece2', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 10px', fontSize: 13, outline: 'none' };
-const btn = (primary, disabled) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: primary ? 'none' : `1px solid ${BORDER}`, background: primary ? GOLD : BG2, color: primary ? '#14110c' : GOLD, fontWeight: 800, fontSize: 12.5, letterSpacing: 0.4, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1 });
+const card = { background: BG, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 18, boxShadow: '0 18px 44px -22px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)' };
+const label = { fontSize: 11, fontWeight: 800, letterSpacing: 1.6, color: GOLD2, textTransform: 'uppercase', marginBottom: 8, display: 'block' };
+const input = { width: '100%', boxSizing: 'border-box', background: INPUT, color: '#f1ede4', border: `1px solid ${BORDER}`, borderRadius: 11, padding: '9px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', colorScheme: 'dark' };
+const btn = (primary, disabled) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 15px', borderRadius: 11, border: primary ? 'none' : `1px solid ${BORDER}`, background: primary ? GOLD_GRAD : BG2, color: primary ? '#14110c' : '#e8e2d8', fontWeight: primary ? 800 : 700, fontSize: 12, letterSpacing: 0.2, fontFamily: 'inherit', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1 });
 
 export default function QrStudio({ clients = [] }) {
   const [tenantId, setTenantId] = useState('');
@@ -130,16 +133,17 @@ export default function QrStudio({ clients = [] }) {
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', width: '100%', padding: '24px 20px 40px', boxSizing: 'border-box' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <QrCode size={22} color={GOLD} /><h2 style={{ margin: 0, fontFamily: 'Georgia, serif', fontWeight: 500, color: '#f7f3eb', fontSize: '1.5rem' }}>QR Studio</h2>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', width: '100%', padding: '26px clamp(14px,2.4vw,34px) 48px', boxSizing: 'border-box', textAlign: 'left', fontFamily: 'Inter, system-ui, sans-serif', color: '#f1ede4' }}>
+      <div style={{ maxWidth: 1200 }}>
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 10, letterSpacing: 2.4, color: GOLD, fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 7 }}><QrCode size={13} /> Print studio</div>
+          <h1 style={{ margin: '8px 0 4px', fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, color: '#f7f3eb', fontSize: 'clamp(26px,3.2vw,36px)', letterSpacing: 0.3, lineHeight: 1.15, textAlign: 'left' }}>QR Studio</h1>
         </div>
-        <p style={{ margin: '0 0 18px', color: 'rgba(255,255,255,0.55)', fontSize: 13, lineHeight: 1.6 }}>
+        <p style={{ margin: '0 0 18px', color: 'rgba(255,255,255,0.5)', fontSize: 12.5, lineHeight: 1.6, maxWidth: 820 }}>
           Pick a restaurant and press <b style={{ color: GOLD }}>Generate QR</b>. You get a signed, print-ready card for every table (from the restaurant’s real table count) and one counter card labelled <b style={{ color: GOLD }}>CT</b>. Each code is decoded again after it is placed on the template, so a card that would not scan is flagged.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 16 }}>
           <div style={card}>
             <label style={label}>Restaurant</label>
             <select value={tenantId} onChange={(e) => { setTenantId(e.target.value); setResults([]); setInfo(''); setError(''); }} style={input}>
@@ -156,7 +160,7 @@ export default function QrStudio({ clients = [] }) {
                 </select>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f1ece2', fontSize: 13, paddingBottom: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={withCounter} onChange={(e) => setWithCounter(e.target.checked)} /> Include counter card (CT)
+                <input type="checkbox" checked={withCounter} onChange={(e) => setWithCounter(e.target.checked)} style={{ accentColor: GOLD }} /> Include counter card (CT)
               </label>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
