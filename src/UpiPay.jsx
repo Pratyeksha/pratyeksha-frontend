@@ -66,16 +66,18 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
   const merchant = payInfo.merchant === true;
   // A personal UPI ID: PhonePe / Google Pay refuse (or cap) a pre-filled amount sent to it, so by default the app opens on the payee and the guest types the copied amount.
   const personal = false; // pre-filled amount is the default for every payee; manual entry stays available as the fallback button
-  const paramsFor = () => ({
+  // Pre-filled links always carry the merchant category code and a unique transaction reference: PhonePe / Google Pay decline ("for security reasons") a
+  // pre-filled payment to a business UPI ID that lacks them. Only the amount-less manual link to a personal ID leaves them out.
+  const paramsFor = (manual = false) => ({
     upiId: payInfo.upiId, payeeName: payInfo.payeeName, amount: amt, note,
-    ...(merchant ? { merchantCode: payInfo.mcc || '5812', txnRef: `PX${String(txnSeed).replace(/[^A-Za-z0-9]/g, '').slice(-10)}${Date.now().toString(36)}`.slice(0, 35) } : {}),
+    ...(merchant || !manual ? { merchantCode: payInfo.mcc || '5812', txnRef: `PX${String(txnSeed).replace(/[^A-Za-z0-9]/g, '').slice(-10)}${Date.now().toString(36)}`.slice(0, 35) } : {}),
   });
   let genericLink = '';
   try { genericLink = buildUpiLink('any', { ...paramsFor() }, platform); } catch { return null; }
 
   const open = async (appId, manual = false) => {
     let link;
-    try { link = buildUpiLink(appId, { ...paramsFor(), withAmount: !manual }, platform); } catch { return; }
+    try { link = buildUpiLink(appId, { ...paramsFor(manual), withAmount: !manual }, platform); } catch { return; }
     if (manual) {
       try { await navigator.clipboard.writeText(formatUpiAmount(amt)); } catch { /* blocked: the amount is shown on screen anyway */ }
       setManualMsg(true);
