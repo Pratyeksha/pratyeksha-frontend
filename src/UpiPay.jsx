@@ -8,7 +8,7 @@ import { UPI_LOGOS } from './upiLogos.js';
 
 const GOLD = '#d3bfa2';
 const T = {
-  en: { subManual: 'Tap your app. It opens on this payee and the amount is already copied: enter it, then your PIN.', tryPrefill: 'Try with the amount pre-filled instead', enterAmt: 'Enter this amount in your app',
+  en: { roundNote: 'Bill', roundNote2: 'rounded to the nearest rupee for UPI', subManual: 'Tap your app. It opens on this payee and the amount is already copied: enter it, then your PIN.', tryPrefill: 'Try with the amount pre-filled instead', enterAmt: 'Enter this amount in your app',
         title: 'Pay with UPI', sub: 'Tap your app. It opens with the amount ready; you only enter your PIN.', other: 'Other UPI app', copy: 'Copy UPI ID', copied: 'Copied',
         manual: 'Amount not accepted or limit error? Pay manually', manualHint: 'The amount is copied. Your app opens on this payee: paste or type', copyAmt: 'Copy amount', amtCopied: 'Amount copied',
         noOpen: 'Did not open? Choose “Other UPI app”, or pay this UPI ID manually.', scan: 'Scan with any UPI app on your phone', amount: 'Amount to pay',
@@ -20,7 +20,7 @@ const T = {
         h_noopen: 'Choose “Other UPI app” to pick from the apps on your phone, or copy the UPI ID and pay manually.',
         h_other: 'Please try another UPI app, or ask staff to take payment at the counter.',
         reported: 'Staff have been told about the problem.', tryAgain: 'Try another way', unsureH: 'Check your UPI app’s payment history. If the money left your account, tap “Yes, I paid”.' },
-  mr: { subManual: 'तुमचे अ‍ॅप निवडा. ते या payee वर उघडते आणि रक्कम कॉपी झाली आहे: ती टाका, मग PIN टाका.', tryPrefill: 'त्याऐवजी रक्कम आधीच भरून पाहा', enterAmt: 'तुमच्या अ‍ॅपमध्ये ही रक्कम टाका',
+  mr: { roundNote: 'बिल', roundNote2: 'UPI साठी जवळच्या रुपयात पूर्णांक केले', subManual: 'तुमचे अ‍ॅप निवडा. ते या payee वर उघडते आणि रक्कम कॉपी झाली आहे: ती टाका, मग PIN टाका.', tryPrefill: 'त्याऐवजी रक्कम आधीच भरून पाहा', enterAmt: 'तुमच्या अ‍ॅपमध्ये ही रक्कम टाका',
         title: 'UPI ने पैसे द्या', sub: 'तुमचे अ‍ॅप निवडा. रक्कम तयार उघडते; तुम्ही फक्त PIN टाका.', other: 'इतर UPI अ‍ॅप', copy: 'UPI आयडी कॉपी करा', copied: 'कॉपी झाले',
         manual: 'रक्कम चालत नाही / मर्यादा त्रुटी? स्वतः पैसे द्या', manualHint: 'रक्कम कॉपी झाली. तुमचे अ‍ॅप या प्राप्तकर्त्यावर उघडेल: रक्कम पेस्ट करा किंवा टाईप करा', copyAmt: 'रक्कम कॉपी करा', amtCopied: 'रक्कम कॉपी झाली',
         noOpen: 'उघडले नाही? “इतर UPI अ‍ॅप” निवडा किंवा हा UPI आयडी वापरून पैसे द्या.', scan: 'तुमच्या फोनवरील कोणत्याही UPI अ‍ॅपने स्कॅन करा', amount: 'भरायची रक्कम',
@@ -59,7 +59,8 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
   const hintTimer = useRef(null);
   useEffect(() => () => clearTimeout(hintTimer.current), []);
 
-  const amt = roundMoney(amount);
+  const billAmt = roundMoney(amount);
+  const amt = billAmt > 0 ? Math.max(1, Math.round(billAmt)) : 0; // UPI apps get a whole-rupee amount (₹53, not ₹52.50)
   const ready = !!(payInfo && payInfo.enabled && UPI_ID_RE.test(payInfo.upiId || '') && payInfo.payeeName && Number.isFinite(amt) && amt > 0);
   if (!ready) return null;
 
@@ -109,6 +110,7 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
         <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)' }}>{tr.amount} · {payInfo.payeeName}</span>
         <span style={{ fontSize: '1.5rem', fontWeight: 900, color: '#fff' }}>₹{formatUpiAmount(amt)}</span>
       </div>
+      {amt !== billAmt && <div style={{ fontSize: '0.64rem', color: '#e0c48f', margin: '-2px 0 6px', textAlign: 'right' }}>{tr.roundNote} ₹{billAmt.toFixed(2)} · {tr.roundNote2}</div>}
       <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.55)', marginBottom: 12, lineHeight: 1.5 }}>{personal && platform !== 'desktop' ? tr.subManual : tr.sub}</div>
 
       {claimed ? (

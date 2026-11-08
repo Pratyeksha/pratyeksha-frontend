@@ -6,13 +6,13 @@ export const UPI_ID_RE = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$/;
 
 export const roundMoney = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 // UPI wants a plain decimal with at most 2 places, no thousands separators, no currency symbol.
-export const formatUpiAmount = (n) => roundMoney(n).toFixed(2);
+export const formatUpiAmount = (n) => { const v = roundMoney(n); return Number.isInteger(v) ? String(v) : v.toFixed(2); };
 
 const cleanNote = (v) => String(v ?? '').replace(/[^A-Za-z0-9 .\-_/#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
 const cleanName = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
 
 /** Query string for the payment. Throws on anything that would make a UPI app reject or mis-show the payment. */
-export function upiQuery({ upiId, payeeName, amount, note, merchantCode = '', txnRef = '' }) {
+export function upiQuery({ upiId, payeeName, amount, note, merchantCode = '', txnRef = '', withAmount = true }) {
   const vpa = String(upiId || '').trim();
   if (!UPI_ID_RE.test(vpa)) throw new Error('Invalid UPI ID');
   const amt = roundMoney(amount);
@@ -30,7 +30,8 @@ export function upiQuery({ upiId, payeeName, amount, note, merchantCode = '', tx
   if (mc) { if (!/^\d{4}$/.test(mc)) throw new Error('Invalid merchant code'); pairs.push(['mc', mc]); }
   const tr = String(txnRef || '').trim();
   if (tr) { if (!/^[A-Za-z0-9]{1,35}$/.test(tr)) throw new Error('Invalid transaction reference'); pairs.push(['tr', tr]); }
-  pairs.push(['am', formatUpiAmount(amt)], ['cu', 'INR']);
+  // withAmount=false opens the app on the payee only, so the guest types the amount. Personal UPI IDs often have pre-filled amounts blocked by Google Pay / PhonePe.
+  if (withAmount) pairs.push(['am', formatUpiAmount(amt)], ['cu', 'INR']);
   const tn = cleanNote(note);
   if (tn) pairs.push(['tn', encodeURIComponent(tn)]);
   return pairs.map(([k, v]) => `${k}=${v}`).join('&');
