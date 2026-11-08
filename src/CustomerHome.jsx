@@ -866,6 +866,7 @@ export default function CustomerHome() {
   const [fresh, setFresh] = useState(false); // true once the list has come from the network in this visit
   const [menuLookup, setMenuLookup] = useState(() => { try { const c = JSON.parse(sessionStorage.getItem(MENU_CACHE_KEY) || 'null'); return c?.data ? buildMenuLookup(c.data) : null; } catch { return null; } });
   const menuReq = useRef(false);
+  const listSig = useRef('');
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [lang, setLang] = useState(() => { try { return localStorage.getItem(LANG_KEY) === 'mr' ? 'mr' : 'en'; } catch { return 'en'; } });
   const tr = L[lang];
@@ -969,12 +970,16 @@ export default function CustomerHome() {
       .then((res) => {
         if (!alive.current) return;
         const list = normalizeTenants(res.data);
-        setTenants(list);
+        const sig = JSON.stringify(list);
+        const now = Date.now();
+        if (sig !== listSig.current) { // an unchanged list keeps the same array: no re-filter / re-render of every card, no storage rewrite
+          listSig.current = sig;
+          setTenants(list);
+          writeJson(CACHE_KEY, { t: now, list });
+        }
         setFromCache(false);
         setFresh(true);
         setLoadError('');
-        const now = Date.now();
-        writeJson(CACHE_KEY, { t: now, list });
         setUpdatedAt(now);
       })
       .catch((err) => {
@@ -997,6 +1002,7 @@ export default function CustomerHome() {
   const ensureMenu = useCallback(() => {
     if (menuReq.current) return;
     menuReq.current = true;
+    try { const c = JSON.parse(sessionStorage.getItem(MENU_CACHE_KEY) || 'null'); if (c?.data && Date.now() - c.t < 10 * 60 * 1000) return; } catch { /* ignore */ }
     menuCtrl.current = new AbortController();
     axios.get(`${BASE_URL}/tenants/menu-index`, { timeout: 12000, signal: menuCtrl.current.signal })
       .then((res) => {
@@ -1008,6 +1014,8 @@ export default function CustomerHome() {
   }, []);
   useEffect(() => {
     if (loading || !tenants.length) return undefined;
+    // Data-saver / low-memory phones: fetch the dish index only when the guest actually uses search.
+    try { if (navigator.connection?.saveData || (navigator.deviceMemory && navigator.deviceMemory <= 2)) return undefined; } catch { /* ignore */ }
     // Wait for an idle moment (or 2.5 s at most) so the dish index never competes with first paint.
     const idle = typeof window.requestIdleCallback === 'function';
     const id = idle ? window.requestIdleCallback(ensureMenu, { timeout: 2500 }) : setTimeout(ensureMenu, 2500);

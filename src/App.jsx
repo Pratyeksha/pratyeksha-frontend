@@ -1856,11 +1856,13 @@ let _menuReqSeq = 0;
 const _ctrl = new AbortController();
 const _menuCacheKey = `px_menu_cache_${tenantId}`;
 let _gotLive = false;
+let _lastBody = ''; // JSON of the last menu shown: an identical refetch skips every state update and storage write
 // Instant paint from this visit's last copy; the network answer below replaces it a moment later.
 try {
   const c = JSON.parse(sessionStorage.getItem(_menuCacheKey) || 'null');
   if (c && Array.isArray(c.menu) && c.menu.length && Date.now() - c.t < 30 * 60 * 1000) {
     setRestaurantData(c.tenant); setCategoryList(c.cats); setAllMenuItems(c.menu); setExtraItems(c.extras || []); setIsLoading(false);
+    _lastBody = JSON.stringify({ tenant: c.tenant, cats: c.cats, menu: c.menu, extras: c.extras || [] });
   }
 } catch { /* ignore */ }
 const fetchMenuContent = async () => {
@@ -1880,12 +1882,15 @@ const fetchMenuContent = async () => {
     const cats = [...(comboList.length ? [COMBO_CATEGORY] : []), ...(Array.isArray(cat.data) ? cat.data : [])];
     const menu = [...(Array.isArray(menuRes.data) ? menuRes.data : []), ...comboList.map(comboToMenuItem)];
     const extraList = Array.isArray(extras.data) ? extras.data : [];
+    const body = JSON.stringify({ tenant: res.data, cats, menu, extras: extraList });
+    if (body === _lastBody) { _gotLive = true; setServingFromCache(!navigator.onLine); return; } // nothing changed: no re-render, no storage write
+    _lastBody = body;
     setRestaurantData(res.data);
     setCategoryList(cats);
     setAllMenuItems(menu);
     setExtraItems(extraList);
     try {
-      const blob = JSON.stringify({ t: Date.now(), tenant: res.data, cats, menu, extras: extraList });
+      const blob = `{"t":${Date.now()},${body.slice(1)}`; // reuse the string already built
       sessionStorage.setItem(_menuCacheKey, blob);
       if (blob.length < 900000) localStorage.setItem(`px_menu_offline_${tenantId}`, blob); // survives closing the tab: used only when the network fails
     } catch { /* quota: fine, just no cache */ }
@@ -1917,7 +1922,14 @@ const fetchMenuContent = async () => {
 };
 // Socket bursts (several menu / combo edits in a row) trigger ONE refetch instead of one each.
 let _refetchTimer = 0;
-const refetchSoon = () => { window.clearTimeout(_refetchTimer); _refetchTimer = window.setTimeout(fetchMenuContent, 350); };
+let _staleHidden = false;
+const refetchSoon = () => {
+  window.clearTimeout(_refetchTimer);
+  if (document.hidden) { _staleHidden = true; return; } // a background tab fetches once, when it comes back
+  _refetchTimer = window.setTimeout(fetchMenuContent, 350);
+};
+const onMenuVis = () => { if (!document.hidden && _staleHidden) { _staleHidden = false; refetchSoon(); } };
+document.addEventListener('visibilitychange', onMenuVis);
     fetchMenuContent();
 
     // 2. PHASE B: SPIN UP LONG-LIVED WEB SOCKET CHANNELS FOR LIVE DATA SYNCING
@@ -2044,6 +2056,7 @@ socket.on('kds_item_timing_updated', (data) => {
     // 3. PHASE C: LIFECYCLE DESTRUCTION CLEANUP
 return () => {
   _disposedMenu = true;
+  document.removeEventListener('visibilitychange', onMenuVis);
   _ctrl.abort();
   window.clearTimeout(_refetchTimer);
   socket.off("menu_updated");

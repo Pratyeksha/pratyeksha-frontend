@@ -11,7 +11,7 @@
      The announcements are automatic. There is no microphone and no tap-to-listen: voice is output only.
    • A speaker button on each ticket repeats its details on demand.
    • Business logic (kds-item timing, dispatch, recall, 86, wastage, auth) is unchanged from the previous screen. */
-import React, { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback, useSyncExternalStore } from 'react';
 import SupportContact from './SupportContact.jsx';
 import { io } from 'socket.io-client';
 import axios from 'axios';
@@ -31,14 +31,21 @@ import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
 const BASE_URL = API_BASE_URL;
+// Sliding tickets into place when one leaves costs measuring every ticket on every change: only done while the board is small enough to be cheap.
+const LAYOUT_ANIM_MAX = 12;
 
 /* ─── helpers ─── */
 const useWindowSize = () => {
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
-    const h = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    // dragging a window edge fires dozens of resize events a second: re-render at most once per frame, and only if the size really changed
+    let raf = 0;
+    const h = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; setSize(prev => (prev.w === window.innerWidth && prev.h === window.innerHeight) ? prev : { w: window.innerWidth, h: window.innerHeight }); });
+    };
     window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
+    return () => { window.removeEventListener('resize', h); if (raf) cancelAnimationFrame(raf); };
   }, []);
   return size;
 };
@@ -68,9 +75,27 @@ const getOrderType = order => {
 // "Extra items" are packaged goods that never go to the kitchen.
 const isKitchenItem = i => !!i && !i.isExtraItem && i.extraItemId == null;
 
-// Module-level so the (module-level) order card and the board share it: keys of dish checks whose save is still in flight.
+// Module-level so the (module-level) order card and the board share it: dish checks whose save is still in flight ("orderId-idx" -> {o, i}).
 // A refresh that lands in that window used to un-tick the dish the chef had just ticked.
-const pendingToggleKeys = new Set();
+const pendingToggles = new Map();
+
+/* ═══ UNCHANGED DATA KEEPS ITS IDENTITY ═══
+   A refresh used to replace every ticket with a brand-new object, so every ticket re-rendered even when nothing had changed. A ticket whose
+   data is identical to the one already on screen now keeps the old object, and the board does not re-render at all when nothing changed. */
+const sigCache = new WeakMap();
+const orderSig = o => { let s = sigCache.get(o); if (s === undefined) { s = JSON.stringify(o); sigCache.set(o, s); } return s; };
+const reuseOrders = (prev, next) => {
+  const prevById = new Map(prev.map(o => [String(o._id), o]));
+  let changed = prev.length !== next.length;
+  const out = next.map((o, i) => {
+    const old = prevById.get(String(o._id));
+    if (old && (old === o || orderSig(old) === orderSig(o))) { if (prev[i] !== old) changed = true; return old; }
+    changed = true;
+    return o;
+  });
+  return changed ? out : prev;
+};
+const sameKeys = (a, b) => { const ka = Object.keys(a); return ka.length === Object.keys(b).length && ka.every(k => k in b); };
 
 // Same rule the order card uses to show/hide a dish (category tab + veg/non-veg mode), so totals built elsewhere match the cards.
 const isDishVisible = (item, { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode }) => {
@@ -302,8 +327,10 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-brand-t{display:flex;flex-direction:column;gap:3px;min-width:0}
 .kx-kds{display:inline-flex;align-items:center;gap:6px;font-size:.52rem;font-weight:700;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;white-space:nowrap}
 .kx-live{display:inline-flex;align-items:center;gap:6px;font-size:.52rem;font-weight:600;letter-spacing:.12em;color:var(--mute);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
-.kx-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;animation:kxPing 2.2s ease-out infinite}
-.kx-live.off{color:var(--amber)} .kx-live.off .kx-dot{background:var(--amber);animation:none}
+.kx-dot{position:relative;width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0}
+/* the pulse is a ring that grows and fades (transform + opacity only): animating box-shadow repainted the header every frame, forever */
+.kx-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--gold);opacity:0;animation:kxRing 2.2s ease-out infinite}
+.kx-live.off{color:var(--amber)} .kx-live.off .kx-dot,.kx-dot.off{background:var(--amber)} .kx-live.off .kx-dot::after,.kx-dot.off::after{animation:none}
 .kx-seg{display:flex;padding:2px;gap:2px;border-radius:12px;background:#070708;border:1px solid var(--line);flex-shrink:0}
 .kx-seg button{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:.58rem;font-weight:700;letter-spacing:.08em;white-space:nowrap;min-height:30px;transition:all .18s var(--ease)}
 .kx-seg button:hover{color:var(--cream)}
@@ -431,7 +458,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-tk.fresh{border-color:rgba(230,214,184,.85)}
 /* glow = an overlay whose OPACITY pulses (cheap on tablets); animating box-shadow on every ticket repainted the whole board each frame */
 .kx-tk::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;z-index:3}
-.kx-tk.high::after{box-shadow:inset 0 0 0 1px rgba(226,154,88,.55),inset 0 0 24px rgba(226,154,88,.26);animation:kxGlow 1.9s ease-in-out infinite}
+.kx-tk.high::after{box-shadow:inset 0 0 0 1px rgba(226,154,88,.55),inset 0 0 24px rgba(226,154,88,.26);opacity:.65;animation:kxGlow 1.9s ease-in-out 5}
 .kx-tk.fresh::after{box-shadow:inset 0 0 0 1px rgba(230,214,184,.9),inset 0 0 28px rgba(230,214,184,.3);animation:kxGlow 1.6s ease-in-out 5}
 .kx-tk.fill{max-height:none;height:100%}
 .kx-tk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 10px 5px 13px}
@@ -478,6 +505,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-sub{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px;font-size:.54rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 .kx-sub .half{color:var(--gold)}
 .kx-tm{display:inline-flex;align-items:center;gap:3px;font:700 .56rem 'JetBrains Mono',monospace;color:var(--gold2);letter-spacing:0}
+.kx-tm.slow::after{content:'\\26A0  SLOW'}  /* drawn by CSS: no extra elements on every dish */
 .kx-tm.slow{padding:2px 7px;border-radius:7px;background:rgba(226,154,88,.16);border:1px solid rgba(226,154,88,.45);color:#f0b87c}
 .kx-hint{margin-top:3px;font-size:.5rem;color:var(--dim);font-style:italic}
 .kx-note{display:flex;align-items:flex-start;gap:6px;margin-top:5px;padding:4px 7px;border-radius:8px;background:rgba(226,154,88,.12);border:1px solid rgba(226,154,88,.42);color:#f2bd88;font-size:.66rem;font-weight:600;line-height:1.38}
@@ -557,7 +585,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-sk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(100deg,transparent 15%,rgba(233,220,195,.12) 50%,transparent 85%);animation:kxSweep 1.7s cubic-bezier(.45,0,.25,1) infinite;animation-delay:var(--d,0s)}
 
 /* ── motion ── */
-@keyframes kxPing{0%{box-shadow:0 0 0 0 rgba(211,191,162,.55)}70%,100%{box-shadow:0 0 0 8px rgba(211,191,162,0)}}
+@keyframes kxRing{0%{transform:scale(1);opacity:.55}70%,100%{transform:scale(2.7);opacity:0}}
 @keyframes kxEq{0%,100%{height:3px}50%{height:14px}}
 @keyframes kxBreath{0%,100%{opacity:.75}50%{opacity:1}}
 @keyframes kxGlow{0%,100%{opacity:.2}50%{opacity:1}}
@@ -619,7 +647,20 @@ const KitchenViewInner = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [stationFilter, setStationFilter] = useState('ALL');
+  // ticked dishes, kept PER TICKET: { orderId: { dishIndex: true } }. Ticking a dish replaces only that ticket's slice, so only that ticket re-renders.
   const [checkedItemsGlobal, setCheckedItemsGlobal] = useState({});
+  const setChecked = useCallback((orderId, idx, value) => {
+    const id = String(orderId);
+    setCheckedItemsGlobal(prev => {
+      const cur = prev[id];
+      if (!!(cur && cur[idx]) === !!value) return prev;
+      const slice = { ...(cur || {}) };
+      if (value) slice[idx] = true; else delete slice[idx];
+      const next = { ...prev };
+      if (Object.keys(slice).length) next[id] = slice; else delete next[id];
+      return next;
+    });
+  }, []);
   const [interceptedAlerts, setInterceptedAlerts] = useState([]);
   // 'loading' until the first ticket fetch answers; 'error' if it failed. Before this the board showed "KITCHEN CLEAR" while loading.
   const [boardState, setBoardState] = useState('loading');
@@ -648,7 +689,6 @@ const KitchenViewInner = () => {
   const [kitchenHealth, setKitchenHealth] = useState(null);
   const [healthOpen, setHealthOpen] = useState(false);
   const [serverKdsToday, setServerKdsToday] = useState(null); // { count, avgSeconds } from the database
-  const [itemFinalTimes, setItemFinalTimes] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [tenantName, setTenantName] = useState('');
@@ -663,7 +703,6 @@ const KitchenViewInner = () => {
   const [display, setDisplay] = useState(loadDisplay);          // ticket size + delayed / overdue limits (this device)
   const [showSettings, setShowSettings] = useState(false);
   const [lateIds, setLateIds] = useState(() => new Set());      // tickets older than the overdue limit
-  const [oldestWait, setOldestWait] = useState(0);
   const [showLateOnly, setShowLateOnly] = useState(false);
   const [voiceList, setVoiceList] = useState([]);
   const [awakeOn, setAwakeOn] = useState(false);                // the screen wake lock is held
@@ -677,7 +716,11 @@ const KitchenViewInner = () => {
   const socketRef = useRef(null);
   const ordersRef = useRef([]);
   const voicePrefsRef = useRef(voicePrefs);
-  const fetchSeqRef = useRef(0);
+  const abortRef = useRef(null);            // cancels downloads when the screen closes
+  const inflightRef = useRef(null);         // the download running right now
+  const queuedRef = useRef(null);           // one follow-up download, merged from any requests that arrived meanwhile
+  const healthAtRef = useRef({ health: 0, summary: 0 });
+  const metaLoadingRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const seenIdsRef = useRef(new Set());      // every ticket this screen has already shown (so a poll never re-announces one)
   const initialLoadRef = useRef(false);
@@ -692,7 +735,8 @@ const KitchenViewInner = () => {
   const lateSeededRef = useRef(false);
   const checkLateRef = useRef(null);
   const gridRef = useRef(null);
-  const anchorRef = useRef(null);          // the ticket at the top of the visible board and how far down it sits
+  const anchorRef = useRef(null);
+  const scrollTopRef = useRef(0);         // from scroll events: reading scrollTop directly forces the browser to re-lay-out the whole board          // the ticket at the top of the visible board and how far down it sits
   const audioUnlockedRef = useRef(false);
   const metaLoadedRef = useRef(false);      // categories / menu / tenant have been loaded at least once
   useEffect(() => { ordersRef.current = orders; }, [orders]);
@@ -764,6 +808,9 @@ const KitchenViewInner = () => {
     speechEngine.say(text, { repeat: opts.force ? 1 : p.repeat, rate: p.rate, interrupt: !!opts.interrupt, volume: p.volume, voiceName: p.voiceName });
   };
   const speakTicket = order => announce(buildTicketSpeech(order, { replay: true }), { force: true, interrupt: true });
+  const speakTicketRef = useRef(speakTicket);
+  useEffect(() => { speakTicketRef.current = speakTicket; });
+  const onSpeakStable = useCallback(o => speakTicketRef.current(o), []);
 
   const pushToast = t => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -790,40 +837,61 @@ const KitchenViewInner = () => {
     later(() => announce(buildTicketSpeech(order)), ring ? (agg ? 1600 : 1100) : 0);
   };
 
-  const fetchHealth = async () => {
-    try {
-      const r = await axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`, { timeout: 12000 });
-      setKitchenHealth(r.data);
-    } catch { /* optional panel */ }
-    try {
-      const s = await axios.get(`${BASE_URL}/admin/kds/today-summary/${tenantId}`, { timeout: 12000 });
-      if (s.data && Number.isFinite(Number(s.data.count))) setServerKdsToday(s.data);
-    } catch { /* falls back to the local counters */ }
+  /* ── data loading ──
+     • one download at a time: a request that arrives while another is running is merged into ONE follow-up (a burst of socket events, a
+       reconnect and a wake-up used to start three identical downloads together)
+     • tickets appear as soon as the order list (and the tiny restaurant record) arrive; the big menu / category lists load beside it
+     • kitchen health and today's totals are asked for at most every 30 s / 60 s, not after every single refresh
+     • a refresh whose data is identical to what is on screen changes nothing (no re-render) */
+  const fetchHealth = ({ summary = false } = {}) => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const now = Date.now();
+    const last = healthAtRef.current;
+    const signal = abortRef.current?.signal;
+    if (now - last.health > 30000) {
+      last.health = now;
+      axios.get(`${BASE_URL}/admin/analytics/kitchen-health/${tenantId}`, { timeout: 12000, signal })
+        .then(r => setKitchenHealth(prev => (prev && JSON.stringify(prev) === JSON.stringify(r.data)) ? prev : r.data))
+        .catch(() => { /* optional panel */ });
+    }
+    if (summary || now - last.summary > 60000) {
+      last.summary = now;
+      axios.get(`${BASE_URL}/admin/kds/today-summary/${tenantId}`, { timeout: 12000, signal })
+        .then(s => { if (s.data && Number.isFinite(Number(s.data.count))) setServerKdsToday(prev => (prev && prev.count === s.data.count && prev.avgSeconds === s.data.avgSeconds) ? prev : s.data); })
+        .catch(() => { /* falls back to the local counters */ });
+    }
   };
 
-  const fetchActiveOrders = async (opts) => {
-    // ordersOnly: socket-triggered refreshes don't need categories/menu/tenant again (the menu is kept live by socket events).
-    const ordersOnly = !!(opts && opts.ordersOnly === true);
-    // Several refreshes can overlap (socket events, reconnect, the 86 button). A slow older response used to land last and
-    // overwrite newer data, bringing back tickets that had already been dispatched.
-    const seq = ++fetchSeqRef.current;
+  const loadMeta = () => {
+    if (metaLoadingRef.current) return;
+    metaLoadingRef.current = true;
+    const signal = abortRef.current?.signal;
+    Promise.all([
+      axios.get(`${BASE_URL}/categories/${tenantId}`, { timeout: 8000, signal }),
+      axios.get(`${BASE_URL}/menu/${tenantId}`, { timeout: 8000, signal }),
+    ]).then(([cat, menu]) => { setCategories(cat.data || []); setMenuItems(menu.data || []); metaLoadedRef.current = true; })
+      .catch(() => { /* tried again on the next full refresh */ })
+      .finally(() => { metaLoadingRef.current = false; });
+  };
+
+  const runFetch = async full => {
+    const signal = abortRef.current?.signal;
     try {
-      const [ordersRes, catRes, menuRes, tenantRes] = await Promise.all([
-        axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`, { timeout: 15000 }), // a request that never answers used to freeze the whole board on its skeleton forever
-        ordersOnly ? null : axios.get(`${BASE_URL}/categories/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: [] })),
-        ordersOnly ? null : axios.get(`${BASE_URL}/menu/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: [] })),
-        ordersOnly ? null : axios.get(`${BASE_URL}/tenant/${tenantId}`, { timeout: 8000 }).catch(() => ({ data: null })),
+      const [ordersRes, tenantRes] = await Promise.all([
+        axios.get(`${BASE_URL}/admin/orders/${tenantId}/kitchen`, { timeout: 15000, signal }), // a request that never answers used to freeze the whole board on its skeleton forever
+        full ? axios.get(`${BASE_URL}/tenant/${tenantId}`, { timeout: 8000, signal }).catch(() => ({ data: null })) : null,
       ]);
-      if (seq !== fetchSeqRef.current) return; // a newer refresh has been started: drop this stale answer
       lastFetchAtRef.current = Date.now();
       const incoming = [...(ordersRes.data || [])]
         .filter(o => !dispatchedRef.current.has(String(o._id)))
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        .sort((a, b) => createdMs(b) - createdMs(a));
+      const incomingIds = new Set(incoming.map(o => String(o._id)));
 
       // Tickets this screen has never shown (the socket was down, or the tablet was asleep) are announced like any other.
       const firstLoad = !initialLoadRef.current;
       const unseen = incoming.filter(o => !seenIdsRef.current.has(String(o._id)));
-      incoming.forEach(o => seenIdsRef.current.add(String(o._id)));
+      incomingIds.forEach(id => seenIdsRef.current.add(id));
+      if (seenIdsRef.current.size > 1500) seenIdsRef.current = new Set(incomingIds); // a long shift must not grow this forever
       initialLoadRef.current = true;
       if (!firstLoad) {
         unseen
@@ -832,41 +900,66 @@ const KitchenViewInner = () => {
       }
 
       // A socket ticket that is newer than this response's snapshot would vanish for a moment: keep it (max 20 s) until the server lists it.
-      const incomingIds = new Set(incoming.map(o => String(o._id)));
       const nowMs = Date.now();
       const kept = [];
       recentSocketRef.current.forEach((v, id) => {
         if (nowMs - v.ts > 20000) { recentSocketRef.current.delete(id); return; }
         if (!incomingIds.has(id) && !dispatchedRef.current.has(id)) kept.push(v.order);
       });
-      setBoardState('ready'); setBoardError(''); setLastLoadedAt(Date.now());
       const nextOrders = kept.length ? [...kept, ...incoming].sort((a, b) => createdMs(b) - createdMs(a)) : incoming;
-      setOrders(nextOrders);
+      setBoardState('ready'); setBoardError(''); setLastLoadedAt(Date.now());
+      setOrders(prev => reuseOrders(prev, nextOrders));
       setModInfo(prev => { const live = new Set(nextOrders.map(o => String(o._id))); const dead = Object.keys(prev).filter(k => !live.has(k)); if (!dead.length) return prev; const n = { ...prev }; dead.forEach(k => delete n[k]); return n; });
-      if (!ordersOnly) metaLoadedRef.current = true;
-      if (catRes) setCategories(catRes.data || []);
-      if (menuRes) setMenuItems(menuRes.data || []);
       if (tenantRes?.data?.name) setTenantName(tenantRes.data.name);
       if (tenantRes?.data?.config?.onlyVeg !== undefined) setTenantOnlyVeg(tenantRes.data.config.onlyVeg);
-      const hydrationMap = {};
-      incoming.forEach(o => o.items?.forEach((item, idx) => {
-        // Rehydrate from the persisted server state, not only the old local flag.
-        // Otherwise a reload/device switch makes completed dishes look unfinished.
-        if (item.isCrossedLocal || item.kdsCompletedAt) hydrationMap[`${o._id}-${idx}`] = true;
-      }));
+
+      // Rehydrate the ticked dishes from the persisted server state, not only the old local flag.
+      // Otherwise a reload/device switch makes completed dishes look unfinished.
+      const hydration = {};
+      incoming.forEach(o => (o.items || []).forEach((item, idx) => { if (item.isCrossedLocal || item.kdsCompletedAt) (hydration[String(o._id)] ||= {})[idx] = true; }));
       setCheckedItemsGlobal(prev => {
         // Keep the local value of any dish whose save is still in flight; the server does not know about it yet.
-        const merged = { ...hydrationMap };
-        pendingToggleKeys.forEach(k => { if (k in prev) merged[k] = prev[k]; else delete merged[k]; });
-        return merged;
+        pendingToggles.forEach(({ o, i }) => {
+          if (!incomingIds.has(o)) return;
+          if (prev[o] && prev[o][i]) (hydration[o] ||= {})[i] = true; else if (hydration[o]) delete hydration[o][i];
+        });
+        const out = {};
+        let changed = false;
+        Object.keys(hydration).forEach(id => {
+          if (!Object.keys(hydration[id]).length) return;
+          if (prev[id] && sameKeys(prev[id], hydration[id])) out[id] = prev[id]; else { out[id] = hydration[id]; changed = true; }
+        });
+        return (!changed && Object.keys(out).length === Object.keys(prev).length) ? prev : out;
       });
+      if (full || !metaLoadedRef.current) loadMeta();
       fetchHealth();
     } catch (err) {
+      if (err && (err.name === 'CanceledError' || err.code === 'ERR_CANCELED')) return; // the screen was closed / switched while loading
       console.error('KDS fetch:', err.message);
       const r = err && err.response;
       setBoardError(r ? `Server answered ${r.status}${r.data && r.data.code ? ` (${r.data.code})` : ''}${r.data && r.data.error ? `: ${String(r.data.error).slice(0, 140)}` : ''}` : (err && err.message) || 'No response from the server');
       setBoardState(prev => prev === 'ready' ? prev : 'error');
     }
+  };
+
+  const fetchActiveOrders = opts => {
+    // ordersOnly: socket-triggered refreshes don't need the restaurant record again (the menu is kept live by socket events).
+    const full = !(opts && opts.ordersOnly === true);
+    if (inflightRef.current) {
+      queuedRef.current = { full: full || !!(queuedRef.current && queuedRef.current.full) };
+      return inflightRef.current;
+    }
+    const run = (async () => {
+      try { await runFetch(full); }
+      finally {
+        inflightRef.current = null;
+        const q = queuedRef.current;
+        queuedRef.current = null;
+        if (q) fetchActiveOrders({ ordersOnly: !q.full });
+      }
+    })();
+    inflightRef.current = run;
+    return run;
   };
 
   const retryBoardLoad = () => { setBoardState('loading'); fetchActiveOrders(); };
@@ -876,6 +969,8 @@ const KitchenViewInner = () => {
   useEffect(() => {
     if (!tenantId) { setBoardState('error'); return undefined; }
     seenIdsRef.current = new Set();
+    abortRef.current = new AbortController();
+    healthAtRef.current = { health: 0, summary: 0 };
     initialLoadRef.current = false;
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     // Blocked/throwing storage used to abort this whole effect, so the socket never connected and the KDS stayed empty.
@@ -953,11 +1048,7 @@ const KitchenViewInner = () => {
         const items = (o.items || []).map((it, i) => i === itemIndex ? { ...it, ...itemPatch } : it);
         return { ...o, items, ...(data.orderTiming || {}) };
       }));
-      const key = `${data.orderId}-${itemIndex}`;
-      setCheckedItemsGlobal(prev => ({ ...prev, [key]: !!itemPatch.kdsCompletedAt || !!itemPatch.isCrossedLocal }));
-      if (itemPatch.kdsPrepTimeSeconds != null) {
-        setItemFinalTimes(prev => ({ ...prev, [`${data.orderId}-${itemIndex}`]: Number(itemPatch.kdsPrepTimeSeconds) }));
-      }
+      setChecked(data.orderId, itemIndex, !!itemPatch.kdsCompletedAt || !!itemPatch.isCrossedLocal);
     });
 
     socket.on('order_modification_detected', data => {
@@ -969,9 +1060,6 @@ const KitchenViewInner = () => {
       if (orderId) {
         if (!modIsEmpty(mod)) setModInfo(prev => ({ ...prev, [orderId]: mergeModification(prev[orderId], mod) }));
         markFresh(orderId); // the ticket glows so the cook finds it
-        // Per-dish timers belong to the old line items: restart them for the changed ticket.
-        const prefix = `${orderId}-`;
-        setItemFinalTimes(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(prefix))));
       }
       const summary = modIsEmpty(mod) ? (data.modificationNote ? String(data.modificationNote) : 'Order changed') : modSummary(mod);
       const known = orderId ? ordersRef.current.find(o => String(o._id) === orderId) : null;
@@ -1044,6 +1132,7 @@ const KitchenViewInner = () => {
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(safetyPoll);
       clearTimeout(reconcileRef.current);
+      abortRef.current?.abort(); // stop downloads that nobody is waiting for any more
       ['new_order', 'kds_item_cross_sync', 'kds_item_timing_updated', 'order_modification_detected', 'order_status_updated', 'order_voided', 'menu_updated', 'menu_item_deleted', 'menu_item_restored', 'menu_bulk_updated']
         .forEach(ev => socket.off(ev));
       socket.off('connect', joinRestaurant);
@@ -1066,6 +1155,8 @@ const KitchenViewInner = () => {
     }));
   }, []);
 
+  const markAsReadyRef = useRef(null);
+  const onReadyStable = useCallback(id => markAsReadyRef.current && markAsReadyRef.current(id), []);   // same function every render, so tickets don't re-render because of it
   const markAsReady = async orderId => {
     if (processingOrderIds.has(orderId)) return; // block a double-tap while the request is in flight
     const order = orders.find(o => o._id === orderId);
@@ -1087,7 +1178,7 @@ const KitchenViewInner = () => {
       const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
       later(() => dispatchedRef.current.delete(idKey), 90000);
       try { localStorage.removeItem(`kds_note_${orderId}`); } catch { /* ignore */ } // the private ticket note is no longer needed
-      fetchHealth(); // refresh the database-backed dispatched/avg figures
+      fetchHealth({ summary: true }); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
       if (Number.isFinite(authoritativeSeconds) && authoritativeSeconds >= 0) {
         // localStorage can throw (private mode / quota). Inside a state updater that crashed the screen, and in this try it
@@ -1108,6 +1199,8 @@ const KitchenViewInner = () => {
       setProcessingOrderIds(prev => { const next = new Set(prev); next.delete(orderId); return next; });
     }
   };
+
+  useEffect(() => { markAsReadyRef.current = markAsReady; });
 
   const handleRecall = async () => {
     if (!recallQueue.length) return;
@@ -1136,7 +1229,7 @@ const KitchenViewInner = () => {
     // The average is total/count, so the recalled ticket's time has to leave the total together with its count.
     const counted = Number(recalled._kdsCountedSeconds);
     if (Number.isFinite(counted) && counted > 0) setTotalProcessingTime(prev => { const n = Math.max(0, prev - counted); try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch { /* ignore */ } return n; });
-    fetchHealth(); // the database-backed dispatched / average figures still counted the recalled ticket
+    fetchHealth({ summary: true }); // the database-backed dispatched / average figures still counted the recalled ticket
   };
 
   const trigger86 = (categoryKey, categoryName) => {
@@ -1156,9 +1249,10 @@ const KitchenViewInner = () => {
         outOfStockAt: new Date().toISOString(),
         outOfStockBy: 'Kitchen',
       });
+      // the menu list is patched in place (the live menu events do the same for other screens): no need to download it all again
+      setMenuItems(prev => prev.map(m => m._id === selectedDish86._id ? { ...m, isAvailable: false, outOfStockReason: selectedReason86 } : m));
       setEightySixModal(null);
       setSelectedDish86(null);
-      fetchActiveOrders();
     } catch { alert('Could not update item.'); }
     finally { confirm86Busy.current = false; }
   };
@@ -1217,7 +1311,7 @@ const KitchenViewInner = () => {
         if (!fId) return;
         const isVeg = item.isVeg !== undefined ? item.isVeg !== false : dishToVegMap[item.name?.toLowerCase().trim()] !== false;
         const matches = isNonVegMode ? !isVeg : isVeg;
-        if (matches && !checkedItemsGlobal[`${order._id}-${idx}`]) counts[fId] = (counts[fId] || 0) + (Number(item.quantity) || 1);
+        if (matches && !(checkedItemsGlobal[order._id] && checkedItemsGlobal[order._id][idx])) counts[fId] = (counts[fId] || 0) + (Number(item.quantity) || 1);
       });
     });
     return counts;
@@ -1261,12 +1355,13 @@ const KitchenViewInner = () => {
 
   const aggregatedTotals = useMemo(() => {
     const totals = {};
+    if (!isAggregateView) return totals; // only the batch-summary screen needs this
     // Built from filteredOrders + the card's own visibility rule: it used every order and every dish, so the totals disagreed
     // with the "N tickets" label beside them and with the dishes actually shown on the cards.
     const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
     filteredOrders.forEach(o => (o.items || []).forEach((i, idx) => {
       if (!isDishVisible(i, vis)) return;
-      if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
+      if (checkedItemsGlobal[o._id] && checkedItemsGlobal[o._id][idx]) return;
       const otype = getOrderType(o);
       const kind = otype === 'parcel' ? 'P' : (otype === 'swiggy' || otype === 'zomato') ? 'S' : 'D';
       const portion = (i.portion && String(i.portion).toLowerCase() !== 'single') ? ` (${i.portion})` : '';
@@ -1274,14 +1369,14 @@ const KitchenViewInner = () => {
       totals[key] = (totals[key] || 0) + (Number(i.quantity) || 1);
     }));
     return totals;
-  }, [filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
+  }, [isAggregateView, filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
 
   const masterPrepMarqueeList = useMemo(() => {
     const m = {};
     const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
     filteredOrders.forEach(o => (o.items || []).forEach((i, idx) => {
       if (!isDishVisible(i, vis)) return;
-      if (checkedItemsGlobal[`${o._id}-${idx}`]) return;
+      if (checkedItemsGlobal[o._id] && checkedItemsGlobal[o._id][idx]) return;
       m[i.name] = (m[i.name] || 0) + (Number(i.quantity) || 1);
     }));
     return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8);
@@ -1374,17 +1469,14 @@ const KitchenViewInner = () => {
       const late = new Set();
       const fresh = [];
       const live = new Set();
-      let oldest = 0;
       ordersRef.current.forEach(o => {
         if (!(o.items || []).some(isKitchenItem)) return;
         const id = String(o._id);
         live.add(id);
         const age = Math.max(0, (now - createdMs(o)) / 1000);
-        if (age > oldest) oldest = age;
         if (age >= lateSec) { late.add(id); if (!alertedLateRef.current.has(id)) { alertedLateRef.current.add(id); fresh.push(o); } }
       });
       alertedLateRef.current.forEach(id => { if (!live.has(id)) alertedLateRef.current.delete(id); });
-      setOldestWait(Math.floor(oldest));
       setLateIds(prev => (prev.size === late.size && [...late].every(x => prev.has(x))) ? prev : late);
       if (!initialLoadRef.current) return;
       if (!lateSeededRef.current) { lateSeededRef.current = true; return; }
@@ -1448,6 +1540,7 @@ const KitchenViewInner = () => {
   useLayoutEffect(() => {
     const g = gridRef.current;
     const a = anchorRef.current;
+    if (scrollTopRef.current <= 0) { anchorRef.current = null; return; }   // at the top there is nothing to hold steady: no layout reads at all
     if (g && a && g.scrollTop > 0) {
       const el = Array.from(g.querySelectorAll('[data-oid]')).find(c => c.getAttribute('data-oid') === a.id);
       if (el && el.style.position !== 'absolute') {
@@ -1486,8 +1579,9 @@ const KitchenViewInner = () => {
   const gridCol = Math.round((isSmallTablet ? 250 : 262) * zoom);
   const cardProps = {
     warnSec: display.warnSec, lateSec: display.lateSec,
-    onReady: markAsReady, dishToCategoryMap, dishToVegMap, selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
-    socketRef, isNonVegMode, tenantOnlyVeg, itemFinalTimes, setItemFinalTimes, onItemSynced: mergeServerItem, onSpeak: speakTicket,
+    onReady: onReadyStable, dishToCategoryMap, dishToVegMap, selectedCategory, setChecked,
+    socketRef, isNonVegMode, tenantOnlyVeg, onItemSynced: mergeServerItem, onSpeak: onSpeakStable,
+    layoutAnim: filteredOrders.length <= LAYOUT_ANIM_MAX,
   };
 
   /* ─── SECTIONS RAIL (permanent on wide screens, drawer on phones / small tablets) ─── */
@@ -1576,7 +1670,7 @@ const KitchenViewInner = () => {
   };
 
   const renderToast = (t, compact = false) => (
-    <Motion.div key={t.id} layout initial={{ opacity: 0, y: compact ? 8 : -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+    <Motion.div key={t.id} initial={{ opacity: 0, y: compact ? 8 : -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       className={`kx-toast${compact ? ' compact' : ''}${t.kind === 'cancel' || t.kind === 'late' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
       <div className="ic">{t.kind === 'late' ? <Siren size={15} /> : t.kind === 'cancel' ? <AlertTriangle size={15} /> : <BellRing size={16} color="#d3bfa2" />}</div>
@@ -1652,7 +1746,7 @@ const KitchenViewInner = () => {
           {isMobile && (
             <div className={`kx-stat${pendingCount > 0 ? ' hot' : ''}`} style={{ minWidth: 56, padding: '5px 9px' }} title={isOnline ? 'Live' : 'Reconnecting'}>
               <b style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <i className="kx-dot" style={isOnline ? undefined : { background: '#e29a58', animation: 'none' }} />{pad2(pendingCount)}
+                <i className={`kx-dot${isOnline ? '' : ' off'}`} />{pad2(pendingCount)}
               </b>
             </div>
           )}
@@ -1826,7 +1920,7 @@ const KitchenViewInner = () => {
                 <div className="kx-mt"><span>Avg clear time</span><b className="sm">{avgClearTime}</b><small>per ticket</small></div>
                 <div className="kx-mt"><span>Currently pending</span><b>{pendingCount}</b><small>active tickets</small></div>
                 <div className="kx-mt"><span>Late now</span><b style={lateIds.size ? { color: '#e29a58' } : undefined}>{lateIds.size}</b><small>over {Math.round(display.lateSec / 60)} min</small></div>
-                <div className="kx-mt"><span>Longest wait</span><b className="sm">{pendingCount ? fmt(oldestWait) : '—'}</b><small>oldest ticket</small></div>
+                <div className="kx-mt"><span>Longest wait</span><OldestWait ordersRef={ordersRef} /><small>oldest ticket</small></div>
               </div>
               <button type="button" className="kx-btn" onClick={() => setShowMetricsDashboard(false)}><ChevronLeft size={15} /> Back to kitchen</button>
             </Motion.div>
@@ -1881,7 +1975,7 @@ const KitchenViewInner = () => {
                 <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }} {...swipeHandlers}>
                   <AnimatePresence mode="wait">
                     <Motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} style={{ height: '100%' }}>
-                      {filteredOrders[safeCardIndex] && <KDSOrderCard order={filteredOrders[safeCardIndex]} modInfo={modInfo[String(filteredOrders[safeCardIndex]._id)]} fresh={freshIds.has(String(filteredOrders[safeCardIndex]._id))} fill isMobile {...cardProps} />}
+                      {filteredOrders[safeCardIndex] && <KDSOrderCard order={filteredOrders[safeCardIndex]} modInfo={modInfo[String(filteredOrders[safeCardIndex]._id)]} checked={checkedItemsGlobal[String(filteredOrders[safeCardIndex]._id)]} fresh={freshIds.has(String(filteredOrders[safeCardIndex]._id))} fill isMobile {...cardProps} />}
                     </Motion.div>
                   </AnimatePresence>
                 </div>
@@ -1896,11 +1990,11 @@ const KitchenViewInner = () => {
 
           {/* TABLET / DESKTOP — ticket wall */}
           {!showMetricsDashboard && !isAggregateView && !useCardView && (
-            <div className="kx-grid no-scrollbar" ref={gridRef} onScroll={captureAnchor} style={{ '--kx-col': `${gridCol}px`, '--kx-zoom': zoom }}>
+            <div className="kx-grid no-scrollbar" ref={gridRef} onScroll={e => { scrollTopRef.current = e.currentTarget.scrollTop; captureAnchor(); }} style={{ '--kx-col': `${gridCol}px`, '--kx-zoom': zoom }}>
               {boardState === 'loading' && orders.length === 0 && Array.from({ length: isTablet ? 4 : 6 }, (_, i) => <KdsCardSkeleton key={`sk-${i}`} index={i} />)}
               {boardState === 'error' && orders.length === 0 && <div style={{ gridColumn: '1/-1', display: 'flex' }}><KdsLoadError onRetry={retryBoardLoad} detail={boardError} /></div>}
               <AnimatePresence mode="popLayout">
-                {filteredOrders.map(order => <KDSOrderCard key={order._id} order={order} modInfo={modInfo[String(order._id)]} fresh={freshIds.has(String(order._id))} isMobile={false} {...cardProps} />)}
+                {filteredOrders.map(order => <KDSOrderCard key={order._id} order={order} modInfo={modInfo[String(order._id)]} checked={checkedItemsGlobal[String(order._id)]} fresh={freshIds.has(String(order._id))} isMobile={false} {...cardProps} />)}
               </AnimatePresence>
               {boardState === 'ready' && filteredOrders.length === 0 && (
                 <div className="kx-center">
@@ -2145,26 +2239,106 @@ const KitchenViewInner = () => {
 };
 
 /* ═══════════════════════════════════════════════════════════════════
+   LIVE TIMERS — one shared 1-second clock for the whole screen
+   Every ticket used to run two intervals and re-render itself (and its whole dish list) every second. Now the clock ticks once, and
+   only the few characters that show a time are rewritten, straight in the DOM. A ticket re-renders only when its own data changes.
+═══════════════════════════════════════════════════════════════════ */
+const kxClock = {
+  subs: new Set(),
+  timer: null,
+  subscribe(fn) {
+    this.subs.add(fn);
+    if (!this.timer) this.timer = setInterval(() => { const now = Date.now(); this.subs.forEach(f => f(now)); }, 1000);
+    return () => { this.subs.delete(fn); if (!this.subs.size) { clearInterval(this.timer); this.timer = null; } };
+  },
+};
+const subscribeClockStore = cb => kxClock.subscribe(() => cb());
+const RING_C = 2 * Math.PI * 19;
+
+// delayed / overdue state of a ticket: re-renders the ticket only at the moment the state CHANGES, not every second
+const useUrgency = (startMs, warnSec, lateSec) => useSyncExternalStore(subscribeClockStore, () => {
+  const s = (Date.now() - startMs) / 1000;
+  return s >= lateSec ? 'high' : s >= warnSec ? 'med' : 'low';
+});
+
+const AgeRing = React.memo(function AgeRing({ startMs, lateSec, urgency, ringColor }) {
+  const txt = useRef(null);
+  const arc = useRef(null);
+  useLayoutEffect(() => {
+    const paint = now => {
+      const s = Math.max(0, Math.floor((now - startMs) / 1000));
+      if (txt.current) { txt.current.textContent = fmt(s); txt.current.style.fontSize = s >= 3600 ? '.54rem' : ''; }
+      if (arc.current) arc.current.setAttribute('stroke-dasharray', `${Math.min(1, s / lateSec) * RING_C} ${RING_C}`);
+    };
+    paint(Date.now());
+    return kxClock.subscribe(paint);
+  }, [startMs, lateSec]);
+  return (
+    <div className={`kx-time ${urgency}`} role="timer" aria-label="Ticket age">
+      <svg viewBox="0 0 44 44" width="50" height="50" aria-hidden="true">
+        <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3.5" />
+        <circle ref={arc} cx="22" cy="22" r="19" fill="none" stroke={ringColor} strokeWidth="3.5" strokeLinecap="round" />
+      </svg>
+      <span className="tv" ref={txt} />
+    </div>
+  );
+});
+
+// the little "0:42" under a dish; turns into a SLOW warning after 5 minutes
+const ItemTimer = React.memo(function ItemTimer({ startMs }) {
+  const root = useRef(null);
+  const txt = useRef(null);
+  useLayoutEffect(() => {
+    const paint = now => {
+      const s = Math.max(0, Math.floor((now - startMs) / 1000));
+      if (txt.current) txt.current.textContent = fmt(s);
+      if (root.current) root.current.classList.toggle('slow', s >= 300);
+    };
+    paint(Date.now());
+    return kxClock.subscribe(paint);
+  }, [startMs]);
+  return (
+    <span className="kx-tm" ref={root}>
+      <Timer size={10} /><span ref={txt} />
+    </span>
+  );
+});
+
+// "Longest wait" tile of the metrics screen
+const OldestWait = ({ ordersRef }) => {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const paint = now => {
+      let oldest = 0;
+      ordersRef.current.forEach(o => { if ((o.items || []).some(isKitchenItem)) { const a = (now - createdMs(o)) / 1000; if (a > oldest) oldest = a; } });
+      if (ref.current) ref.current.textContent = oldest > 0 ? fmt(oldest) : '—';
+    };
+    paint(Date.now());
+    return kxClock.subscribe(paint);
+  }, [ordersRef]);
+  return <b className="sm" ref={ref} />;
+};
+
+/* ═══════════════════════════════════════════════════════════════════
    TICKET CARD
 ═══════════════════════════════════════════════════════════════════ */
 // forwardRef: <AnimatePresence mode="popLayout"> hands every child a ref to measure it. A plain function component cannot take one
 // ("Function components cannot be given refs"), so an exiting ticket could not be measured and the grid jumped when a ticket was dispatched.
-const KDSOrderCard = React.forwardRef(({
-  order, onReady, fresh, fill, modInfo, warnSec = 450, lateSec = 900,
+// React.memo: every prop is stable (ids, primitives, per-ticket slices), so a ticket re-renders only when ITS data changes.
+const KDSOrderCard = React.memo(React.forwardRef(({
+  order, onReady, fresh, fill, modInfo, warnSec = 450, lateSec = 900, layoutAnim = true,
   dishToCategoryMap, dishToVegMap,
-  selectedCategory, checkedItemsGlobal, setCheckedItemsGlobal,
+  selectedCategory, checked, setChecked,
   socketRef, isNonVegMode, tenantOnlyVeg, isMobile,
-  itemFinalTimes, setItemFinalTimes, onItemSynced, onSpeak,
+  onItemSynced, onSpeak,
 }, ref) => {
   // KDSOrderCard is defined outside KitchenView, so the route's tenantId is not in scope here.
   const tenantId = order.tenantId;
   const otype = getOrderType(order);
   const isAggOrder = otype === 'swiggy' || otype === 'zomato';
   const isParcelOrder = otype === 'parcel';
+  const isChecked = idx => !!(checked && checked[idx]);
 
-  const [seconds, setSeconds] = useState(0);
-  const [itemStartTimes, setItemStartTimes] = useState({});
-  const [itemElapsed, setItemElapsed] = useState({});
   const [showNote, setShowNote] = useState(false);
   // The server has no field for kitchen notes, so this stays on this device. It used to vanish on every refresh / reconnect;
   // keep it per ticket in localStorage (blocked storage just means it is not remembered).
@@ -2172,54 +2346,12 @@ const KDSOrderCard = React.forwardRef(({
   const [localNote, setLocalNoteState] = useState(() => { try { return localStorage.getItem(`kds_note_${order._id}`) || ''; } catch { return ''; } });
   const setLocalNote = v => { setLocalNoteState(v); try { if (v) localStorage.setItem(noteKey, v); else localStorage.removeItem(noteKey); } catch { /* ignore */ } };
 
-  /* The customer replaced the dishes: per-dish local timers are keyed by line index and would now point at different dishes */
-  useEffect(() => {
-    setItemStartTimes({});
-    setItemElapsed({});
-  }, [order.modifiedAt]);
-
-  /* live second counter */
-  useEffect(() => {
-    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - new Date(order.createdAt)) / 1000) || 0)); // NaN when createdAt is missing/invalid
-    tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-  }, [order.createdAt]);
-
-  /* Server-authoritative item timers. The browser only renders elapsed time. */
-  useEffect(() => {
-    const starts = {};
-    const finals = {};
-    (order.items || []).forEach((item, idx) => {
-      if (!isKitchenItem(item)) return;
-      const start = item.kdsStartedAt || order.kdsStartedAt || order.createdAt;
-      if (start && !item.kdsCompletedAt && !item.isCrossedLocal) starts[idx] = new Date(start).getTime();
-      if (item.kdsPrepTimeSeconds != null) finals[`${order._id}-${idx}`] = Number(item.kdsPrepTimeSeconds);
-    });
-    setItemStartTimes(starts);
-    setItemFinalTimes(prev => ({ ...prev, ...finals }));
-  }, [order._id, order.items, order.kdsStartedAt, order.createdAt, setItemFinalTimes]);
-
-  /* item-level cook timers */
-  useEffect(() => {
-    if (Object.keys(itemStartTimes).length === 0) { setItemElapsed(prev => (Object.keys(prev).length ? {} : prev)); return undefined; }
-    const t = setInterval(() => {
-      setItemElapsed(() => {
-        const u = {};
-        Object.entries(itemStartTimes).forEach(([idx, startMs]) => {
-          u[idx] = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-        });
-        return u;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [itemStartTimes]);
-
-  const urgency = seconds >= lateSec ? 'high' : seconds >= warnSec ? 'med' : 'low';
+  const createdAtMs = useMemo(() => new Date(order.createdAt).getTime() || Date.now(), [order.createdAt]); // NaN when createdAt is missing/invalid
+  const urgency = useUrgency(createdAtMs, warnSec, lateSec);
   const ringColor = urgency === 'high' ? '#e29a58' : urgency === 'med' ? '#d3bfa2' : '#8a704d';
 
   const kitchenItems = (order.items || []).filter(isKitchenItem);
-  const checkedCount = (order.items || []).reduce((n, it, idx) => (isKitchenItem(it) && checkedItemsGlobal[`${order._id}-${idx}`]) ? n + 1 : n, 0);
+  const checkedCount = (order.items || []).reduce((n, it, idx) => (isKitchenItem(it) && isChecked(idx)) ? n + 1 : n, 0);
   const totalItems = kitchenItems.length;
   const progressPct = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
   const allDone = progressPct === 100 && totalItems > 0;
@@ -2227,12 +2359,10 @@ const KDSOrderCard = React.forwardRef(({
   const toggleItemCrossed = async idx => {
     const key = `${order._id}-${idx}`;
     // A second tap while the first save is in flight carried the same (now stale) version: guaranteed 409 and a flicker.
-    if (pendingToggleKeys.has(key)) return;
-    const next = !checkedItemsGlobal[key];
-    pendingToggleKeys.add(key);
-    const startMs = itemStartTimes[idx] || new Date(order.items?.[idx]?.kdsStartedAt || order.kdsStartedAt || order.createdAt).getTime();
-    setItemStartTimes(prev => ({ ...prev, [idx]: startMs }));
-    setCheckedItemsGlobal(prev => ({ ...prev, [key]: next }));
+    if (pendingToggles.has(key)) return;
+    const next = !isChecked(idx);
+    pendingToggles.set(key, { o: String(order._id), i: idx });
+    setChecked(order._id, idx, next);
     socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: next });
     try {
       const currentItem = order.items?.[idx] || {};
@@ -2240,58 +2370,22 @@ const KDSOrderCard = React.forwardRef(({
         itemIndex: idx, completed: next, tenantId,
         timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0,
       });
+      // the server's copy of the dish (timing version, prep seconds) replaces ours
       onItemSynced?.(order._id, idx, r.data?.item, r.data?.order ? { prepTimeSeconds: r.data.order.prepTimeSeconds, prepTimeMinutes: r.data.order.prepTimeMinutes } : null);
-      if (next && r.data?.item?.kdsPrepTimeSeconds != null) {
-        setItemFinalTimes(prev => ({ ...prev, [`${order._id}-${idx}`]: Number(r.data.item.kdsPrepTimeSeconds) }));
-        setItemStartTimes(prev => ({ ...prev, [idx]: new Date(r.data.item.kdsStartedAt || startMs).getTime() }));
-      }
     } catch (err) {
       const authoritative = err?.response?.data?.item;
       if (err?.response?.status === 409 && authoritative) {
         onItemSynced?.(order._id, idx, authoritative, null);
-        setCheckedItemsGlobal(prev => ({ ...prev, [key]: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal }));
-        if (authoritative.kdsPrepTimeSeconds != null) {
-          setItemFinalTimes(prev => ({ ...prev, [key]: Number(authoritative.kdsPrepTimeSeconds) }));
-        }
-        setItemStartTimes(prev => ({ ...prev, [idx]: authoritative.kdsStartedAt ? new Date(authoritative.kdsStartedAt).getTime() : startMs }));
+        const serverState = !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal;
+        setChecked(order._id, idx, serverState);
         // Other screens were told `next` before the save; tell them what the server really holds.
-        socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !!authoritative.kdsCompletedAt || !!authoritative.isCrossedLocal });
+        socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: serverState });
       } else {
-        setCheckedItemsGlobal(prev => ({ ...prev, [key]: !next }));
+        setChecked(order._id, idx, !next);
         socketRef?.current?.emit('kds_item_cross_sync', { orderId: order._id, tenantId: order.tenantId, idx, newState: !next });
       }
       console.error('KDS item timing save failed:', err?.message || err);
-    } finally { pendingToggleKeys.delete(key); }
-  };
-
-  // Touch long-press: iOS/iPadOS never fires `contextmenu` on a long-press, so the cook timer could not be started on an iPad.
-  const lpTimerRef = useRef(null);
-  const lpFiredRef = useRef(false);
-  const lastStartRef = useRef({});
-  useEffect(() => () => clearTimeout(lpTimerRef.current), []);
-  const startItemTimer = async (idx, e) => {
-    e?.preventDefault?.();
-    const key = `${order._id}-${idx}`;
-    if (itemStartTimes[idx] || checkedItemsGlobal[key]) return;
-    // Long-press and contextmenu can both fire for one gesture on Android, and state has not updated between them.
-    if (lastStartRef.current[key] && Date.now() - lastStartRef.current[key] < 1500) return;
-    lastStartRef.current[key] = Date.now();
-    // Persist the actual cook-start moment. The local clock remains immediate
-    // feedback, while the server becomes the source of truth for analytics.
-    const now = Date.now();
-    setItemStartTimes(p => ({ ...p, [idx]: now }));
-    try {
-      const currentItem = order.items?.[idx] || {};
-      const sr = await axios.patch(`${BASE_URL}/admin/orders/${order._id}/kds-item`, {
-        itemIndex: idx, action: 'start', tenantId,
-        timingVersion: Number.isInteger(Number(currentItem.kdsTimingVersion)) ? Number(currentItem.kdsTimingVersion) : 0,
-      });
-      onItemSynced?.(order._id, idx, sr.data?.item, null);
-    } catch (err) {
-      if (err?.response?.status === 409 && err.response.data?.item) onItemSynced?.(order._id, idx, err.response.data.item, null);
-      setItemStartTimes(p => { const n = { ...p }; delete n[idx]; return n; });
-      console.error('KDS item start save failed:', err?.message || err);
-    }
+    } finally { pendingToggles.delete(key); }
   };
 
   // Which dishes did the customer change? The server flags them (item.modChange); the socket event is the fallback by dish name.
@@ -2314,14 +2408,12 @@ const KDSOrderCard = React.forwardRef(({
   const typeLabel = isAggOrder ? 'DELIVERY' : isParcelOrder ? 'PARCEL' : 'DINE-IN';
   const numClass = otype === 'swiggy' ? ' sw' : otype === 'zomato' ? ' zo' : '';
   const tableLabel = otype === 'swiggy' ? 'SWIGGY' : otype === 'zomato' ? 'ZOMATO' : isParcelOrder ? 'PARCEL' : `T-${String(order.tableNumber ?? '').trim() || '?'}`;
-  const firstOpenIdx = (order.items || []).findIndex((it, i) => isKitchenItem(it) && !checkedItemsGlobal[`${order._id}-${i}`]);
-  const circ = 2 * Math.PI * 19;
 
   return (
     <Motion.article
       ref={ref}
       data-oid={order._id}
-      layout
+      layout={layoutAnim}
       initial={{ opacity: 0, y: 18, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
@@ -2341,13 +2433,7 @@ const KDSOrderCard = React.forwardRef(({
           </div>
         </div>
         <div>
-          <div className={`kx-time ${urgency}`} aria-label={`Ticket age ${fmt(seconds)}`}>
-            <svg viewBox="0 0 44 44" width="50" height="50" aria-hidden="true">
-              <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3.5" />
-              <circle cx="22" cy="22" r="19" fill="none" stroke={ringColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.min(1, seconds / lateSec) * circ} ${circ}`} />
-            </svg>
-            <span className="tv" style={seconds >= 3600 ? { fontSize: '.54rem' } : undefined}>{fmt(seconds)}</span>
-          </div>
+          <AgeRing startMs={createdAtMs} lateSec={lateSec} urgency={urgency} ringColor={ringColor} />
           {urgency !== 'low' && <span className="kx-late">{urgency === 'high' ? 'OVERDUE' : 'DELAYED'}</span>}
         </div>
       </div>
@@ -2389,11 +2475,9 @@ const KDSOrderCard = React.forwardRef(({
           const modeMatch = tenantOnlyVeg ? true : (isNonVegMode ? !isVeg : isVeg);
           if (!modeMatch) return null;
 
-          const crossed = !!checkedItemsGlobal[`${order._id}-${idx}`];
-          const hasStarted = !!itemStartTimes[idx] || !!item.kdsStartedAt;
-          const elapsedSecs = Math.max(0, Math.round(item.kdsCompletedAt && item.kdsPrepTimeSeconds != null ? Number(item.kdsPrepTimeSeconds) : (itemElapsed[idx] || 0)));
-          const isSlow = hasStarted && !crossed && elapsedSecs >= 300;
-          const finalSecs = Math.max(0, Math.round(Number(itemFinalTimes?.[`${order._id}-${idx}`] ?? elapsedSecs) || 0)); // fractional server seconds rendered as "3m 12.4285s"
+          const crossed = isChecked(idx);
+          // every dish is timed from when the kitchen got the order (or the server's own start time for that dish)
+          const itemStartMs = new Date(item.kdsStartedAt || order.kdsStartedAt || order.createdAt).getTime() || createdAtMs;
           const portionTxt = item.portion?.toUpperCase() || 'STANDARD';
           const mod = !crossed ? modOf(item) : null;
 
@@ -2401,14 +2485,9 @@ const KDSOrderCard = React.forwardRef(({
             <div
               key={idx}
               role="button" tabIndex={0} aria-pressed={crossed}
-              className={`kx-it${crossed ? ' done' : mod ? ' mod' : hasStarted ? ' run' : ''}`}
-              onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } toggleItemCrossed(idx); }}
+              className={`kx-it${crossed ? ' done' : mod ? ' mod' : ' run'}`}
+              onClick={() => toggleItemCrossed(idx)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleItemCrossed(idx); } }}
-              onContextMenu={e => startItemTimer(idx, e)}
-              onTouchStart={() => { lpFiredRef.current = false; clearTimeout(lpTimerRef.current); lpTimerRef.current = setTimeout(() => { lpFiredRef.current = true; startItemTimer(idx, null); }, 550); }}
-              onTouchEnd={() => clearTimeout(lpTimerRef.current)}
-              onTouchMove={() => clearTimeout(lpTimerRef.current)}
-              onTouchCancel={() => clearTimeout(lpTimerRef.current)}
             >
               <div className="kx-qty">{item.quantity}</div>
               <div className="kx-it-b">
@@ -2422,16 +2501,10 @@ const KDSOrderCard = React.forwardRef(({
                 {!crossed && (
                   <div className="kx-sub">
                     <span className={item.portion?.toLowerCase() === 'half' ? 'half' : undefined}>{portionTxt}</span>
-                    {hasStarted && (
-                      <span className={`kx-tm${isSlow ? ' slow' : ''}`}>
-                        <Timer size={10} />{fmt(elapsedSecs)}
-                        {isSlow && <><AlertTriangle size={10} strokeWidth={2.5} /> SLOW</>}
-                      </span>
-                    )}
+                    <ItemTimer startMs={itemStartMs} />
                   </div>
                 )}
-                {crossed && hasStarted && <div className="kx-sub"><span className="kx-tm" style={{ color: '#9b978d' }}><Timer size={10} /> Done {fmtSpan(finalSecs)}</span></div>}
-                {!hasStarted && !crossed && idx === firstOpenIdx && <div className="kx-hint">Hold to start cook timer</div>}
+                {crossed && item.kdsPrepTimeSeconds != null && <div className="kx-sub"><span className="kx-tm" style={{ color: '#9b978d' }}><Timer size={10} /> Done {fmtSpan(item.kdsPrepTimeSeconds)}</span></div>}
                 {item.suggestion && !crossed && <div className="kx-note"><StickyNote size={14} /><span>{item.suggestion}</span></div>}
               </div>
               <div className="kx-chk">{crossed && <Check size={16} strokeWidth={3} />}</div>
@@ -2461,7 +2534,7 @@ const KDSOrderCard = React.forwardRef(({
       </div>
     </Motion.article>
   );
-});
+}));
 KDSOrderCard.displayName = 'KDSOrderCard';
 
 /* ═══════════════════════════════════════════════════════════
