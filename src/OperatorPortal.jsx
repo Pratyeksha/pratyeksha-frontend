@@ -559,7 +559,7 @@ const fetchAiBrain = useCallback(async () => {
 
 const fetchAuditLogs = useCallback(async () => {
   try {
-const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=200`);
+const r = await axios.get(`${BASE_URL}/admin/audit/${tenantId}?limit=100`);
 
 setAuditLogs(asArr(r.data));
   } catch (err) { showNotif('Could not load the audit log', 'error'); }
@@ -5770,7 +5770,7 @@ const renderMonthHeatmap = () => {
     }}
     onMouseUp={() => setDraggingTable(null)}
     onMouseLeave={() => setDraggingTable(null)}
-    style={{ position:'relative', width:'100%', height: 'clamp(230px, 28vw, 300px)', borderRadius:'14px', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'12px', overflow:'hidden' }}>
+    style={{ position:'relative', width:'100%', height: 'clamp(230px, 28vw, 300px)', background:'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 32px)', border:'1px solid rgba(211,191,162,0.12)', borderRadius:'12px', overflow:'hidden' }}>
 
     {/* Connector lines between joined tables */}
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>

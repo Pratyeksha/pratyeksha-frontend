@@ -13,6 +13,7 @@ import SpoonForkIcon from './SpoonForkIcon.jsx';
 import OffersExplorer from './OffersExplorer.jsx';
 
 import API_BASE_URL from './apiBase.js';
+import { ensureModelViewer } from './modelViewer.js';
 
 const BASE_URL = API_BASE_URL;
 const logo = '/pratyeksha-logo.png';
@@ -675,6 +676,64 @@ const Avatar = ({ t, size = 50, radius = 15 }) => {
 };
 
 /* Map + navigate card for one outlet (used in the Map view and in the quick sheet). */
+
+/* A shared dish link (/?place=<outlet>&dish=<id>): the restaurant's spot on the home with the dish's 3D preview straight away. */
+const DISH_L = {
+  en: { menu: 'Open menu', place: 'Restaurant details', close: 'Close', half: 'Half', full: 'Full', no3d: 'No 3D preview for this dish yet', drag: 'Drag to rotate · pinch to zoom', veg: 'Veg', nonveg: 'Non-veg', gone: 'This dish is not available right now', shared: 'Shared with you', loading: 'Loading the dish…' },
+  mr: { menu: 'मेनू उघडा', place: 'रेस्टॉरंट माहिती', close: 'बंद करा', half: 'अर्धा', full: 'पूर्ण', no3d: 'या पदार्थाचा 3D प्रीव्ह्यू अजून नाही', drag: 'फिरवण्यासाठी ओढा · झूमसाठी पिंच करा', veg: 'शाकाहारी', nonveg: 'मांसाहारी', gone: 'हा पदार्थ सध्या उपलब्ध नाही', shared: 'तुमच्यासाठी शेअर केले', loading: 'पदार्थ लोड होत आहे…' },
+};
+function DishShare({ tenant, item, loading, lang, onClose, onMenu, onPlace }) {
+  const L = DISH_L[lang] || DISH_L.en;
+  const mr = lang === 'mr';
+  const name = item ? ((mr && item.name_mr) || item.name) : '';
+  const prices = item ? [item.priceHalf ? [L.half, item.priceHalf] : null, item.priceFull ? [L.full, item.priceFull] : null, !item.priceHalf && !item.priceFull && item.price ? ['', item.price] : null].filter(Boolean) : [];
+  const ings = item && Array.isArray(item.ingredients) ? item.ingredients.filter((x) => typeof x === 'string').slice(0, 6) : [];
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); const k = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', k); return () => document.removeEventListener('keydown', k); }, [onClose]);
+  useEffect(() => { if (item?.modelUrl) ensureModelViewer(); }, [item?.modelUrl]);
+  return (
+    <motion.div role="dialog" aria-modal="true" aria-label={name || tenant.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.72)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <motion.div ref={ref} tabIndex={-1} initial={{ y: 60 }} animate={{ y: 0 }} exit={{ y: 60 }} transition={{ type: 'spring', damping: 26, stiffness: 260 }} onClick={(e) => e.stopPropagation()}
+        style={{ outline: 'none', width: 'min(520px,100%)', maxHeight: '94dvh', overflowY: 'auto', borderRadius: '26px 26px 0 0', background: 'linear-gradient(180deg,#1a1713,#0f0e0c)', border: '1px solid rgba(211,191,162,.22)', borderBottom: 0, boxShadow: '0 -20px 60px rgba(0,0,0,.6)', position: 'relative', paddingBottom: 'calc(18px + env(safe-area-inset-bottom,0px))' }}>
+        <button type="button" onClick={onClose} aria-label={L.close} style={{ ...iconBtn, position: 'absolute', top: 12, right: 12, zIndex: 4, width: 36, height: 36, background: 'rgba(12,12,12,.8)' }}><X size={16} color={GOLD} /></button>
+        <div style={{ padding: '18px 20px 10px' }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: mr ? 0 : '.16em', textTransform: mr ? 'none' : 'uppercase', color: 'rgba(211,191,162,.7)', display: 'flex', alignItems: 'center', gap: 6 }}><Share2 size={11} />{L.shared}</div>
+          <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: GOLD, display: 'flex', alignItems: 'center', gap: 6 }}><MapPin size={13} />{(mr && tenant.name_mr) || tenant.name}{tenant.area ? <span style={{ opacity: .6, fontWeight: 500 }}> · {tenant.area}</span> : null}</div>
+        </div>
+        <div style={{ margin: '0 16px', height: 'min(46dvh,320px)', borderRadius: 20, overflow: 'hidden', position: 'relative', background: 'radial-gradient(circle at 50% 40%,#2a251d,#0b0a08)', border: '1px solid rgba(211,191,162,.14)' }}>
+          {loading && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'rgba(211,191,162,.7)', fontSize: 12 }}>{L.loading}</div>}
+          {!loading && item?.modelUrl && (
+            <>
+              <model-viewer src={item.modelUrl} camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" shadow-intensity="1.2" exposure="0.9" style={{ width: '100%', height: '100%' }} />
+              <div aria-hidden="true" style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', fontSize: 10, color: 'rgba(255,255,255,.55)', whiteSpace: 'nowrap', background: 'rgba(0,0,0,.35)', padding: '4px 10px', borderRadius: 99 }}>{L.drag}</div>
+            </>
+          )}
+          {!loading && (!item || !item.modelUrl) && (
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center', padding: 20, color: 'rgba(211,191,162,.6)', fontSize: 12 }}>
+              <div><UtensilsCrossed size={34} strokeWidth={1.2} style={{ opacity: .6 }} /><div style={{ marginTop: 10 }}>{item ? L.no3d : L.gone}</div></div>
+            </div>
+          )}
+        </div>
+        {item && (
+          <div style={{ padding: '14px 20px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span aria-label={item.isVeg ? L.veg : L.nonveg} style={{ marginTop: 5, width: 14, height: 14, flexShrink: 0, border: `1.5px solid ${item.isVeg ? '#3fae5a' : '#d0463c'}`, borderRadius: 3, display: 'grid', placeItems: 'center' }}><i style={{ width: 6, height: 6, borderRadius: item.isVeg ? '50%' : 0, background: item.isVeg ? '#3fae5a' : '#d0463c', clipPath: item.isVeg ? undefined : 'polygon(50% 0,100% 100%,0 100%)' }} /></span>
+              <h2 style={{ margin: 0, fontSize: 21, lineHeight: 1.2, color: '#f7f3eb', fontFamily: mr ? 'inherit' : "'Playfair Display', serif" }}>{name}</h2>
+            </div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8, color: GOLD, fontWeight: 800, fontSize: 15 }}>{prices.map(([l, p]) => <span key={l + p}>{l ? `${l} ` : ''}₹{p}</span>)}</div>
+            {ings.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>{ings.map((x) => <span key={x} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 99, border: '1px solid rgba(211,191,162,.2)', color: 'rgba(247,243,235,.75)' }}>{x}</span>)}</div>}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, padding: '16px 20px 0' }}>
+          <button type="button" className="pxh-btn" onClick={onMenu} style={{ flex: '1 1 0' }}>{L.menu} <ChevronRight size={14} /></button>
+          <button type="button" className="pxh-btn ghost" onClick={onPlace} style={{ flex: '1 1 0', background: 'transparent', border: '1px solid rgba(211,191,162,.35)', color: GOLD }}>{L.place}</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function PlaceDetail({ t, pos, onOrder, onService, tr }) {
   const [note, setNote] = useState('');
   const km = distanceKm(pos, t);
@@ -839,6 +898,8 @@ export default function CustomerHome() {
   const [geoMsg, setGeoMsg] = useState('');
   const [mapId, setMapId] = useState(null);
   const [sheetTenant, setSheetTenant] = useState(null);
+  const [sharedDish, setSharedDish] = useState(null); // { tenant, item|null, loading }
+  const sharedHandled = useRef(false);
   const [howHidden, setHowHidden] = useState(() => { try { return localStorage.getItem(HOW_KEY) === '1'; } catch { return false; } });
   const [linkMsg, setLinkMsg] = useState('');
   const linkTimer = useRef(null);
@@ -1012,6 +1073,31 @@ export default function CustomerHome() {
   // A dismissed banner used to come straight back whenever the restaurant list reloaded (Retry, refresh). Remember the dismissal
   // for the current link; a new notification link shows again.
   const dismissedNote = useRef('');
+  // Shared dish link: /?place=<outlet>&dish=<id> -> the restaurant's spot with the 3D preview of that dish.
+  useEffect(() => {
+    if (sharedHandled.current || !tenants.length) return undefined;
+    let qp; try { qp = new URLSearchParams(location.search); } catch { return undefined; }
+    const pid = qp.get('place'); const did = qp.get('dish');
+    if (!pid || !did) return undefined;
+    const tenant = tenants.find((x) => x.tenantId === pid);
+    sharedHandled.current = true;
+    if (!tenant) return undefined;
+    setSharedDish({ tenant, item: null, loading: true });
+    // Not aborted when `tenants` refreshes (that would leave the sheet loading forever); only ignored after the page is gone.
+    axios.get(`${BASE_URL}/menu/${encodeURIComponent(pid)}`, { timeout: 10000 })
+      .then((r) => {
+        if (!alive.current) return;
+        const item = (Array.isArray(r.data) ? r.data : []).find((m) => String(m._id) === String(did) && m.isAvailable !== false) || null;
+        setSharedDish({ tenant, item, loading: false });
+      })
+      .catch(() => { if (alive.current) setSharedDish({ tenant, item: null, loading: false }); });
+    return undefined;
+  }, [tenants, location.search]);
+  const closeSharedDish = useCallback(() => {
+    setSharedDish(null);
+    try { const u = new URL(window.location.href); u.searchParams.delete('place'); u.searchParams.delete('dish'); window.history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } catch { /* ignore */ }
+  }, []);
+
   const viewedPx = useRef('');
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1751,6 +1837,13 @@ export default function CustomerHome() {
         )}
       </div>
 
+      <AnimatePresence>
+        {sharedDish && (
+          <DishShare key="dish-share" tenant={sharedDish.tenant} item={sharedDish.item} loading={sharedDish.loading} lang={lang} onClose={closeSharedDish}
+            onMenu={() => { const t = sharedDish.tenant; closeSharedDish(); openTenant(t, 'share'); }}
+            onPlace={() => { const t = sharedDish.tenant; closeSharedDish(); setSheetTenant(t); }} />
+        )}
+      </AnimatePresence>
       {/* ── Map & directions sheet ── */}
       <AnimatePresence>
         {sheetTenant && (

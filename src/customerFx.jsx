@@ -322,6 +322,15 @@ const releaseAwake = async () => { try { await wakeLock?.release(); } catch { /*
 const PRIVATE_KEYS = [/^px_menu_favs_/, /^px_last_meal_/, /^px_menu_recent_/, /^px_menu_diet_/, /^px_menu_sort_/, /^px_err_log$/, /^px_menu_offline_/, /^px_last_place$/, /^px_home_recent$/, /^px_home_favs$/];
 const clearSavedData = () => { try { Object.keys(localStorage).filter((k) => PRIVATE_KEYS.some((r) => r.test(k))).forEach((k) => localStorage.removeItem(k)); } catch { /* blocked */ } };
 
+// Defined at module level: when it lived inside PrefsMenu it was re-created on every render, so a toggled switch lost keyboard focus.
+function Row({ icon, label, on, set }) {
+  return (
+    <button type="button" className="fx-pref-row" role="switch" aria-checked={on} onClick={() => set(!on)}>
+      <span className="fx-pref-ico">{icon}</span><span className="fx-pref-lbl">{label}</span><span className={`fx-switch${on ? ' on' : ''}`}><i /></span>
+    </button>
+  );
+}
+
 export function PrefsMenu({ lang = 'en', size = 16, style }) {
   const mr = lang === 'mr';
   const [open, setOpen] = useState(false);
@@ -367,11 +376,6 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
   const L = mr
     ? { title: 'माझ्या आवडीनिवडी', sound: 'आवाज', vib: 'कंपन', size: 'अक्षरांचा आकार', motion: 'कमी हालचाल', awake: 'स्क्रीन सुरू ठेवा', dim: 'रात्री मंद प्रकाश', diag: 'सपोर्टसाठी माहिती कॉपी करा', copied: 'कॉपी झाले', copyFail: 'कॉपी होऊ शकले नाही', dense: 'कॉम्पॅक्ट यादी', reset: 'डीफॉल्ट सेटिंग्ज', clear: 'माझा जतन केलेला डेटा पुसा', clearAsk: 'नक्की पुसायचे?', yes: 'हो, पुसा', no: 'नको', open: 'आवडीनिवडी' }
     : { title: 'My preferences', sound: 'Sounds', vib: 'Vibration', size: 'Text size', motion: 'Reduce motion', awake: 'Keep screen on', dim: 'Night dim', diag: 'Copy info for support', copied: 'Copied', copyFail: "Couldn't copy", dense: 'Compact list', reset: 'Reset to defaults', clear: 'Clear my saved data', clearAsk: 'Remove favourites and last orders from this phone?', yes: 'Yes, clear', no: 'Cancel', open: 'Preferences' };
-  const Row = ({ icon, label, on, set }) => (
-    <button type="button" className="fx-pref-row" role="switch" aria-checked={on} onClick={() => set(!on)}>
-      <span className="fx-pref-ico">{icon}</span><span className="fx-pref-lbl">{label}</span><span className={`fx-switch${on ? ' on' : ''}`}><i /></span>
-    </button>
-  );
   return (
     <div className="fx-prefs" ref={box}>
       <button type="button" className="fx-sound-btn" data-fx="off" aria-haspopup="dialog" aria-expanded={open} aria-label={L.open} title={L.open} style={style} onClick={() => setOpen((v) => !v)}>

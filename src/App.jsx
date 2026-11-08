@@ -18,20 +18,7 @@ import {
 
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 
-// 3D viewer: ~0.5 MB of script plus a WebGL context. Only fetched the first time a guest opens a 3D dish (or hovers / focuses the button).
-const MODEL_VIEWER_SRC = 'https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js';
-let __mvPromise = null;
-const ensureModelViewer = () => {
-  if (typeof window === 'undefined' || window.customElements?.get('model-viewer')) return Promise.resolve();
-  if (__mvPromise) return __mvPromise;
-  __mvPromise = new Promise((resolve) => {
-    const s = document.createElement('script');
-    s.type = 'module'; s.src = MODEL_VIEWER_SRC; s.async = true;
-    s.onload = () => resolve(); s.onerror = () => { __mvPromise = null; resolve(); };
-    document.head.appendChild(s);
-  });
-  return __mvPromise;
-};
+import { ensureModelViewer } from './modelViewer.js';
 import { startInvoicePdf } from './invoicePdf.js';
 
 import SpoonForkIcon from './SpoonForkIcon.jsx';
@@ -749,7 +736,9 @@ const startVoice = () => {
 useEffect(() => () => { try { recRef.current?.abort(); } catch { /* none */ } }, []);
 const shareDish = async (item) => {
   const text = `${(language === 'mr' && item.name_mr) || item.name} — ₹${item.priceFull || item.price || item.priceHalf || ''}${restaurantData?.name ? ` at ${restaurantData.name}` : ''}`;
-  try { await navigator.share({ title: item.name, text, url: window.location.href.split('&qr=')[0] }); fx.success(); } catch { /* cancelled */ }
+  // The link opens the restaurant's page on the Pratyeksha home with this dish's 3D preview, NOT this table's menu (which would put the receiver on the sharer's table).
+  const url = `${window.location.origin}/?place=${encodeURIComponent(tenantId)}&dish=${encodeURIComponent(item._id)}`;
+  try { await navigator.share({ title: item.name, text, url }); fx.success(); } catch { /* cancelled */ }
 };
 const toggleDishFav = (id) => { const adding = !favIds.includes(id); setFavIds(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id])); fx.like(); if (adding) fx.toast(language === 'mr' ? 'आवडत्यात जोडले' : 'Saved to favourites', { label: language === 'mr' ? 'पहा' : 'View', onClick: () => { setQuickFilter('fav'); window.scrollTo({ top: 0, behavior: 'smooth' }); } }); };
 useEffect(() => () => { surpriseTimers.current.forEach(clearTimeout); }, []);
@@ -2274,6 +2263,7 @@ useEffect(() => {
   };
 
 const sendExtraItemsRequest = async () => {
+  if (viewOnly) { fx.toast(language === 'mr' ? 'फक्त ज्यांनी ऑर्डर दिली तेच विनंती पाठवू शकतात' : 'Only the guest who ordered can send requests'); return; }
   const activeItems = Object.entries(extraItemCart).filter(([id, qty]) => qty > 0 && extraItems.some(i => i._id === id));
   if (activeItems.length === 0) return;
   if (extraSendingRef.current) return;
@@ -3025,7 +3015,11 @@ const downloadReservationPDF = () => {
   openTokenWindow(html, `Reservation_Token_${tokenId}.pdf`);
 };
 
+const waiterBusy = useRef(false);
 const notifyWaiter = async (serviceType = "Custom") => {
+  if (viewOnly) { fx.toast(language === 'mr' ? 'फक्त ज्यांनी ऑर्डर दिली तेच विनंती पाठवू शकतात' : 'Only the guest who ordered can send requests'); return; }
+  if (waiterBusy.current) return; // a double-tap used to page the staff twice
+  waiterBusy.current = true;
   try {
     let requestText = serviceType;
 
@@ -3057,10 +3051,12 @@ const notifyWaiter = async (serviceType = "Custom") => {
   } catch (error) { 
     console.error("Waiter Request Error:", error.response?.data || error.message);
     triggerAlert("orderError", "error"); 
+  } finally {
+    window.setTimeout(() => { waiterBusy.current = false; }, 1200);
   }
 };
   const updateWaiterCount = (item, delta) => {
-    setWaiterCounts(prev => ({ ...prev, [item]: Math.max(0, prev[item] + delta) }));
+    setWaiterCounts(prev => ({ ...prev, [item]: Math.min(9, Math.max(0, prev[item] + delta)) }));
   };
 
   const primaryColor = '#d3bfa2'; 
@@ -3092,10 +3088,11 @@ const notifyWaiter = async (serviceType = "Custom") => {
   const totalItemsInCart = Object.values(cart).reduce((a, b) => a + b, 0);
   const baseTitleRef = useRef(typeof document !== 'undefined' ? document.title : '');
   useEffect(() => {
-    const base = baseTitleRef.current.replace(/^\(\d+\)\s*/, '');
+    const orig = baseTitleRef.current.replace(/^\(\d+\)\s*/, '');
+    const base = restaurantData?.name ? `${restaurantData.name} · Menu` : orig;
     document.title = totalItemsInCart > 0 ? `(${totalItemsInCart}) ${base}` : base;
-    return () => { document.title = base; };
-  }, [totalItemsInCart]);
+    return () => { document.title = orig; };
+  }, [totalItemsInCart, restaurantData?.name]);
 
   const getCartTotal = () => {
     return Object.entries(cart).reduce((acc, [key, qty]) => {
@@ -5664,7 +5661,7 @@ if (qrCheck === 'unverified') {
       <div className="px-ambient" style={{ zIndex: -1 }} aria-hidden="true"><div className="px-grain" /></div>
       {legalSheetEl}
       {viewOnly && (
-        <div role="status" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9000, padding: 'calc(9px + env(safe-area-inset-top, 0px)) 14px 9px', background: 'rgba(20,17,12,0.96)', borderBottom: '1px solid rgba(211,191,162,0.35)', color: '#d3bfa2', fontSize: '0.72rem', fontWeight: 700, textAlign: 'center', lineHeight: 1.4, backdropFilter: 'blur(8px)' }}>
+        <div role="status" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 800, padding: 'calc(9px + env(safe-area-inset-top, 0px)) 14px 9px', background: 'rgba(20,17,12,0.96)', borderBottom: '1px solid rgba(211,191,162,0.35)', color: '#d3bfa2', fontSize: '0.72rem', fontWeight: 700, textAlign: 'center', lineHeight: 1.4, backdropFilter: 'blur(8px)' }}>
           {language === 'mr'
             ? 'फक्त पाहण्यासाठी — या टेबलवर दुसऱ्या पाहुण्याने ऑर्डर दिली आहे. फक्त तेच ऑर्डर करू शकतात.'
             : 'View only — another guest at this table has ordered. Only that guest can order and be billed.'}

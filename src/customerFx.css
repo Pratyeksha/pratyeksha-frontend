@@ -273,3 +273,5 @@ html[data-reduce-motion] .qf-row>*,html[data-reduce-motion] .fx-wiggle{animation
 
 .pxh-hero>*:has(.fx-prefs){z-index:40 !important}
 .fx-prefs{position:relative}
+
+.fx-top{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
