@@ -3120,19 +3120,52 @@ const notifyWaiter = async (serviceType = "Custom") => {
   const cheerRef = useRef(totalItemsInCart);
   useEffect(() => {
     const prev = cheerRef.current; cheerRef.current = totalItemsInCart;
+    if (totalItemsInCart > prev) { const fab = document.querySelector('[data-fx-cart]'); if (fab) { fab.classList.remove('fx-bump'); void fab.offsetWidth; fab.classList.add('fx-bump'); } } // the cart button bounces when something lands in it
     if (totalItemsInCart !== prev + 1) return; // single taps only: a restored or re-ordered cart does not cheer
     if (prev < 3 && totalItemsInCart >= 3) fx.toast(language === 'mr' ? 'छान निवड! ३ पदार्थ तुमच्या ट्रेमध्ये' : 'Nice picks! 3 dishes in your tray');
     else if (prev < 6 && totalItemsInCart >= 6) fx.toast(language === 'mr' ? 'मेजवानीच की! भुकेलेली टोळी दिसतेय' : 'That’s a feast! Hungry crowd today');
   }, [totalItemsInCart, language]);
   // One warm welcome per visit.
   useEffect(() => {
-    if (!restaurantData?.name || !tenantId) return undefined;
+    if (!restaurantData?.name || !tenantId || !tableNumber) return undefined; // only where the menu is shown (not on the landing page)
     let seen = false;
     try { seen = sessionStorage.getItem(`px_welcomed_${tenantId}`) === '1'; if (!seen) sessionStorage.setItem(`px_welcomed_${tenantId}`, '1'); } catch { /* blocked */ }
     if (seen) return undefined;
-    const id = window.setTimeout(() => fx.toast(language === 'mr' ? `${restaurantData.name} मध्ये स्वागत आहे` : `Welcome to ${restaurantData.name}`), 1200);
+    const id = window.setTimeout(() => { const h = new Date().getHours(); const part = h < 5 ? 'n' : h < 12 ? 'm' : h < 17 ? 'a' : h < 21 ? 'e' : 'n'; const hi = { en: { m: 'Good morning', a: 'Good afternoon', e: 'Good evening', n: 'Hello' }, mr: { m: 'शुभ प्रभात', a: 'शुभ दुपार', e: 'शुभ संध्याकाळ', n: 'नमस्कार' } }[language === 'mr' ? 'mr' : 'en'][part]; fx.toast(language === 'mr' ? `${hi}! ${restaurantData.name} मध्ये स्वागत आहे` : `${hi}! Welcome to ${restaurantData.name}`); }, 1200);
     return () => window.clearTimeout(id);
-  }, [restaurantData?.name, tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [restaurantData?.name, tenantId, tableNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Two gentle, once-only nudges: the 3D button (per device) and a forgotten tray (per visit).
+  useEffect(() => {
+    if (!tableNumber || isLoading || !allMenuItems.some((m) => m.modelUrl)) return undefined;
+    let seen = true; try { seen = localStorage.getItem('px_3d_hint') === '1'; } catch { /* blocked */ }
+    if (seen) return undefined;
+    const id = window.setTimeout(() => { try { localStorage.setItem('px_3d_hint', '1'); } catch { /* blocked */ } fx.toast(language === 'mr' ? '3D बटण दाबा आणि पदार्थ तुमच्या टेबलवर पाहा' : 'Tap 3D to see a dish on your table'); }, 9000);
+    return () => window.clearTimeout(id);
+  }, [tableNumber, isLoading, allMenuItems, language]);
+  useEffect(() => {
+    if (!tableNumber || totalItemsInCart === 0) return undefined;
+    let done = false; const key = `px_tray_nudge_${tenantId}`;
+    try { done = sessionStorage.getItem(key) === '1'; } catch { /* blocked */ }
+    if (done) return undefined;
+    const id = window.setTimeout(() => { try { sessionStorage.setItem(key, '1'); } catch { /* blocked */ } if (!document.hidden) fx.toast(language === 'mr' ? 'तुमचा ट्रे वाट पाहतोय. ऑर्डर करायची का?' : 'Your tray is waiting. Ready to order?'); }, 90000);
+    return () => window.clearTimeout(id);
+  }, [tableNumber, totalItemsInCart, tenantId, language]);
+  // A relaxed nudge after 45 minutes at the table, and a "welcome back" when the tab returns after a long break.
+  useEffect(() => {
+    if (!tableNumber) return undefined;
+    const id = window.setTimeout(() => { if (!document.hidden) fx.toast(language === 'mr' ? 'अजून काही हवे आहे का? चहा किंवा गोड, एका टॅपवर' : 'Still enjoying? Chai or something sweet is one tap away'); }, 45 * 60 * 1000);
+    return () => window.clearTimeout(id);
+  }, [tableNumber, language]);
+  useEffect(() => {
+    let hiddenAt = 0;
+    const vis = () => {
+      if (document.hidden) { hiddenAt = Date.now(); return; }
+      if (hiddenAt && Date.now() - hiddenAt > 5 * 60 * 1000 && tableNumber) fx.toast(language === 'mr' ? 'पुन्हा स्वागत! मेनू अद्ययावत केला' : 'Welcome back! Menu refreshed');
+      hiddenAt = 0;
+    };
+    document.addEventListener('visibilitychange', vis);
+    return () => document.removeEventListener('visibilitychange', vis);
+  }, [tableNumber, language]);
   // "Chai time?" style suggestion that follows the clock and only points at something on this menu.
   const craving = useMemo(() => {
     const h = new Date().getHours();
@@ -5882,7 +5915,7 @@ if (qrCheck === 'unverified') {
     <DietToggle vegOnly={filterVegOnly} counts={dietCounts} onChange={(v) => { setFilterVegOnly(v); fx.toast(v ? (language === 'mr' ? 'फक्त शाकाहारी पदार्थ दाखवत आहे' : 'Showing vegetarian dishes only') : (language === 'mr' ? 'पूर्ण मेनू दाखवत आहे' : 'Showing the full menu')); try { if (tenantId) localStorage.setItem(`px_menu_diet_${tenantId}`, v ? 'veg' : 'all'); } catch { /* blocked */ } }} language={language} />
   </div>
 )}
-        <h1 style={{...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
+        <h1 onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ cursor: 'pointer', ...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '10px 0 4px' }} aria-hidden="true">
           <span style={{ width: 40, height: 1, background: 'linear-gradient(90deg, transparent, rgba(211,191,162,0.6))' }} />
           <Sparkles size={11} color="#d3bfa2" />
@@ -6627,6 +6660,13 @@ if (qrCheck === 'unverified') {
     <div style={{ fontSize: '0.72rem', color: 'rgba(247,243,235,0.55)', marginTop: 6 }}>
       {language === 'mr' ? 'कमी अक्षरे किंवा सोपा शब्द (उदा. “चहा”, “पनीर”) वापरून पहा.' : 'Try fewer letters, or a simpler word like “tea” or “paneer”.'}
     </div>
+    {searchQuery.trim() && allMenuItems.length > 0 && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+        {allMenuItems.filter((m) => m.isAvailable !== false).slice(0, 3).map((m) => (
+          <button key={m._id} type="button" onClick={() => { fx.tap?.(); setSearchQuery(((language === 'mr' && m.name_mr) || m.name).split(' ')[0]); }} style={{ padding: '7px 14px', borderRadius: 999, border: '1px solid rgba(211,191,162,0.3)', background: 'rgba(211,191,162,0.06)', color: '#f7f3eb', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>{((language === 'mr' && m.name_mr) || m.name).split(' ')[0]}</button>
+        ))}
+      </div>
+    )}
     {searchQuery.trim() && (
       <button type="button" onClick={() => setSearchQuery('')} style={{ marginTop: 14, padding: '9px 20px', borderRadius: 999, border: '1px solid rgba(211,191,162,0.35)', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.5px', cursor: 'pointer' }}>
         {language === 'mr' ? 'शोध साफ करा' : 'CLEAR SEARCH'}

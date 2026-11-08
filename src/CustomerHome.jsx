@@ -8,7 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
-import { fx, PrefsMenu, CustomerExtras, TimeGreeting } from './customerFx.jsx';
+import { fx, PrefsMenu, CustomerExtras, TimeGreeting, useBackClose } from './customerFx.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import OffersExplorer from './OffersExplorer.jsx';
 
@@ -556,6 +556,7 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-top{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:44px;height:44px;border-radius:50%;border:1px solid rgba(211,191,162,.35);background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.03)),#121212;color:#d3bfa2;display:grid;place-items:center;cursor:pointer;box-shadow:0 14px 34px rgba(0,0,0,.5);z-index:40;backdrop-filter:blur(10px)}
 .pxh-chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:4px 8px 10px;margin:-4px -8px -6px}
 .pxh-chips::-webkit-scrollbar{display:none}
+.pxh-chips,.pxh-areas{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);padding-right:30px}
 .pxh-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(211,191,162,.16);background:rgba(255,255,255,.03);color:rgba(255,255,255,.62);border-radius:22px;padding:8px 13px;font-size:11px;font-weight:800;cursor:pointer;transition:all .18s}
 .pxh-chip.on{background:linear-gradient(135deg,#d3bfa2,#bda88a);color:#101010;border-color:transparent;box-shadow:0 6px 18px rgba(211,191,162,.18)}
 .pxh-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
@@ -887,6 +888,33 @@ export default function CustomerHome() {
   const listSig = useRef('');
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [lang, setLang] = useState(() => { try { return localStorage.getItem(LANG_KEY) === 'mr' ? 'mr' : 'en'; } catch { return 'en'; } });
+  // Coming back to the list returns to where you were; a first-visit tip points at the shuffle button.
+  const homeRestored = useRef(false);
+  useEffect(() => {
+    let t; const onScroll = () => { window.clearTimeout(t); t = window.setTimeout(() => { try { sessionStorage.setItem('px_home_scroll', String(Math.round(window.scrollY))); } catch { /* ignore */ } }, 200); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); window.clearTimeout(t); };
+  }, []);
+  useEffect(() => {
+    if (homeRestored.current || loading || !tenants.length) return;
+    homeRestored.current = true;
+    try { const sp = new URLSearchParams(window.location.search); if (sp.get('place')) return; const y = Number(sessionStorage.getItem('px_home_scroll')); if (y > 300) window.setTimeout(() => window.scrollTo(0, y), 250); } catch { /* ignore */ }
+  }, [loading, tenants.length]);
+  useEffect(() => {
+    if (loading || !tenants.length) return undefined;
+    let seen = true; try { seen = localStorage.getItem('px_home_tip') === '1'; } catch { /* ignore */ }
+    if (seen) return undefined;
+    const id = window.setTimeout(() => { if (window.scrollY < 80 && !document.hidden) { try { localStorage.setItem('px_home_tip', '1'); } catch { /* ignore */ } fx.toast(lang === 'mr' ? 'टीप: शफल बटण दाबा, आश्चर्याची निवड मिळेल' : 'Tip: tap the shuffle button for a surprise pick'); } }, 14000);
+    return () => window.clearTimeout(id);
+  }, [loading, tenants.length, lang]);
+  // Tapping the logo in the sticky header scrolls back to the top.
+  useEffect(() => {
+    const img = document.querySelector('.pxh-sticky img');
+    if (!img) return undefined;
+    const go = () => { fx.tap?.(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    img.style.cursor = 'pointer'; img.addEventListener('click', go);
+    return () => img.removeEventListener('click', go);
+  }, [loading]);
   useEffect(() => {
     const prev = document.title;
     if (tenants.length) document.title = lang === 'mr' ? `Pratyeksha · ${tenants.length} ठिकाणे` : `Pratyeksha · ${tenants.length} place${tenants.length === 1 ? '' : 's'} to eat`;
@@ -949,6 +977,7 @@ export default function CustomerHome() {
   const [geoMsg, setGeoMsg] = useState('');
   const [mapId, setMapId] = useState(null);
   const [sheetTenant, setSheetTenant] = useState(null);
+  useBackClose([[!!sheetTenant, () => setSheetTenant(null)], [showAllOffers, () => setShowAllOffers(false)], [scanning, () => setScanning(false)]]);
   const [sharedDish, setSharedDish] = useState(null); // { tenant, item|null, loading }
   const sharedHandled = useRef(false);
   const [howHidden, setHowHidden] = useState(() => { try { return localStorage.getItem(HOW_KEY) === '1'; } catch { return false; } });
@@ -1105,7 +1134,7 @@ export default function CustomerHome() {
     };
   }, [refresh]);
 
-  const chooseLang = (next) => { setLang(next); try { localStorage.setItem(LANG_KEY, next); } catch { /* ignore */ } };
+  const chooseLang = (next) => { setLang(next); try { localStorage.setItem(LANG_KEY, next); } catch { /* ignore */ } fx.toast(next === 'mr' ? 'भाषा: मराठी' : 'Language: English'); };
 
   const offersReq = useRef(0);
   const loadAllOffers = async () => {
@@ -1243,7 +1272,7 @@ export default function CustomerHome() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
-  const chooseSort = (v) => { setSort(v); try { localStorage.setItem(SORT_KEY, v); } catch { /* ignore */ } };
+  const chooseSort = (v) => { setSort(v); try { localStorage.setItem(SORT_KEY, v); } catch { /* ignore */ } const lab = { recommended: tr.sortRec, az: tr.sortAz, offers: tr.sortOffers, saved: tr.sortSaved }[v]; if (lab) fx.toast(`${tr.sort}: ${lab}`); };
   const rememberSearch = (term) => {
     const t = String(term || '').trim();
     if (t.length < 2) return;

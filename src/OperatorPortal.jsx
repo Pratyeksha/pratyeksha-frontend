@@ -3101,7 +3101,7 @@ const downloadCsv = (fileName, headers, rows) => {
 };
 const istDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
 const csvButton = (onClick, title = 'Export CSV') => (
-  <button type="button" onClick={onClick} title={title} style={{ padding: '8px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.7px', whiteSpace: 'nowrap' }}>EXPORT CSV</button>
+  <button type="button" onClick={onClick} title={title} style={{ padding: '8px 14px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(211,191,162,0.25)', color: '#d3bfa2', fontSize: '0.58rem', fontWeight: '900', letterSpacing: '0.7px', whiteSpace: 'nowrap', marginLeft: 'auto' }}>EXPORT CSV</button>
 );
 
 const SEG_META = {
@@ -5098,9 +5098,9 @@ const renderMonthHeatmap = () => {
           {id:'pending',      label:'Live Kitchen',    icon:<CookingPot size={16}/>,   badge: orders.filter(o=>o.status==='pending').length},
           {id:'billing',      label:'Billing Hub',     icon:<ReceiptIndianRupee size={16}/>, badge: null},
           {id:'dayclose',      label:'Daily Close',     icon:<ClipboardList size={16}/>, badge: null},
-          {id:'payables',       label:'Payables',        icon:<Wallet size={16}/>, badge: null},
-          {id:'compliance',     label:'Compliance',      icon:<ShieldCheck size={16}/>, badge: null},
-          {id:'equipment',      label:'Equipment',       icon:<Wrench size={16}/>, badge: null},
+          {id:'payables',       label:'Payables',        icon:<Wallet size={16}/>, badge: (payables?.bills || []).filter(b => b.status === 'unpaid' && new Date(b.dueDate).getTime() < Date.now()).length || null},
+          {id:'compliance',     label:'Compliance',      icon:<ShieldCheck size={16}/>, badge: (complianceItems || []).filter(i => new Date(i.expiresOn).getTime() - Date.now() <= 30 * 864e5).length || null},
+          {id:'equipment',      label:'Equipment',       icon:<Wrench size={16}/>, badge: (equipmentData.items || []).filter(e => !e.lastServicedOn || new Date(e.lastServicedOn).getTime() + e.serviceEveryDays * 864e5 <= Date.now() + 14 * 864e5).length || null},
           {id:'shiftlog',       label:'Shift Log',       icon:<FileClock size={16}/>, badge: null},
           {id:'menu',         label:'Menu Editor',     icon:<UtensilsCrossed size={16}/>, badge: menuItems.filter(i=>!i.isAvailable).length > 0 ? menuItems.filter(i=>!i.isAvailable).length : null},
         ]
@@ -5310,6 +5310,7 @@ const renderMonthHeatmap = () => {
           {label:(()=>{const istNow=new Date(new Date().getTime()+330*60*1000);const isCurrentMonth=viewDate.getFullYear()===istNow.getUTCFullYear()&&viewDate.getMonth()===istNow.getUTCMonth();return isCurrentMonth?"TODAY'S BILLS":"MONTH BILLS";})(),val:hudLiveCounterBreakdown.total,color:'#d3bfa2'},
           {label:'DINE-IN',  val:hudLiveCounterBreakdown.direct},
           {label:'TAKEAWAY', val:hudLiveCounterBreakdown.takeaway},
+          {label:'OTHER', val:(hudLiveCounterBreakdown.pickup||0)+(hudLiveCounterBreakdown.reservation||0)+(hudLiveCounterBreakdown.waitlist||0)},
           {label:'ONLINE',   val:hudLiveCounterBreakdown.online},
         ].map((s,i)=>(
           <div key={i} style={{...styles.hudStatBox,borderLeft:i>0?'1px solid rgba(211,191,162,0.16)':'none'}}>
@@ -5383,26 +5384,6 @@ const renderMonthHeatmap = () => {
     </div>
   )}
  
-  {/* ── EXTRAS header controls ── */}
-  {activeTab==='extras' && (
-    <div style={{marginLeft:'auto',display:'flex',gap:'10px',alignItems:'center'}} className="p-extras-kpi">
-      {[
-        {l:'TOTAL',v:extraItems.length,c:'#d3bfa2'},
-        {l:'AVAILABLE',v:extraItems.filter(i=>i.isAvailable).length,c:'#ecdcb9'},
-        {l:'STOCK VALUE',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*(i.costPrice||0)),0).toLocaleString()}`,c:'#d3bfa2'},
-      ].map((s,i)=>(
-        <div key={i} style={{
-          textAlign:'center',padding:'8px 16px',
-          background:'rgba(211,191,162,0.04)',
-          border:'1px solid rgba(211,191,162,0.1)',borderRadius:'9px'
-        }}>
-          <div style={{fontSize:'1.05rem',fontWeight:'900',color:s.c,fontFamily:'monospace'}}>{s.v}</div>
-          <div style={{fontSize:'0.46rem',color:'#969696',fontWeight:'900',marginTop:'2px',letterSpacing:'0.8px'}}>{s.l}</div>
-        </div>
-      ))}
-    </div>
-  )}
- 
   {/* ── MENU header controls ── */}
   {activeTab==='menu' && (
     <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'auto'}} className="p-menu-header-actions">
@@ -5426,45 +5407,10 @@ const renderMonthHeatmap = () => {
         onMouseLeave={e=>{e.currentTarget.style.background='rgba(211,191,162,0.06)';}}>
         <Tag size={11}/> REFRESH BESTSELLERS
       </button>
-      {tenantConfig&&(
-        <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 12px',background:'#070707',border:`1px solid ${tenantConfig.config?.autoHideDishesOnLowStock?'rgba(211,191,162,0.22)':'rgba(211,191,162,0.16)'}`,borderRadius:'9px',transition:'all 0.2s'}} className="p-autohide-toggle">
-          <Layers size={12} color={tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#969696'}/>
-          <span style={{fontSize:'0.58rem',fontWeight:'900',color:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#969696'}} className="p-autohide-label">AUTO-HIDE</span>
-          <button type="button" onClick={async()=>{try{const nv=!tenantConfig.config?.autoHideDishesOnLowStock;await axios.patch(`${BASE_URL}/tenant/config/${tenantId}`,{key:'autoHideDishesOnLowStock',value:nv});setTenantConfig(p=>({...p,config:{...p.config,autoHideDishesOnLowStock:nv}}));showNotif(`Auto-hide ${nv?'enabled':'disabled'}`);}catch(err){showNotif(err.response?.data?.error||'Could not change auto-hide','error');}}}
-            style={{width:'36px',height:'19px',borderRadius:'10px',border:'none',cursor:'pointer',position:'relative',flexShrink:0,transition:'background 0.2s',background:tenantConfig.config?.autoHideDishesOnLowStock?'#d3bfa2':'#171717'}}>
-            <div style={{position:'absolute',top:'3px',left:tenantConfig.config?.autoHideDishesOnLowStock?'19px':'3px',width:'13px',height:'13px',borderRadius:'50%',background:tenantConfig.config?.autoHideDishesOnLowStock?'#0d0d0d':'#444',transition:'left 0.2s'}}/>
-          </button>
-        </div>
-      )}
-    </div>
+          </div>
   )}
  
-  {/* ── MARKETING header controls ── */}
-  {activeTab==='marketing' && (
-    <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
-      {announcements.some(a=>a.isActive&&new Date(a.expiresAt)>new Date())&&(
-        <div style={{display:'flex',alignItems:'center',gap:'6px',padding:'6px 12px',borderRadius:'20px',background:'rgba(236,220,185,0.05)',border:'1px solid rgba(236,220,185,0.18)'}}>
-          <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'#ecdcb9',boxShadow:'0 0 6px rgba(236,220,185,0.5)',animation:'moodPulse 2s ease-in-out infinite'}}/>
-          <span style={{fontSize:'0.55rem',color:'#ecdcb9',fontWeight:'900',letterSpacing:'1px'}}>BANNER LIVE</span>
-        </div>
-      )}
-      {/* Sub-tab pills */}
-      {['announcements','offers','campaigns','analytics','discovery'].map(st=>(
-        <button type="button" key={st} onClick={()=>setMarketingSubTab(st)}
-          style={{
-            padding:'7px 14px',borderRadius:'8px',cursor:'pointer',
-            fontSize:'0.6rem',fontWeight:'900',letterSpacing:'0.5px',
-            border:marketingSubTab===st?'none':'1px solid rgba(211,191,162,0.16)',
-            background:marketingSubTab===st?'linear-gradient(135deg,#d3bfa2,#bda88a)':'#0f0f0f',
-            color:marketingSubTab===st?'#0c0c0c':'#969696',
-            transition:'all 0.15s',textTransform:'uppercase'
-          }}>
-          {st==='announcements'?'Menu Banners':st==='offers'?'Offers':st==='campaigns'?'Campaigns':st==='discovery'?'Directory Insights':'Analytics'}
-        </button>
-      ))}
-    </div>
-  )}
-</header>
+  </header>
   
 {ingredientAlerts.filter(a => !a.dismissed).length > 0 && (
     <div style={{
@@ -6939,7 +6885,7 @@ const renderMonthHeatmap = () => {
 
           {/* Headline figures, each shown once */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
-            {tile('Gross revenue', money(revenue), 'after tax and discounts', true)}
+            {tile('Gross revenue', money(revenue), 'incl. GST, after discounts', true)}
             {tile('Bills settled', bills, bills === 1 ? '1 bill' : `${bills} bills`, false)}
             {tile('Average bill', money(avgBill), 'revenue per bill', false)}
             {tile('Discounts given', money(discount), discount > 0 ? `${pct(discount)}% of revenue` : 'none today', false)}
@@ -7711,7 +7657,6 @@ const renderMonthHeatmap = () => {
     {/* ── MENU TOOLBAR ── */}
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0 20px', borderBottom: '1px solid rgba(211,191,162,0.12)', gap: '12px', flexWrap: 'wrap' }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#fff' }}>MENU REGISTRY</h2>
         <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#b4b4b4' }}>
           {menuItems.length} dishes · {menuItems.filter(i => i.isAvailable).length} available · {menuItems.filter(i => !i.isAvailable).length} hidden
         </p>
@@ -7953,9 +7898,9 @@ const renderMonthHeatmap = () => {
                     <button type="button" onClick={() => {
                       setEditDishModal(item);
                       setEditDishData({ name: item.name, name_mr: item.name_mr || '', price: item.price || '', priceHalf: item.priceHalf || '', priceFull: item.priceFull || '', categoryId: item.categoryId || '', spicylevel: item.spicylevel || '', servingSize: item.servingSize || 1, isVeg: item.isVeg !== false, isAvailable: item.isAvailable !== false, isChefSpecial: item.isChefSpecial || false, tags: item.tags || [], ingredients: item.ingredients || { en: [], mr: [] }, chefMessage: item.chefMessage || '' });
-                    }} style={{ width: '100%', padding: '9px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.12)', color: '#8a704d', borderRadius: '9px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.15s' }}
+                    }} style={{ width: '100%', padding: '9px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.12)', color: '#b8a27f', borderRadius: '9px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', transition: 'all 0.15s' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.3)'; e.currentTarget.style.color = '#d3bfa2'; e.currentTarget.style.background = 'rgba(211,191,162,0.08)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = '#8a704d'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(211,191,162,0.12)'; e.currentTarget.style.color = '#b8a27f'; e.currentTarget.style.background = 'rgba(211,191,162,0.04)'; }}
                     >
                       <SquarePen size={12} /> EDIT ALL DETAILS
                     </button>
@@ -10987,7 +10932,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                 </div>
                 <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px' }}>
                   {urgentCount > 0
-                    ? `${urgentCount} thing${urgentCount > 1 ? 's' : ''} need your attention today`
+                    ? `${urgentCount} ${urgentCount > 1 ? 'things need' : 'thing needs'} your attention today`
                     : opportunityCount > 0
                     ? `${opportunityCount} growth opportunit${opportunityCount > 1 ? 'ies' : 'y'} identified`
                     : `Operations are running smoothly`}
@@ -11011,7 +10956,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
                     <span style={{ fontSize: '1.6rem', fontWeight: '900', color: healthColor }}>
                       {healthScore}
                     </span>
-                    <span style={{ fontSize: '0.48rem', color: '#a6a6a6', fontWeight: '900', letterSpacing: '1px' }}>HEALTH SCORE</span>
+                    <span style={{ fontSize: '0.4rem', color: '#a6a6a6', fontWeight: '900', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>HEALTH SCORE</span>
                   </div>
                 </div>
               </div>
@@ -12612,7 +12557,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div><div style={P.label}>Audit trail</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{todays} {todays === 1 ? 'change' : 'changes'} today · {logs.length} on record</div></div>
+        <div><div style={P.label}>Today</div><div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{todays} {todays === 1 ? 'change' : 'changes'} today</div></div>
         {csvButton(exportRows, 'Export the audit trail')}
       </div>
     </div>
@@ -12631,7 +12576,6 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           <ShieldCheck size={17} color="#d3bfa2" strokeWidth={1.4} />
         </div>
         <div>
-          <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>AUDIT TRAIL</div>
           <div style={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.25)', marginTop: '3px', fontWeight: '500' }}>
             {auditLogs.length} records · Complete action history
           </div>
@@ -12803,33 +12747,8 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
     {/* ── HEADER ── */}
     <div style={{
       display: 'flex', alignItems: 'center',
-      justifyContent: 'space-between', marginBottom: '16px', flexShrink: 0
+      justifyContent: 'flex-end', marginBottom: '16px', flexShrink: 0
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
-        <div style={{
-          width: '36px', height: '36px', borderRadius: '10px',
-          background: 'rgba(211,191,162,0.07)',
-          border: '1px solid rgba(211,191,162,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0
-        }}>
-          <Sparkles size={16} color="#d3bfa2" strokeWidth={1.4} />
-        </div>
-        <div>
-          <div style={{
-            fontSize: '0.65rem', fontWeight: '900',
-            color: '#d3bfa2', letterSpacing: '2.5px'
-          }}>
-            ASSIST
-          </div>
-          <div style={{
-            fontSize: '0.52rem', color: 'rgba(255,255,255,0.2)',
-            marginTop: '2px', fontWeight: '500'
-          }}>
-            Real-time answers from your restaurant data
-          </div>
-        </div>
-      </div>
       {/* Clear chat */}
       <button type="button"
         onClick={() => setAssistMessages([{ role: 'system', text: 'Hello. Ask me anything about your restaurant — orders, revenue, stock, staff, or menu performance.', ts: new Date() }])}
@@ -13029,6 +12948,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
             border: `1px solid ${msg.role === 'user'
               ? 'rgba(211,191,162,0.2)'
               : 'rgba(255,255,255,0.06)'}`,
+            textAlign: 'left',
           }}>
             {/* Message text — handle multi-line with \n */}
             <div style={{
@@ -13885,47 +13805,6 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
               INVENTORY — standalone, NOT inside any modal
               ════════════════════════════════════════════ */}
 {activeTab === 'inventory' && (() => {
-  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
-  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
-  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-  const rows = (inventory || []).filter(i => (Number(i.currentStock) || 0) <= (Number(i.minThreshold) || 0)).map(i => {
-    const w = Number(i.weightedAvgCost || i.costPrice) || 0;
-    const proc = (procurementData || []).find(p => String(p._id) === String(i._id));
-    const avg = Number(proc?.avgDailyUsage) || 0;
-    const need = Math.max(0, Math.ceil(avg * 14 - (Number(i.currentStock) || 0)));
-    const qty = need || Math.ceil((Number(i.minThreshold) || 0) * 2);
-    return { i, qty, cost: Math.round(qty * w * 100) / 100, days: proc?.daysRemaining ?? null };
-  }).sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
-  const total = rows.reduce((n, r) => n + r.cost, 0);
-  const exportRows = () => downloadCsv('reorder-list.csv', ['Ingredient', 'Unit', 'In stock', 'Minimum', 'Order qty', 'Est. cost (₹)', 'Days left'], rows.map(r => [r.i.itemName, r.i.unit, r.i.currentStock, r.i.minThreshold, r.qty, r.cost, r.days ?? '']));
-  return (
-    <div style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div>
-          <div style={P.label}>Reorder now</div>
-          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{rows.length === 0 ? 'Everything is above its minimum' : `${rows.length} ${rows.length === 1 ? 'ingredient' : 'ingredients'} at or below minimum · about ${money(total)} to restock`}</div>
-        </div>
-        {rows.length > 0 && csvButton(exportRows, 'Export the reorder list')}
-      </div>
-      {rows.length > 0 && (
-        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr', gap: '10px', fontSize: '0.66rem', color: '#B4B4B4' }}>
-          {['Ingredient', 'Unit', 'In stock', 'Minimum', 'Order qty', 'Est. cost', 'Days left'].map(h => <span key={h} style={P.label}>{h}</span>)}
-          {rows.slice(0, 8).map(r => [
-            <span key={r.i._id + 'n'} style={{ color: '#ECDCB9', fontWeight: '800' }}>{r.i.itemName}</span>,
-            <span key={r.i._id + 'u'}>{r.i.unit}</span>,
-            <span key={r.i._id + 's'} style={{ fontFamily: 'monospace' }}>{Number(r.i.currentStock) || 0}</span>,
-            <span key={r.i._id + 'm'} style={{ fontFamily: 'monospace' }}>{Number(r.i.minThreshold) || 0}</span>,
-            <span key={r.i._id + 'q'} style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>{r.qty}</span>,
-            <span key={r.i._id + 'c'} style={{ fontFamily: 'monospace' }}>{money(r.cost)}</span>,
-            <span key={r.i._id + 'd'}>{r.days == null ? '-' : r.days <= 3 ? `${r.days}d · urgent` : `${r.days}d`}</span>,
-          ])}
-        </div>
-      )}
-    </div>
-  );
-})()}
-
-{activeTab === 'inventory' && (() => {
   /* ── Premium palette: obsidian, brass, ivory. Alerts use brass weight, never red / green / orange. ── */
   const P = {
     gold: '#B8923A', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
@@ -14038,6 +13917,47 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           </div>
         </div>
       )}
+
+{(() => {
+  const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+  const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+  const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const rows = (inventory || []).filter(i => (Number(i.currentStock) || 0) <= (Number(i.minThreshold) || 0)).map(i => {
+    const w = Number(i.weightedAvgCost || i.costPrice) || 0;
+    const proc = (procurementData || []).find(p => String(p._id) === String(i._id));
+    const avg = Number(proc?.avgDailyUsage) || 0;
+    const need = Math.max(0, Math.ceil(avg * 14 - (Number(i.currentStock) || 0)));
+    const qty = need || Math.ceil((Number(i.minThreshold) || 0) * 2);
+    return { i, qty, cost: Math.round(qty * w * 100) / 100, days: proc?.daysRemaining ?? null };
+  }).sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
+  const total = rows.reduce((n, r) => n + r.cost, 0);
+  const exportRows = () => downloadCsv('reorder-list.csv', ['Ingredient', 'Unit', 'In stock', 'Minimum', 'Order qty', 'Est. cost (₹)', 'Days left'], rows.map(r => [r.i.itemName, r.i.unit, r.i.currentStock, r.i.minThreshold, r.qty, r.cost, r.days ?? '']));
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={P.label}>Reorder now</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{rows.length === 0 ? 'Everything is above its minimum' : `${rows.length} ${rows.length === 1 ? 'ingredient' : 'ingredients'} at or below minimum · about ${money(total)} to restock`}</div>
+        </div>
+        {rows.length > 0 && csvButton(exportRows, 'Export the reorder list')}
+      </div>
+      {rows.length > 0 && (
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr', gap: '10px', fontSize: '0.66rem', color: '#B4B4B4' }}>
+          {['Ingredient', 'Unit', 'In stock', 'Minimum', 'Order qty', 'Est. cost', 'Days left'].map(h => <span key={h} style={P.label}>{h}</span>)}
+          {rows.slice(0, 8).map(r => [
+            <span key={r.i._id + 'n'} style={{ color: '#ECDCB9', fontWeight: '800' }}>{r.i.itemName}</span>,
+            <span key={r.i._id + 'u'}>{r.i.unit}</span>,
+            <span key={r.i._id + 's'} style={{ fontFamily: 'monospace' }}>{Number(r.i.currentStock) || 0}</span>,
+            <span key={r.i._id + 'm'} style={{ fontFamily: 'monospace' }}>{Number(r.i.minThreshold) || 0}</span>,
+            <span key={r.i._id + 'q'} style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>{r.qty}</span>,
+            <span key={r.i._id + 'c'} style={{ fontFamily: 'monospace' }}>{money(r.cost)}</span>,
+            <span key={r.i._id + 'd'}>{r.days == null ? '-' : r.days <= 3 ? `${r.days}d · urgent` : `${r.days}d`}</span>,
+          ])}
+        </div>
+      )}
+    </div>
+  );
+})()}
 
       {/* ── WORKSPACE: restock (left) + ledger (right) ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
@@ -14689,7 +14609,6 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           <ChefHat size={17} color="#d3bfa2" strokeWidth={1.5} />
         </div>
         <div>
-          <div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2.5px' }}>RECIPE ENGINE</div>
           <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.35)', marginTop: '3px', fontWeight: '500' }}>
             Link ingredients · Auto stock deduction · Live costing
           </div>
@@ -15374,7 +15293,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <div>
           <div style={P.label}>Beverages and retail</div>
-          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{low.length ? `${low.length} at or below their low-stock mark: ${low.slice(0, 4).map(i => i.name).join(', ')}` : 'All items above their low-stock mark'} · stock worth {money(value)} at cost</div>
+          <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#ECDCB9', fontWeight: '800' }}>{low.length ? `${low.length} at or below their low-stock mark: ${low.slice(0, 4).map(i => i.name).join(', ')}` : 'All items above their low-stock mark'}</div>
         </div>
         {csvButton(exportRows, 'Export extra items')}
       </div>
@@ -15563,7 +15482,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
       {l:'Total Items',v:extraItems.length,c:'#d3bfa2',icon:<Package size={14}/>},
       {l:'Available',v:extraItems.filter(i=>i.isAvailable).length,c:'#ecdcb9',icon:<CheckCircle2 size={14}/>},
       {l:'Hidden',v:extraItems.filter(i=>!i.isAvailable).length,c:'#b4b4b4',icon:<EyeOff size={14}/>},
-      {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:'#b8923a',icon:<AlertTriangle size={14}/>},
+      {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:extraItems.some(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0)?'#b8923a':'rgba(255,255,255,0.3)',icon:<AlertTriangle size={14}/>},
       {l:'Stock Value',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*(i.costPrice||i.price)),0).toLocaleString()}`,c:'#d3bfa2',icon:<WalletCards size={14}/>},
     ].map((s,i)=>(
       <div key={i} style={{
@@ -15757,7 +15676,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <span style={{width:'3px',height:'14px',background:'#d3bfa2',borderRadius:'2px'}}/>
             <span style={{fontSize:'0.6rem',fontWeight:'900',color:'#8a704d',letterSpacing:'1.5px',textTransform:'uppercase'}}>{cat}</span>
-            <span style={{fontSize:'0.52rem',color:'#969696',fontWeight:'700'}}>{items.length} items</span>
+            <span style={{fontSize:'0.52rem',color:'#969696',fontWeight:'700'}}>{items.length} {items.length === 1 ? 'item' : 'items'}</span>
           </div>
           <div style={{display:'flex',gap:'6px'}}>
             <span style={{fontSize:'0.52rem',color:'#ecdcb9',fontWeight:'700',padding:'2px 8px',background:'rgba(236,220,185,0.06)',border:'1px solid rgba(236,220,185,0.12)',borderRadius:'6px'}}>

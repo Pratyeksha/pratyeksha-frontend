@@ -305,3 +305,44 @@ html[data-reduce-motion][data-customer] { scroll-behavior: auto; }
 .px-crave b { font-weight: 800; }
 .px-crave small { display: block; font-size: .66rem; color: rgba(247,243,235,.6); margin-top: 2px; }
 .px-crave span.go { margin-left: auto; color: #d3bfa2; font-weight: 900; font-size: .7rem; letter-spacing: .5px; white-space: nowrap; }
+
+/* ── Round 3: small details ── */
+@keyframes fxBump { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.fx-bump { animation: fxBump .45s cubic-bezier(.3,1.6,.5,1); }
+html[data-customer] body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+html[data-customer] h1, html[data-customer] h2, html[data-customer] h3 { text-wrap: balance; }
+html[data-customer] p { text-wrap: pretty; }
+html[data-customer] button, html[data-customer] [role="button"], html[data-customer] .qf, html[data-customer] .px-crave { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media (hover: hover) and (pointer: fine) {
+  html[data-customer] .pxh-card { transition: transform .2s ease, border-color .2s ease; }
+  html[data-customer] .pxh-card:hover { transform: translateY(-2px); border-color: rgba(211,191,162,.4); }
+  html[data-customer] .px-dish { transition: border-color .2s ease; }
+  html[data-customer] .px-dish:hover { border-color: rgba(211,191,162,.35); }
+}
+@media (prefers-contrast: more) {
+  html[data-customer] ::placeholder { color: rgba(255,255,255,.72); }
+  html[data-customer] :focus-visible { outline-width: 3px; }
+  html[data-customer] .px-dish, html[data-customer] .pxh-card { border-color: rgba(211,191,162,.55); }
+}
+@media print {
+  html[data-customer] .fx-toast, html[data-customer] .fx-top, html[data-customer] .fx-progress, html[data-customer] .fx-prefs, html[data-customer] [data-fx-cart], html[data-customer] .qf-row { display: none !important; }
+  html[data-customer], html[data-customer] body, html[data-customer] #root { background: #fff !important; color: #000 !important; }
+}
+.fx-greet-day { opacity: .7; font-weight: 600; }
+
+/* ── Round 4: small details ── */
+@keyframes fxPageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+html[data-customer] #root { animation: fxPageIn .38s ease-out both; }
+html[data-reduce-motion][data-customer] #root { animation: none; }
+html[data-customer] a { text-underline-offset: 3px; }
+html[data-customer] button:disabled, html[data-customer] [aria-disabled="true"] { cursor: not-allowed; }
+html[data-customer] input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+html[data-customer] input[type="number"]::-webkit-outer-spin-button, html[data-customer] input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+html[data-customer] input:-webkit-autofill, html[data-customer] input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0 100px #16120d inset !important; -webkit-text-fill-color: #f7f3eb !important; caret-color: #d3bfa2; transition: background-color 9999s ease-out; }
+@supports (-webkit-touch-callout: none) { html[data-customer] input, html[data-customer] textarea, html[data-customer] select { font-size: max(16px, 1em); } }
+html[data-customer] h1, html[data-customer] h2, html[data-customer] h3, html[data-customer] p { overflow-wrap: break-word; }
+.px-mark { background: rgba(211,191,162,.28); color: inherit; border-radius: 4px; padding: 0 2px; -webkit-text-fill-color: currentColor; }
+
+/* the menu app's own scroller */
+html[data-customer] #root > div { scroll-behavior: smooth; scroll-padding-top: 88px; }
+html[data-reduce-motion][data-customer] #root > div { scroll-behavior: auto; }

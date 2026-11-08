@@ -11,7 +11,7 @@
 // is limited to customer screens (the <html data-customer> flag set in main.jsx), and respects
 // prefers-reduced-motion for every animation. Staff screens (kitchen / operator / owner) are untouched.
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bug, Sunrise, Sun, Sunset, MoonStar, ArrowUp, WifiOff, Wifi, Moon, Rows3, RotateCcw, Volume2, VolumeX, Type, SlidersHorizontal, Vibrate, Wind, Minus, Plus, MonitorSmartphone, Trash2 } from 'lucide-react';
 import './customerFx.css';
@@ -294,6 +294,40 @@ const readTextScale = () => { try { const v = Number(localStorage.getItem(TEXT_K
 const applyTextScale = (v) => { try { document.documentElement.style.fontSize = v === 100 ? '' : `${v}%`; } catch { /* no DOM */ } };
 if (typeof document !== 'undefined') applyTextScale(readTextScale());
 
+// Phone Back button closes the topmost open panel (cart, bill, request sheet…) instead of leaving the menu.
+// overlays = [[isOpen, close], …]. One history entry per open panel; entries are removed again when a panel is closed from the UI.
+export function useBackClose(overlays) {
+  const ref = useRef(overlays);
+  ref.current = overlays;
+  const pushed = useRef(0);
+  const skip = useRef(0);
+  const openCount = overlays.reduce((n, o) => n + (o[0] ? 1 : 0), 0);
+  useEffect(() => {
+    try {
+      if (openCount > pushed.current) {
+        while (pushed.current < openCount) { window.history.pushState({ ...(window.history.state || {}), pxOv: 1 }, ''); pushed.current += 1; }
+      } else if (openCount < pushed.current) {
+        const n = pushed.current - openCount;
+        pushed.current = openCount;
+        skip.current += 1;
+        window.history.go(-n);
+      }
+    } catch { /* history unavailable */ }
+  }, [openCount]);
+  useEffect(() => {
+    const onPop = () => {
+      if (skip.current > 0) { skip.current -= 1; return; }
+      if (pushed.current > 0) {
+        pushed.current -= 1;
+        const top = [...ref.current].reverse().find((o) => o[0]);
+        if (top) top[1]();
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+}
+
 export function TextSizeToggle({ size = 16, style, lang = 'en' }) {
   const mr = lang === 'mr';
   const [v, setV] = useState(readTextScale);
@@ -415,6 +449,9 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
 }
 
 /** Small guest-side niceties, mounted once per page: an offline / back-online banner and a back-to-top button. */
+// The element that scrolls the whole page when it is not the window (the menu app's container).
+let pageScroller = null;
+const isPageScroller = (t) => t.clientWidth >= window.innerWidth * 0.8 && t.clientHeight >= window.innerHeight * 0.5;
 export function CustomerExtras({ lang = 'en', banner = true, topButton = true, toasts = false }) {
   const mr = lang === 'mr';
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
@@ -430,15 +467,35 @@ export function CustomerExtras({ lang = 'en', banner = true, topButton = true, t
   }, [toasts, lang]);
   useEffect(() => {
     let raf = 0;
-    const h = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setTop(window.scrollY > 700); const d = document.documentElement; const max = d.scrollHeight - window.innerHeight; if (bar.current) bar.current.style.transform = `scaleX(${max > 300 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0})`; }); };
-    h(); window.addEventListener('scroll', h, { passive: true });
-    return () => { window.removeEventListener('scroll', h); if (raf) cancelAnimationFrame(raf); };
+    // The menu app scrolls inside its own full-height container (not the window), so listen in the capture phase and follow whichever page-sized element scrolls.
+    const h = (e) => {
+      const t = e && e.target;
+      if (t && t.nodeType === 1) { if (!isPageScroller(t)) return; pageScroller = t; }
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const d = document.documentElement; const inner = pageScroller && d.scrollHeight <= window.innerHeight + 2;
+        const y = inner ? pageScroller.scrollTop : window.scrollY;
+        const max = inner ? pageScroller.scrollHeight - pageScroller.clientHeight : d.scrollHeight - window.innerHeight;
+        setTop(y > Math.min(700, window.innerHeight * 0.9));
+        if (bar.current) bar.current.style.transform = `scaleX(${max > 300 ? Math.min(1, Math.max(0, y / max)) : 0})`;
+      });
+    };
+    h(); document.addEventListener('scroll', h, { passive: true, capture: true });
+    return () => { document.removeEventListener('scroll', h, true); if (raf) cancelAnimationFrame(raf); };
   }, []);
+  // Copying text gives a small confirmation.
+  useEffect(() => {
+    let last = 0;
+    const onCopy = () => { const n = Date.now(); if (n - last < 2000) return; last = n; if (String(window.getSelection?.() || '').trim().length > 1) fx.toast(lang === 'mr' ? 'कॉपी केले' : 'Copied'); };
+    document.addEventListener('copy', onCopy);
+    return () => document.removeEventListener('copy', onCopy);
+  }, [lang]);
   useEffect(() => {
     const key = (e) => {
       const el = document.activeElement; const tag = el?.tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable;
-      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !document.querySelector('[role="dialog"], [aria-modal="true"]')) {
+      if (((e.key === '/' && !typing && !e.metaKey && !e.ctrlKey) || ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey))) && !e.altKey && !document.querySelector('[role="dialog"], [aria-modal="true"]')) {
         const q = document.querySelector('input[type="text"], input[type="search"]');
         if (q) { e.preventDefault(); q.focus(); q.scrollIntoView({ block: 'center', behavior: 'auto' }); }
       } else if (e.key === 'Escape' && tag === 'INPUT' && (el.type === 'text' || el.type === 'search') && el.value) {
@@ -499,7 +556,7 @@ export function CustomerExtras({ lang = 'en', banner = true, topButton = true, t
     return () => { window.clearTimeout(idleT); ['pointerdown', 'keydown', 'scroll'].forEach((ev) => window.removeEventListener(ev, arm, true)); document.removeEventListener('visibilitychange', vis); document.removeEventListener('pointerdown', down); document.removeEventListener('pointerup', up); };
   }, []);
   if (typeof document === 'undefined') return null;
-  const goTop = () => { const calm = document.documentElement.hasAttribute('data-reduce-motion') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); fx.tap(); };
+  const goTop = () => { const calm = document.documentElement.hasAttribute('data-reduce-motion') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; const tgt = pageScroller && document.documentElement.scrollHeight <= window.innerHeight + 2 ? pageScroller : window; tgt.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' }); fx.tap(); };
   return createPortal(
     <>
       {banner && (!online || back) && (
@@ -520,7 +577,8 @@ export function TimeGreeting({ lang = 'en', style, name = '' }) {
   const k = h < 5 ? 'n' : h < 12 ? 'm' : h < 17 ? 'a' : h < 21 ? 'e' : 'n';
   const T = { en: { m: 'Good morning', a: 'Good afternoon', e: 'Good evening', n: 'Late-night cravings?' }, mr: { m: 'शुभ प्रभात', a: 'शुभ दुपार', e: 'शुभ संध्याकाळ', n: 'रात्रीची भूक?' } };
   const Ico = k === 'm' ? Sunrise : k === 'a' ? Sun : k === 'e' ? Sunset : MoonStar;
-  return <span className="fx-greet" style={style}><Ico size={13} className="fx-greet-i" aria-hidden="true" />{(T[lang] || T.en)[k]}{name && k !== 'n' ? `, ${name}` : ''}</span>;
+  let day = ''; try { day = new Date().toLocaleDateString(lang === 'mr' ? 'mr-IN' : 'en-IN', { weekday: 'long' }); } catch { /* ignore */ }
+  return <span className="fx-greet" style={style}><Ico size={13} className="fx-greet-i" aria-hidden="true" />{(T[lang] || T.en)[k]}{name && k !== 'n' ? `, ${name}` : ''}{day && <span className="fx-greet-day"> · {day}</span>}</span>;
 }
 
 export function FxSoundToggle({ size = 16, style, lang = 'en' }) {
