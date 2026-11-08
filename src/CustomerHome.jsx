@@ -679,16 +679,28 @@ const Avatar = ({ t, size = 50, radius = 15 }) => {
 
 /* A shared dish link (/?place=<outlet>&dish=<id>): the restaurant's spot on the home with the dish's 3D preview straight away. */
 const DISH_L = {
-  en: { menu: 'Open menu', place: 'Restaurant details', close: 'Close', half: 'Half', full: 'Full', no3d: 'No 3D preview for this dish yet', drag: 'Drag to rotate · pinch to zoom', veg: 'Veg', nonveg: 'Non-veg', gone: 'This dish is not available right now', shared: 'Shared with you', loading: 'Loading the dish…' },
-  mr: { menu: 'मेनू उघडा', place: 'रेस्टॉरंट माहिती', close: 'बंद करा', half: 'अर्धा', full: 'पूर्ण', no3d: 'या पदार्थाचा 3D प्रीव्ह्यू अजून नाही', drag: 'फिरवण्यासाठी ओढा · झूमसाठी पिंच करा', veg: 'शाकाहारी', nonveg: 'मांसाहारी', gone: 'हा पदार्थ सध्या उपलब्ध नाही', shared: 'तुमच्यासाठी शेअर केले', loading: 'पदार्थ लोड होत आहे…' },
+  en: { menu: 'Open menu', place: 'Restaurant details', close: 'Close', half: 'Half', full: 'Full', no3d: 'No 3D preview for this dish yet', drag: 'Drag to rotate · pinch to zoom', veg: 'Veg', nonveg: 'Non-veg', gone: 'This dish is not available right now', shared: 'Shared with you', loading: 'Loading the dish…', share: 'Share', copied: 'Link copied', more: 'More 3D dishes here', viewing: 'Now viewing' },
+  mr: { menu: 'मेनू उघडा', place: 'रेस्टॉरंट माहिती', close: 'बंद करा', half: 'अर्धा', full: 'पूर्ण', no3d: 'या पदार्थाचा 3D प्रीव्ह्यू अजून नाही', drag: 'फिरवण्यासाठी ओढा · झूमसाठी पिंच करा', veg: 'शाकाहारी', nonveg: 'मांसाहारी', gone: 'हा पदार्थ सध्या उपलब्ध नाही', shared: 'तुमच्यासाठी शेअर केले', loading: 'पदार्थ लोड होत आहे…', share: 'शेअर करा', copied: 'लिंक कॉपी केली', more: 'इथले आणखी 3D पदार्थ', viewing: 'सध्या पाहत आहात' },
 };
-function DishShare({ tenant, item, loading, lang, onClose, onMenu, onPlace }) {
+function DishShare({ tenant, item, loading, lang, onClose, onMenu, onPlace, others = [], onPick }) {
   const L = DISH_L[lang] || DISH_L.en;
   const mr = lang === 'mr';
   const name = item ? ((mr && item.name_mr) || item.name) : '';
   const prices = item ? [item.priceHalf ? [L.half, item.priceHalf] : null, item.priceFull ? [L.full, item.priceFull] : null, !item.priceHalf && !item.priceFull && item.price ? ['', item.price] : null].filter(Boolean) : [];
   const ings = item && Array.isArray(item.ingredients) ? item.ingredients.filter((x) => typeof x === 'string').slice(0, 6) : [];
   const ref = useRef(null);
+  const [note, setNote] = useState('');
+  const noteT = useRef(null);
+  useEffect(() => () => clearTimeout(noteT.current), []);
+  const shareAgain = async () => {
+    if (!item) return;
+    const url = `${window.location.origin}/?place=${encodeURIComponent(tenant.tenantId)}&dish=${encodeURIComponent(item._id)}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: item.name, text: `${item.name} — ${tenant.name}`, url }); fx.success(); return; }
+      await navigator.clipboard.writeText(url);
+      fx.success(); setNote(L.copied); clearTimeout(noteT.current); noteT.current = setTimeout(() => setNote(''), 1800);
+    } catch { /* cancelled */ }
+  };
   useEffect(() => { ref.current?.focus(); const k = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', k); return () => document.removeEventListener('keydown', k); }, [onClose]);
   useEffect(() => { if (item?.modelUrl) ensureModelViewer(); }, [item?.modelUrl]);
   return (
@@ -705,7 +717,7 @@ function DishShare({ tenant, item, loading, lang, onClose, onMenu, onPlace }) {
           {loading && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'rgba(211,191,162,.7)', fontSize: 12 }}>{L.loading}</div>}
           {!loading && item?.modelUrl && (
             <>
-              <model-viewer src={item.modelUrl} camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" shadow-intensity="1.2" exposure="0.9" style={{ width: '100%', height: '100%' }} />
+              <model-viewer key={item._id} src={item.modelUrl} camera-controls auto-rotate ar ar-modes="webxr scene-viewer quick-look" shadow-intensity="1.2" exposure="0.9" style={{ width: '100%', height: '100%' }} />
               <div aria-hidden="true" style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', fontSize: 10, color: 'rgba(255,255,255,.55)', whiteSpace: 'nowrap', background: 'rgba(0,0,0,.35)', padding: '4px 10px', borderRadius: 99 }}>{L.drag}</div>
             </>
           )}
@@ -722,13 +734,28 @@ function DishShare({ tenant, item, loading, lang, onClose, onMenu, onPlace }) {
               <h2 style={{ margin: 0, fontSize: 21, lineHeight: 1.2, color: '#f7f3eb', fontFamily: mr ? 'inherit' : "'Playfair Display', serif" }}>{name}</h2>
             </div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8, color: GOLD, fontWeight: 800, fontSize: 15 }}>{prices.map(([l, p]) => <span key={l + p}>{l ? `${l} ` : ''}₹{p}</span>)}</div>
-            {ings.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>{ings.map((x) => <span key={x} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 99, border: '1px solid rgba(211,191,162,.2)', color: 'rgba(247,243,235,.75)' }}>{x}</span>)}</div>}
+            {ings.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>{ings.map((x, i) => <motion.span key={x} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .15 + i * .05 }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 99, border: '1px solid rgba(211,191,162,.2)', color: 'rgba(247,243,235,.75)' }}>{x}</motion.span>)}</div>}
           </div>
         )}
         <div style={{ display: 'flex', gap: 10, padding: '16px 20px 0' }}>
           <button type="button" className="pxh-btn" onClick={onMenu} style={{ flex: '1 1 0' }}>{L.menu} <ChevronRight size={14} /></button>
           <button type="button" className="pxh-btn ghost" onClick={onPlace} style={{ flex: '1 1 0', background: 'transparent', border: '1px solid rgba(211,191,162,.35)', color: GOLD }}>{L.place}</button>
         </div>
+        {item && (
+          <div style={{ padding: '10px 20px 0' }}>
+            <button type="button" className="pxh-btn ghost" onClick={shareAgain} style={{ width: '100%', background: 'transparent', border: '1px dashed rgba(211,191,162,.35)', color: GOLD, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Share2 size={14} />{note || L.share}</button>
+          </div>
+        )}
+        {others.length > 0 && (
+          <div style={{ padding: '16px 0 0' }}>
+            <div style={{ padding: '0 20px 8px', fontSize: 11, fontWeight: 800, color: 'rgba(211,191,162,.7)', letterSpacing: mr ? 0 : '.1em', textTransform: mr ? 'none' : 'uppercase' }}>{L.more}</div>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 20px 4px', scrollbarWidth: 'none' }}>
+              {others.map((o) => (
+                <button key={o._id} type="button" onClick={() => { fx.tap?.(); onPick(o); }} style={{ flex: '0 0 auto', maxWidth: 190, padding: '8px 14px', borderRadius: 99, border: '1px solid rgba(211,191,162,.3)', background: 'rgba(211,191,162,.06)', color: '#f7f3eb', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(mr && o.name_mr) || o.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -750,7 +777,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr }) {
   };
   const share = async () => {
     // Share the restaurant's page on this platform (so a listing spreads through the app), with the map link in the text.
-    const pageUrl = `${window.location.origin}/${encodeURIComponent(t.tenantId)}?entry=home`;
+    const pageUrl = `${window.location.origin}/?place=${encodeURIComponent(t.tenantId)}`;
     const mapLine = hasPlace(t) ? `\n${openMapUrl(t)}` : '';
     const data = { title: t.name, text: `${t.name}${addressLine(t) ? ' - ' + addressLine(t) : ''}${mapLine}`, url: pageUrl };
     try {
@@ -1078,19 +1105,21 @@ export default function CustomerHome() {
     if (sharedHandled.current || !tenants.length) return undefined;
     let qp; try { qp = new URLSearchParams(location.search); } catch { return undefined; }
     const pid = qp.get('place'); const did = qp.get('dish');
-    if (!pid || !did) return undefined;
+    if (!pid) return undefined;
     const tenant = tenants.find((x) => x.tenantId === pid);
     sharedHandled.current = true;
     if (!tenant) return undefined;
+    if (!did) { setSheetTenant(tenant); try { const u = new URL(window.location.href); u.searchParams.delete('place'); window.history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } catch { /* ignore */ } return undefined; }
     setSharedDish({ tenant, item: null, loading: true });
     // Not aborted when `tenants` refreshes (that would leave the sheet loading forever); only ignored after the page is gone.
     axios.get(`${BASE_URL}/menu/${encodeURIComponent(pid)}`, { timeout: 10000 })
       .then((r) => {
         if (!alive.current) return;
-        const item = (Array.isArray(r.data) ? r.data : []).find((m) => String(m._id) === String(did) && m.isAvailable !== false) || null;
-        setSharedDish({ tenant, item, loading: false });
+        const all = (Array.isArray(r.data) ? r.data : []).filter((m) => m && m.isAvailable !== false);
+        const item = all.find((m) => String(m._id) === String(did)) || null;
+        setSharedDish({ tenant, item, loading: false, all });
       })
-      .catch(() => { if (alive.current) setSharedDish({ tenant, item: null, loading: false }); });
+      .catch(() => { if (alive.current) setSharedDish({ tenant, item: null, loading: false, all: [] }); });
     return undefined;
   }, [tenants, location.search]);
   const closeSharedDish = useCallback(() => {
@@ -1840,6 +1869,8 @@ export default function CustomerHome() {
       <AnimatePresence>
         {sharedDish && (
           <DishShare key="dish-share" tenant={sharedDish.tenant} item={sharedDish.item} loading={sharedDish.loading} lang={lang} onClose={closeSharedDish}
+            others={(sharedDish.all || []).filter((m) => m.modelUrl && (!sharedDish.item || m._id !== sharedDish.item._id)).slice(0, 12)}
+            onPick={(o) => setSharedDish((d) => (d ? { ...d, item: o } : d))}
             onMenu={() => { const t = sharedDish.tenant; closeSharedDish(); openTenant(t, 'share'); }}
             onPlace={() => { const t = sharedDish.tenant; closeSharedDish(); setSheetTenant(t); }} />
         )}
