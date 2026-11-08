@@ -26,7 +26,7 @@ import UpiPay from './UpiPay.jsx';
 import { decideEntry } from './sessionPolicy.js';
 import { recommendPairings } from './pairing.js';
 import SessionEndedScreen from './SessionEnded.jsx';
-import { fx, PrefsMenu, CustomerExtras, TimeGreeting } from './customerFx.jsx';
+import { fx, PrefsMenu, CustomerExtras } from './customerFx.jsx';
 import ExtraItemsSheet from './ExtraItemsSheet.jsx';
 import DietToggle, { SeatedTimer } from './DietToggle.jsx';
 import InvalidQrScreen from './InvalidQrScreen.jsx';
@@ -223,6 +223,23 @@ const GuestIdentityBlock = ({ language, info, onName, onPhone, locked, onForget 
   );
 };
 
+
+// A small rotating "while you wait" line: calm, useful, never pushy. Reduce-motion keeps it still (the CSS animation is switched off globally).
+const WAIT_TIPS = {
+  en: ['Need water or a napkin? Tap the bell, no need to wave.', 'Feeling hungrier? Order more anytime, it joins the same table bill.', 'Keep this page open, it updates the moment your food is ready.', 'Good food takes a little time. Catch up with your people meanwhile.'],
+  mr: ['पाणी किंवा नॅपकिन हवे? बेल दाबा, हात दाखवायची गरज नाही.', 'आणखी भूक लागली? कधीही ऑर्डर करा, ती त्याच टेबलच्या बिलात जोडली जाते.', 'हे पेज उघडे ठेवा, जेवण तयार होताच इथे कळेल.', 'चांगल्या जेवणाला थोडा वेळ लागतो. तोपर्यंत गप्पा मारा.'],
+};
+const WaitTip = ({ language }) => {
+  const list = WAIT_TIPS[language] || WAIT_TIPS.en;
+  const [i, setI] = useState(0);
+  useEffect(() => { const id = window.setInterval(() => { if (!document.hidden) setI((n) => (n + 1) % list.length); }, 6000); return () => window.clearInterval(id); }, [list.length]);
+  return (
+    <div role="note" aria-live="polite" style={{ textAlign: 'center', margin: '0 auto 22px', maxWidth: 290, minHeight: 36 }}>
+      <div key={i} className="fx-rise" style={{ fontSize: '0.7rem', lineHeight: 1.6, color: 'rgba(247,243,235,0.5)' }}>{list[i]}</div>
+    </div>
+  );
+};
+
 const GuestLegalLinks = ({ language, onOpen, style }) => {
   const mr = language === 'mr';
   const btn = { background: 'none', border: 0, padding: '10px 6px', cursor: 'pointer', color: 'rgba(211,191,162,0.62)', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Poppins, sans-serif', letterSpacing: '0.3px' };
@@ -316,7 +333,7 @@ const PratyekshaPremiumMenu = () => {
   const [filterVegOnly, setFilterVegOnly] = useState(true);
   const [recentSearches, setRecentSearches] = useState([]);
   const [phIdx, setPhIdx] = useState(0);
-  const [socketLive, setSocketLive] = useState(true);
+  const [, setSocketLive] = useState(true);
   const dietCounts = useMemo(() => { let veg = 0; let nonVeg = 0; for (const i of allMenuItems) { if (i.isAvailable === false) continue; if (i.isVeg === true) veg += 1; else nonVeg += 1; } return { veg, nonVeg }; }, [allMenuItems]);
   const [searchFocus, setSearchFocus] = useState(false);
   
@@ -3099,6 +3116,33 @@ const notifyWaiter = async (serviceType = "Custom") => {
   };
 
   const totalItemsInCart = Object.values(cart).reduce((a, b) => a + b, 0);
+  // A tiny cheer when the tray reaches 3 and 6 dishes (once per step, never when it shrinks or on restore).
+  const cheerRef = useRef(totalItemsInCart);
+  useEffect(() => {
+    const prev = cheerRef.current; cheerRef.current = totalItemsInCart;
+    if (totalItemsInCart !== prev + 1) return; // single taps only: a restored or re-ordered cart does not cheer
+    if (prev < 3 && totalItemsInCart >= 3) fx.toast(language === 'mr' ? 'छान निवड! ३ पदार्थ तुमच्या ट्रेमध्ये' : 'Nice picks! 3 dishes in your tray');
+    else if (prev < 6 && totalItemsInCart >= 6) fx.toast(language === 'mr' ? 'मेजवानीच की! भुकेलेली टोळी दिसतेय' : 'That’s a feast! Hungry crowd today');
+  }, [totalItemsInCart, language]);
+  // One warm welcome per visit.
+  useEffect(() => {
+    if (!restaurantData?.name || !tenantId) return undefined;
+    let seen = false;
+    try { seen = sessionStorage.getItem(`px_welcomed_${tenantId}`) === '1'; if (!seen) sessionStorage.setItem(`px_welcomed_${tenantId}`, '1'); } catch { /* blocked */ }
+    if (seen) return undefined;
+    const id = window.setTimeout(() => fx.toast(language === 'mr' ? `${restaurantData.name} मध्ये स्वागत आहे` : `Welcome to ${restaurantData.name}`), 1200);
+    return () => window.clearTimeout(id);
+  }, [restaurantData?.name, tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "Chai time?" style suggestion that follows the clock and only points at something on this menu.
+  const craving = useMemo(() => {
+    const h = new Date().getHours();
+    const band = (h >= 6 && h < 11) ? { re: /chai|tea|coffee|poha|upma|idli|dosa|misal|sandwich/i, en: 'Breakfast time?', mr: 'नाश्त्याची वेळ?' }
+      : (h >= 15 && h < 18) ? { re: /chai|tea|coffee|bhaji|vada|samosa|sandwich/i, en: 'Chai time?', mr: 'चहाची वेळ?' }
+      : (h >= 20 || h < 1) ? { re: /gulab|kulfi|ice ?cream|dessert|brownie|sweet|halwa|jamun/i, en: 'Something sweet to finish?', mr: 'शेवट गोड करायचा?' } : null;
+    if (!band) return null;
+    const it = allMenuItems.find((m) => m.isAvailable !== false && band.re.test(m.name || ''));
+    return it ? { it, band } : null;
+  }, [allMenuItems]);
   const baseTitleRef = useRef(typeof document !== 'undefined' ? document.title : '');
   useEffect(() => {
     const orig = baseTitleRef.current.replace(/^\(\d+\)\s*/, '');
@@ -5835,7 +5879,7 @@ if (qrCheck === 'unverified') {
         
 {hasNonVegInView && (
   <div style={{ position: 'absolute', top: '15px', left: '15px', zIndex: 5 }}>
-    <DietToggle vegOnly={filterVegOnly} counts={dietCounts} onChange={(v) => { setFilterVegOnly(v); try { if (tenantId) localStorage.setItem(`px_menu_diet_${tenantId}`, v ? 'veg' : 'all'); } catch { /* blocked */ } }} language={language} />
+    <DietToggle vegOnly={filterVegOnly} counts={dietCounts} onChange={(v) => { setFilterVegOnly(v); fx.toast(v ? (language === 'mr' ? 'फक्त शाकाहारी पदार्थ दाखवत आहे' : 'Showing vegetarian dishes only') : (language === 'mr' ? 'पूर्ण मेनू दाखवत आहे' : 'Showing the full menu')); try { if (tenantId) localStorage.setItem(`px_menu_diet_${tenantId}`, v ? 'veg' : 'all'); } catch { /* blocked */ } }} language={language} />
   </div>
 )}
         <h1 style={{...styles.cafeName, background: 'linear-gradient(180deg,#f6ecd7,#d3bfa2 65%,#b99f78)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{restaurantData?.name || 'Restaurant'}</h1>
@@ -5846,8 +5890,6 @@ if (qrCheck === 'unverified') {
         </div>
         <div style={language === 'mr' ? { ...styles.poweredBy, letterSpacing: 0, fontSize: '0.7rem' } : styles.poweredBy}>{t[language].poweredBy} <img src={PRATYEKSHAA_LOGO} alt="Pratyeksha" style={{ width:86, height:'auto', verticalAlign:'middle', background:'#f7f3eb', borderRadius:5, padding:'2px 4px', margin:'0 3px' }} /> • {t[language].table} {convertToMrNumber(tableNumber)}</div>
         <GuestLegalLinks language={language} onOpen={openLegal} style={{ marginTop: 8 }} />
-        {/* In normal flow (not absolutely positioned) so it can never sit on top of a long restaurant name or the VEG / NON-VEG toggle. */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px', marginTop: 8 }}><TimeGreeting lang={language} style={language === 'mr' ? { letterSpacing: 0, textTransform: 'none' } : undefined} /><span className={`fx-live${socketLive ? '' : ' off'}`} title={language === 'mr' ? (socketLive ? 'मेनू थेट अपडेट होतो' : 'पुन्हा जोडत आहे…') : (socketLive ? 'Menu updates live' : 'Reconnecting…')}><i />{language === 'mr' ? (socketLive ? 'थेट' : 'जोडत आहे') : (socketLive ? 'Live' : 'Reconnecting')}</span></div>
         <div style={{ display:'flex', justifyContent:'center', alignItems:'center', flexWrap: 'wrap', gap: 10, marginTop: 8 }}><PwaInstallButton kind="customer" compact /><SeatedTimer language={language} /></div>
       </header>
 {activeAnnouncement && !announcementDismissed && (() => {
@@ -6471,6 +6513,21 @@ if (qrCheck === 'unverified') {
           </button>
         </div>
       )}
+      {!searchQuery && craving && !cart[craving.it._id] && (
+        <button type="button" className="px-crave fx-rise" onClick={() => {
+          fx.tap?.();
+          setQuickFilter('none'); setSearchQuery(''); setSelectedCategoryId(craving.it.categoryId || 'all'); setHighlightId(craving.it._id);
+          surpriseTimers.current.forEach(clearTimeout);
+          surpriseTimers.current = [
+            setTimeout(() => { document.getElementById(`dish-${craving.it._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 380),
+            setTimeout(() => setHighlightId(null), 3200),
+          ];
+        }}>
+          <Sparkles size={18} color="#d3bfa2" />
+          <span><b>{language === 'mr' ? craving.band.mr : craving.band.en}</b><small>{(language === 'mr' && craving.it.name_mr) || craving.it.name} · ₹{craving.it.priceFull || craving.it.price}</small></span>
+          <span className="go">{language === 'mr' ? 'पाहा' : 'SHOW ME'}</span>
+        </button>
+      )}
       {(quickFilter !== 'none' || searchQuery.trim()) && shownItems.length > 0 && (
         <div className="px-count" role="status">
           <span>{language === 'mr' ? `${convertToMrNumber(shownItems.length)} पदार्थ` : `${shownItems.length} ${shownItems.length === 1 ? 'dish' : 'dishes'}`}</span>
@@ -6568,7 +6625,7 @@ if (qrCheck === 'unverified') {
         : (language === 'mr' ? 'या विभागात सध्या काही उपलब्ध नाही' : 'Nothing available here right now')}
     </div>
     <div style={{ fontSize: '0.72rem', color: 'rgba(247,243,235,0.55)', marginTop: 6 }}>
-      {language === 'mr' ? 'दुसरा शब्द वापरून पहा किंवा दुसरा विभाग निवडा.' : 'Try a different word, or pick another category.'}
+      {language === 'mr' ? 'कमी अक्षरे किंवा सोपा शब्द (उदा. “चहा”, “पनीर”) वापरून पहा.' : 'Try fewer letters, or a simpler word like “tea” or “paneer”.'}
     </div>
     {searchQuery.trim() && (
       <button type="button" onClick={() => setSearchQuery('')} style={{ marginTop: 14, padding: '9px 20px', borderRadius: 999, border: '1px solid rgba(211,191,162,0.35)', background: 'rgba(211,191,162,0.1)', color: '#d3bfa2', fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.5px', cursor: 'pointer' }}>
@@ -6788,6 +6845,13 @@ if (qrCheck === 'unverified') {
                 <button type="button" style={{...styles.view3dBtn, background: primaryColor}} onClick={() => { ensureModelViewer(); setActiveModel(item); }} onPointerEnter={ensureModelViewer} onFocus={ensureModelViewer}>{t[language].view3d}</button>
               </div>
             ))}
+      {/* End of the list: a friendly full stop instead of the page just stopping. */}
+      {!isLoading && filteredMenuItems.length > 0 && !searchQuery.trim() && (
+  <div style={{ textAlign: 'center', margin: '26px 84px 6px 24px', fontSize: '0.72rem', lineHeight: 1.6, color: 'rgba(247,243,235,0.45)' }}>
+    {language === 'mr' ? 'मेनू इथे संपला. अजून काही हवे असेल तर वेटरला आजचे स्पेशल विचारा.' : 'That’s the whole menu. Still deciding? Ask your server for today’s special.'}
+  </div>
+)}
+
           </motion.div>
         </AnimatePresence>
       </motion.div>
@@ -6802,9 +6866,9 @@ if (qrCheck === 'unverified') {
   const activeStatus = hasReady ? 'ready' : hasPending ? 'pending' : 'served';
 
   const statusMeta = {
-    pending: { label: language === 'mr' ? 'किचनमध्ये बनत आहे' : 'In the kitchen', sub: language === 'mr' ? 'थोडा वेळ लागेल' : 'Being prepared now', icon: <Flame size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: true },
+    pending: { label: language === 'mr' ? 'किचनमध्ये बनत आहे' : 'In the kitchen', sub: language === 'mr' ? 'शेफ कामाला लागले आहेत' : 'Your chef is on it', icon: <Flame size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: true },
     ready:   { label: language === 'mr' ? 'तयार आहे!' : 'Ready!', sub: language === 'mr' ? 'कृपया घ्या' : 'Please collect your order', icon: <CheckCircle2 size={14} color="#ecd9b0" strokeWidth={2} />, pulse: true },
-    served:  { label: language === 'mr' ? 'सर्व्ह केले' : 'All served', sub: language === 'mr' ? 'आनंद घ्या!' : 'Enjoy your meal!', icon: <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: false },
+    served:  { label: language === 'mr' ? 'सर्व्ह केले' : 'All served', sub: language === 'mr' ? 'आनंद घ्या! काही हवे असल्यास बेल दाबा' : 'Enjoy! Tap the bell if you need anything', icon: <Sparkles size={14} color="#d3bfa2" strokeWidth={1.5} />, pulse: false },
   };
   const meta = statusMeta[activeStatus];
 
@@ -7306,6 +7370,7 @@ if (qrCheck === 'unverified') {
                    <div style={styles.statusIconWrapper}><CheckCircle2 size={50} color={primaryColor} /></div>
                    <h2 style={styles.professionalTitle}>{t[language].thankYou}</h2>
                    <p style={styles.professionalSubtitle}>{t[language].receiptSent}</p>
+                   <p style={{ ...styles.professionalSubtitle, marginTop: -6, fontSize: '0.78rem', opacity: 0.8 }}>{language === 'mr' ? 'आशा आहे जेवण आवडले. पुन्हा भेटूया!' : 'Hope the meal made your day. See you again soon!'}</p>
                    
                    {/* 📱 ON-SCREEN UI: KEEPS YOUR ORIGINAL DESIGN COMPLETELY UNTOUCHED */}
                    <div style={styles.billBriefCard}>
@@ -9163,6 +9228,7 @@ if (qrCheck === 'unverified') {
           </div>
         </motion.div>
  
+        <WaitTip language={language} />
         {/* ── TABLE + ORDER COUNT ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}

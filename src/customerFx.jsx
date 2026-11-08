@@ -415,7 +415,7 @@ export function PrefsMenu({ lang = 'en', size = 16, style }) {
 }
 
 /** Small guest-side niceties, mounted once per page: an offline / back-online banner and a back-to-top button. */
-export function CustomerExtras({ lang = 'en', banner = true, topButton = true }) {
+export function CustomerExtras({ lang = 'en', banner = true, topButton = true, toasts = false }) {
   const mr = lang === 'mr';
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [back, setBack] = useState(false);
@@ -423,11 +423,11 @@ export function CustomerExtras({ lang = 'en', banner = true, topButton = true })
   const bar = React.useRef(null);
   useEffect(() => {
     let t = 0;
-    const off = () => { window.clearTimeout(t); setBack(false); setOnline(false); };
-    const on = () => { setOnline(true); setBack(true); window.clearTimeout(t); t = window.setTimeout(() => setBack(false), 2600); };
+    const off = () => { window.clearTimeout(t); setBack(false); setOnline(false); if (toasts) fx.toast(lang === 'mr' ? 'ऑफलाइन आहात. सेव्ह केलेली माहिती दिसेल' : 'You’re offline. Showing what was saved'); };
+    const on = () => { setOnline(true); setBack(true); if (toasts) fx.toast(lang === 'mr' ? 'पुन्हा ऑनलाइन' : 'Back online'); window.clearTimeout(t); t = window.setTimeout(() => setBack(false), 2600); };
     window.addEventListener('offline', off); window.addEventListener('online', on);
     return () => { window.removeEventListener('offline', off); window.removeEventListener('online', on); window.clearTimeout(t); };
-  }, []);
+  }, [toasts, lang]);
   useEffect(() => {
     let raf = 0;
     const h = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setTop(window.scrollY > 700); const d = document.documentElement; const max = d.scrollHeight - window.innerHeight; if (bar.current) bar.current.style.transform = `scaleX(${max > 300 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0})`; }); };

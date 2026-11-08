@@ -287,3 +287,21 @@ html[data-customer] #root { border-inline: 0; background: #0b0b0c; }
 html[data-customer] [style*="overflow-y: auto"], html[data-customer] [style*="overflow-y:auto"] { overflow-x: hidden; }
 /* Headings without their own colour inherited the template's near-black (--text-h), e.g. "Preparing your bill" was invisible on the dark screen. */
 html[data-customer] h1, html[data-customer] h2, html[data-customer] h3 { color: #f7f3eb; }
+
+/* ── Small details on every customer screen ── */
+html[data-customer] ::selection { background: rgba(211,191,162,.35); color: #fff; }
+html[data-customer] input, html[data-customer] textarea { caret-color: #d3bfa2; }
+html[data-customer] ::placeholder { color: rgba(255,255,255,.34); }
+html[data-customer] :focus-visible { outline: 2px solid #d3bfa2; outline-offset: 2px; border-radius: 10px; }
+html[data-customer] input:focus-visible, html[data-customer] textarea:focus-visible { outline-offset: 0; }
+html[data-customer] { scroll-behavior: smooth; scroll-padding-top: 88px; -webkit-tap-highlight-color: transparent; }
+html[data-customer] button, html[data-customer] a, html[data-customer] [role="button"] { touch-action: manipulation; }
+html[data-customer] button:not(:disabled):active { filter: brightness(.9); }
+@media (hover: hover) and (pointer: fine) { html[data-customer] * { scrollbar-width: thin; scrollbar-color: rgba(211,191,162,.35) transparent; } }
+@media (prefers-reduced-motion: reduce) { html[data-customer] { scroll-behavior: auto; } }
+html[data-reduce-motion][data-customer] { scroll-behavior: auto; }
+/* "craving" suggestion on the menu */
+.px-crave { display: flex; align-items: center; gap: 10px; width: calc(100% - 32px); margin: 12px 16px 0; padding: 11px 14px; border-radius: 16px; border: 1px solid rgba(211,191,162,.3); background: linear-gradient(120deg, rgba(211,191,162,.14), rgba(211,191,162,.04)); color: #f7f3eb; text-align: left; cursor: pointer; font-family: inherit; }
+.px-crave b { font-weight: 800; }
+.px-crave small { display: block; font-size: .66rem; color: rgba(247,243,235,.6); margin-top: 2px; }
+.px-crave span.go { margin-left: auto; color: #d3bfa2; font-weight: 900; font-size: .7rem; letter-spacing: .5px; white-space: nowrap; }

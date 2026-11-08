@@ -44,9 +44,9 @@ const L = {
   en: {
     heroLive: 'places live now', morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening', search: 'Search', all: 'All', cafe: 'Café', dine: 'Dine',
     pickup: 'Pickup', reservation: 'Reserve', waitlist: 'Waitlist', saved: 'Saved', offers: 'Offers', veg: 'Pure veg', nearMe: 'Near me',
-    allAreas: 'All areas', place: 'place', places: 'places', nearest: ' · nearest first', list: 'List', map: 'Map', nothing: 'Nothing found',
+    allAreas: 'All areas', place: 'place', places: 'places', nearest: ' · nearest first', list: 'List', map: 'Map', nothing: 'Nothing found', nothingHint: 'Try “chai”, “misal” or a nearby area name.', madeWith: 'Made with {h} for hungry people',
     welcomeBack: 'Welcome back', pickUp: 'Open menu', dismiss: 'Dismiss',
-    clear: 'Clear filters', retry: 'Retry', more: 'more', recent: 'Recent', clearRecent: 'Clear', saveHint: 'Tap the heart on a place to save it',
+    clear: 'Clear filters', retry: 'Retry', more: 'more', recent: 'Recent', clearRecent: 'Clear', saveHint: 'Tap the heart on a place to keep it here. Your go-to spots, one tap away.',
     offlineCached: "Couldn't refresh — showing your last saved list", offline: "You're offline", directions: 'Directions', openMenu: 'Open menu', call: 'Call',
     loadFail: 'Unable to load restaurants.', locDenied: 'Allow location access to sort by distance', locTimeout: 'Could not get your location in time — try again',
     locNA: 'Location is not available on this device', locBusy: 'Location unavailable right now', finding: 'Finding you…', inArea: 'in',
@@ -62,16 +62,16 @@ const L = {
     updated: 'Updated', justNow: 'just now', minAgo: 'min ago', hrAgo: 'h ago', dayAgo: 'd ago', refresh: 'Refresh', refreshing: 'Refreshing…',
     pullHint: 'Pull to refresh', releaseHint: 'Release to refresh', suggestions: 'Suggestions', sugArea: 'Area',
     openNow: 'Open now', closesAt: 'closes', closingSoon: 'Closing soon', closedNow: 'Closed', opensAt: 'opens', tomorrow: 'tomorrow', tempClosed: 'Temporarily closed',
-    opensSoon: 'Opens in {n} min', statOpen: 'open now', loadingList: 'Loading restaurants…',
+    opensSoon: 'Opens in {n} min', statOpen: 'open now', loadingList: 'Finding good food near you…',
     searchPh: 'Search places, areas, dishes…', searchPhShort: 'Search…', browseMenu: 'Browse by menu', serves: 'Serves', menuCategory: 'Category', tryMenu: 'Try a menu category', sugCategory: 'Category', sugDish: 'Dish',
     open24: 'Open 24 hours', monFri: 'Mon–Fri', satSun: 'Sat–Sun', closedOn: 'Closed on', minShort: 'min', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   },
   mr: {
     heroLive: 'ठिकाणे आता सुरू', morning: 'शुभ प्रभात', afternoon: 'शुभ दुपार', evening: 'शुभ संध्याकाळ', search: 'शोधा', all: 'सर्व', cafe: 'कॅफे', dine: 'डाइन',
     pickup: 'पिकअप', reservation: 'आरक्षण', waitlist: 'प्रतीक्षा', saved: 'आवडते', offers: 'ऑफर्स', veg: 'शुद्ध शाकाहारी', nearMe: 'जवळ',
-    allAreas: 'सर्व भाग', place: 'ठिकाण', places: 'ठिकाणे', nearest: ' · सर्वात जवळचे आधी', list: 'यादी', map: 'नकाशा', nothing: 'काहीही सापडले नाही',
+    allAreas: 'सर्व भाग', place: 'ठिकाण', places: 'ठिकाणे', nearest: ' · सर्वात जवळचे आधी', list: 'यादी', map: 'नकाशा', nothing: 'काहीही सापडले नाही', nothingHint: '“चहा”, “मिसळ” किंवा जवळचा भाग शोधून पहा.', madeWith: 'भुकेल्या जिवांसाठी {h} ने बनवले',
     welcomeBack: 'पुन्हा स्वागत', pickUp: 'मेनू उघडा', dismiss: 'बंद करा',
-    clear: 'फिल्टर काढा', retry: 'पुन्हा प्रयत्न', more: 'आणखी', recent: 'अलीकडील', clearRecent: 'पुसा', saveHint: 'आवडते ठिकाण जतन करण्यासाठी हृदयावर टॅप करा',
+    clear: 'फिल्टर काढा', retry: 'पुन्हा प्रयत्न', more: 'आणखी', recent: 'अलीकडील', clearRecent: 'पुसा', saveHint: 'आवडते ठिकाण इथे ठेवण्यासाठी हृदयावर टॅप करा. तुमची नेहमीची ठिकाणे, एका टॅपवर.',
     offlineCached: 'रिफ्रेश झाले नाही — शेवटची जतन केलेली यादी दाखवत आहे', offline: 'तुम्ही ऑफलाइन आहात', directions: 'दिशा', openMenu: 'मेनू उघडा', call: 'कॉल',
     loadFail: 'रेस्टॉरंट लोड करता आले नाहीत.', locDenied: 'अंतरानुसार क्रमवारीसाठी लोकेशनची परवानगी द्या', locTimeout: 'लोकेशन वेळेत मिळाले नाही — पुन्हा प्रयत्न करा',
     locNA: 'या डिव्हाइसवर लोकेशन उपलब्ध नाही', locBusy: 'लोकेशन सध्या उपलब्ध नाही', finding: 'तुमचे लोकेशन शोधत आहे…', inArea: 'येथे',
@@ -87,7 +87,7 @@ const L = {
     updated: 'अपडेट', justNow: 'आत्ताच', minAgo: 'मि. पूर्वी', hrAgo: 'तासांपूर्वी', dayAgo: 'दिवसांपूर्वी', refresh: 'रिफ्रेश', refreshing: 'रिफ्रेश होत आहे…',
     pullHint: 'रिफ्रेश करण्यासाठी खाली ओढा', releaseHint: 'रिफ्रेश करण्यासाठी सोडा', suggestions: 'सूचना', sugArea: 'भाग',
     openNow: 'आता उघडे', closesAt: 'बंद होईल', closingSoon: 'लवकरच बंद', closedNow: 'बंद', opensAt: 'उघडेल', tomorrow: 'उद्या', tempClosed: 'तात्पुरते बंद',
-    opensSoon: '{n} मि. मध्ये उघडेल', statOpen: 'आता उघडे', loadingList: 'रेस्टॉरंट लोड होत आहेत…',
+    opensSoon: '{n} मि. मध्ये उघडेल', statOpen: 'आता उघडे', loadingList: 'जवळचे चविष्ट ठिकाण शोधत आहे…',
     searchPh: 'ठिकाण, भाग, पदार्थ शोधा…', searchPhShort: 'शोधा…', browseMenu: 'मेनूनुसार शोधा', serves: 'उपलब्ध', menuCategory: 'श्रेणी', tryMenu: 'मेनू श्रेणी वापरून पहा', sugCategory: 'श्रेणी', sugDish: 'पदार्थ',
     open24: '२४ तास उघडे', monFri: 'सोम–शुक्र', satSun: 'शनि–रवि', closedOn: 'बंद', minShort: 'मि.', days: ['रवि', 'सोम', 'मंगळ', 'बुध', 'गुरु', 'शुक्र', 'शनि'],
   },
@@ -652,6 +652,24 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 .pxh-grid>.pxh-card:nth-child(2){animation-delay:.05s}.pxh-grid>.pxh-card:nth-child(3){animation-delay:.1s}.pxh-grid>.pxh-card:nth-child(4){animation-delay:.15s}
 .pxh-grid>.pxh-card:nth-child(5){animation-delay:.2s}.pxh-grid>.pxh-card:nth-child(n+6){animation-delay:.25s}
 @keyframes pxhCardIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+/* ── Redesign: phone layout is one roomy row per place (avatar left, details right), compact header, full-width featured card ── */
+.pxh-sticky img{max-width:112px}
+.pxh-feat:only-child{width:100%}
+@media(max-width:719px){
+.pxh-grid{grid-template-columns:1fr;gap:10px}
+.pxh-card>button.main{display:grid;grid-template-columns:56px minmax(0,1fr);column-gap:14px;align-items:start;padding:14px 48px 14px 14px}
+.pxh-card>button.main>:first-child{grid-row:1/span 8}
+.pxh-card>button.main>:not(:first-child){grid-column:2;min-width:0}
+.pxh-card>button.main>:nth-child(2){margin-top:2px!important}
+.pxh-card>button.main>div:last-of-type{padding-right:40px}
+}
+.pxh-card:active{transform:scale(.985)}
+@media(max-width:719px){.pxh-card>button.main[style*="padding-top"]{padding-top:40px!important}}
+.pxh-hint{margin-top:6px;font-size:11.5px;color:rgba(255,255,255,.42);line-height:1.5}
+.pxh-made{margin:34px 0 8px;text-align:center;font-size:11px;letter-spacing:.04em;color:rgba(211,191,162,.55)}
+.pxh-made i{display:inline-block;font-style:normal;color:#d98a7a;animation:pxhBeat 2.2s ease-in-out infinite}
+@keyframes pxhBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+@media(prefers-reduced-motion:reduce){.pxh-made i{animation:none}}
 @media(prefers-reduced-motion:reduce){.pxh-orb,.pxh-live,.pxh-w,.pxh-bar i,.pxh-grid>.pxh-card{animation:none!important}.pxh-bar{display:none}}
 @media(prefers-reduced-motion:reduce){.pxh-spin{animation:none}.pxh-sk::after{animation:none;display:none}.pxh-sk-in{animation:none}.pxh-card{transition:none}}
 `;
@@ -869,6 +887,11 @@ export default function CustomerHome() {
   const listSig = useRef('');
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [lang, setLang] = useState(() => { try { return localStorage.getItem(LANG_KEY) === 'mr' ? 'mr' : 'en'; } catch { return 'en'; } });
+  useEffect(() => {
+    const prev = document.title;
+    if (tenants.length) document.title = lang === 'mr' ? `Pratyeksha · ${tenants.length} ठिकाणे` : `Pratyeksha · ${tenants.length} place${tenants.length === 1 ? '' : 's'} to eat`;
+    return () => { document.title = prev; };
+  }, [tenants.length, lang]);
   const tr = L[lang];
   // A shared link (?type=cafe&service=pickup&area=rajarampuri&offers=1&q=...) opens exactly that view; otherwise the guest's saved filters apply.
   const [init] = useState(() => {
@@ -1176,7 +1199,7 @@ export default function CustomerHome() {
   };
 
   const toggleFav = (id, el) => {
-    if (!favs.includes(id)) { track(id, 'save'); fx.like(el); }
+    if (!favs.includes(id)) { track(id, 'save'); fx.like(el); fx.toast(lang === 'mr' ? `जतन केले · तुमच्या यादीत ${favs.length + 1}` : `Saved · ${favs.length + 1} in your list`); }
     setFavs((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev];
       writeList(FAV_KEY, next);
@@ -1532,7 +1555,7 @@ export default function CustomerHome() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
               <PwaInstallButton kind="customer" compact />
-              <PrefsMenu lang={lang} /><CustomerExtras lang={lang} banner={false} topButton={false} />
+              <PrefsMenu lang={lang} /><CustomerExtras lang={lang} banner={false} topButton={false} toasts />
             </div>
           </div>
           {!guestName && <div style={{ margin: '2px 0 6px' }}><TimeGreeting lang={lang} /></div>}
@@ -1763,6 +1786,7 @@ export default function CustomerHome() {
             <div style={{ border: '1px solid rgba(211,191,162,.1)', borderRadius: 20, padding: '38px 20px', textAlign: 'center', background: 'rgba(255,255,255,.02)' }}>
               <Sparkles size={22} color={GOLD} />
               <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(255,255,255,.55)' }}>{favOnly && !favs.length ? tr.saveHint : tr.nothing}</div>
+              {!(favOnly && !favs.length) && <div className="pxh-hint">{tr.nothingHint}</div>}
               {qNorm && menuLookup?.top.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.4, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', marginBottom: 8 }}>{tr.tryMenu}</div>
@@ -1813,7 +1837,7 @@ export default function CustomerHome() {
                         <Avatar t={tenant} size={52} radius={16} />
                         <div style={{ marginTop: 12, fontSize: 14, fontWeight: 800, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tenant.name}</div>
                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'rgba(255,255,255,.38)', minHeight: 14 }}>
-                          {areaOf(tenant) && <><MapPin size={10} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(tenant)}{distanceKm(pos, tenant) != null ? ` · ${fmtKm(distanceKm(pos, tenant))}` : ''}</span></>}
+                          {areaOf(tenant) && <><MapPin size={10} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(tenant)}{distanceKm(pos, tenant) != null ? ` · ${fmtKm(distanceKm(pos, tenant))}${distanceKm(pos, tenant) <= 2.5 ? (lang === 'mr' ? ` · ~${Math.max(1, Math.round(distanceKm(pos, tenant) * 12))} मि. चालत` : ` · ~${Math.max(1, Math.round(distanceKm(pos, tenant) * 12))} min walk`) : ''}` : ''}</span></>}
                         </div>
                         {why && !why.name && (why.dish.length > 0 || why.category.length > 0) && (
                           <div className="pxh-why"><Search size={10} /><span>{why.dish.length ? `${tr.serves}: ${why.dish.slice(0, 2).join(', ')}` : `${tr.menuCategory}: ${why.category.join(', ')}`}</span></div>
@@ -1872,6 +1896,10 @@ export default function CustomerHome() {
             </div>
           </section>
         )}
+
+        {!loading && !loadError && (
+          <div className="pxh-made">{tr.madeWith.split('{h}')[0]}<i aria-label="love">♥</i>{tr.madeWith.split('{h}')[1]}</div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -1910,7 +1938,7 @@ export default function CustomerHome() {
                 ) : offersError ? (
                   <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.48)', fontSize: 12, textAlign: 'center' }}>{offersError}</div>
                 ) : allOffers.length === 0 ? (
-                  <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.38)', fontSize: 12 }}>No offers right now</div>
+                  <div style={{ minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.38)', fontSize: 12, textAlign: 'center', padding: '0 24px', lineHeight: 1.6 }}>{lang === 'mr' ? 'सध्या ऑफर्स नाहीत. लवकरच पुन्हा पाहा!' : 'No offers right now. Check back soon, good deals show up here first.'}</div>
                 ) : (
                   <OffersExplorer offers={allOffers} lang={lang} Avatar={Avatar} onOpen={(offer) => { const tenant = offer.tenant || {}; setShowAllOffers(false); if (offer._id) track(tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(tenant, 'offers'); }} />
                 )}

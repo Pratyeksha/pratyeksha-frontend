@@ -49,6 +49,18 @@ const T = {
         settledH: 'पेमेंट मिळाले', settledP: 'आमच्यासोबत जेवल्याबद्दल धन्यवाद. पुन्हा भेटूया.' },
 };
 
+
+const BILL_TIPS = {
+  en: ['Checking your offers so you never overpay.', 'Most bills are ready in a couple of minutes.', 'Dessert or chai still calls? Just wave at your server.', 'Splitting with friends? The final bill shows every line clearly.'],
+  mr: ['तुम्हाला जास्त पैसे लागू नयेत म्हणून ऑफर्स तपासत आहोत.', 'बहुतेक बिले काही मिनिटांत तयार होतात.', 'चहा किंवा गोड खावेसे वाटतेय? वेटरला खुणावा.', 'मित्रांसोबत वाटून घेताय? अंतिम बिलात प्रत्येक ओळ स्पष्ट दिसते.'],
+};
+function BillTip({ language }) {
+  const list = BILL_TIPS[language] || BILL_TIPS.en;
+  const [i, setI] = useState(0);
+  useEffect(() => { const id = setInterval(() => { if (!document.hidden) setI((n) => (n + 1) % list.length); }, 6000); return () => clearInterval(id); }, [list.length]);
+  return <div key={i} className="fx-rise" role="note" style={{ margin: '14px auto 0', maxWidth: 300, color: 'rgba(211,191,162,0.7)', fontSize: '0.72rem', lineHeight: 1.6, minHeight: 36 }}>{list[i]}</div>;
+}
+
 /** Premium waiting screen shown until the operator approves and sends the bill. No amount is shown: nothing here is final. */
 export function BillWaitingScreen({ language = 'en', restaurantName = '', requestedAt, cancelled = false }) {
   const tr = T[language] || T.en;
@@ -84,6 +96,7 @@ export function BillWaitingScreen({ language = 'en', restaurantName = '', reques
               ))}
             </div>
             <p style={{ margin: '18px 0 0', color: 'rgba(255,255,255,0.45)', fontSize: '0.74rem', lineHeight: 1.6 }}>{tr.keep}</p>
+            <BillTip language={language} />
           </>
         )}
       </div>
