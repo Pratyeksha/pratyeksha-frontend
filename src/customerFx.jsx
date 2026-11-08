@@ -464,6 +464,9 @@ export function CustomerExtras({ lang = 'en', banner = true, topButton = true })
     const down = (e) => {
       if (calm() || e.button > 0) return;
       if (e.target.closest?.('button, a, [role="button"], .px-dish, label, summary')) puff('fx-ring', e.clientX, e.clientY, '', 620);
+      // Tapping ADD / + on a dish makes its card pulse once.
+      const btn = e.target.closest?.('.px-dish button:not(.px-heart):not(.px-share)'); const card = btn && btn.closest('.px-dish');
+      if (card) { card.classList.remove('px-flash'); void card.offsetWidth; card.classList.add('px-flash'); window.setTimeout(() => card.classList.remove('px-flash'), 650); }
     };
     const up = (e) => {
       const card = e.target.closest?.('.px-dish');

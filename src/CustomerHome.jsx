@@ -63,7 +63,7 @@ const L = {
     pullHint: 'Pull to refresh', releaseHint: 'Release to refresh', suggestions: 'Suggestions', sugArea: 'Area',
     openNow: 'Open now', closesAt: 'closes', closingSoon: 'Closing soon', closedNow: 'Closed', opensAt: 'opens', tomorrow: 'tomorrow', tempClosed: 'Temporarily closed',
     opensSoon: 'Opens in {n} min', statOpen: 'open now', loadingList: 'Loading restaurants…',
-    searchPh: 'Search places, areas, dishes…', browseMenu: 'Browse by menu', serves: 'Serves', menuCategory: 'Category', tryMenu: 'Try a menu category', sugCategory: 'Category', sugDish: 'Dish',
+    searchPh: 'Search places, areas, dishes…', searchPhShort: 'Search…', browseMenu: 'Browse by menu', serves: 'Serves', menuCategory: 'Category', tryMenu: 'Try a menu category', sugCategory: 'Category', sugDish: 'Dish',
     open24: 'Open 24 hours', monFri: 'Mon–Fri', satSun: 'Sat–Sun', closedOn: 'Closed on', minShort: 'min', days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   },
   mr: {
@@ -88,7 +88,7 @@ const L = {
     pullHint: 'रिफ्रेश करण्यासाठी खाली ओढा', releaseHint: 'रिफ्रेश करण्यासाठी सोडा', suggestions: 'सूचना', sugArea: 'भाग',
     openNow: 'आता उघडे', closesAt: 'बंद होईल', closingSoon: 'लवकरच बंद', closedNow: 'बंद', opensAt: 'उघडेल', tomorrow: 'उद्या', tempClosed: 'तात्पुरते बंद',
     opensSoon: '{n} मि. मध्ये उघडेल', statOpen: 'आता उघडे', loadingList: 'रेस्टॉरंट लोड होत आहेत…',
-    searchPh: 'ठिकाण, भाग, पदार्थ शोधा…', browseMenu: 'मेनूनुसार शोधा', serves: 'उपलब्ध', menuCategory: 'श्रेणी', tryMenu: 'मेनू श्रेणी वापरून पहा', sugCategory: 'श्रेणी', sugDish: 'पदार्थ',
+    searchPh: 'ठिकाण, भाग, पदार्थ शोधा…', searchPhShort: 'शोधा…', browseMenu: 'मेनूनुसार शोधा', serves: 'उपलब्ध', menuCategory: 'श्रेणी', tryMenu: 'मेनू श्रेणी वापरून पहा', sugCategory: 'श्रेणी', sugDish: 'पदार्थ',
     open24: '२४ तास उघडे', monFri: 'सोम–शुक्र', satSun: 'शनि–रवि', closedOn: 'बंद', minShort: 'मि.', days: ['रवि', 'सोम', 'मंगळ', 'बुध', 'गुरु', 'शुक्र', 'शनि'],
   },
 };
@@ -1558,7 +1558,7 @@ export default function CustomerHome() {
                   if (showSug && sugIdx >= 0 && suggestions[sugIdx]) { e.preventDefault(); pickSuggestion(suggestions[sugIdx].text); } else rememberSearch(query);
                   e.currentTarget.blur();
                 }
-              }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={tr.searchPh} aria-label={tr.search}
+              }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={typeof window !== 'undefined' && window.innerWidth < 360 ? tr.searchPhShort : tr.searchPh} aria-label={tr.search}
                 role="combobox" aria-expanded={showSug} aria-controls="pxh-sug" aria-autocomplete="list" aria-activedescendant={showSug && sugIdx >= 0 ? `pxh-sug-${sugIdx}` : undefined} style={{ width: '100%', boxSizing: 'border-box', textOverflow: 'ellipsis', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
               {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,.4)', cursor: 'pointer', display: 'flex', padding: 4 }}><X size={15} /></button>}
               {showSug && (

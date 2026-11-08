@@ -7395,7 +7395,7 @@ if (qrCheck === 'unverified') {
                    {/* 📥 PRINT DOM ENGINE ROOT: AUTO-SIZED & SHIFTED FOR PERFECT 1-PAGE A4 CENTERING */}
                    {/* ========================================================================= */}
                 {/* 📥 PRINT DOM ENGINE ROOT: UPDATED WITH AGGREGATED finalBillItems */}
-<div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+<div aria-hidden="true" style={{ position: 'fixed', top: 0, left: '-10000px', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
   <div id="pdf-rendering-frame" style={{ width: '210mm', display: 'flex', justifyContent: 'center', background: '#ffffff', padding: '15mm 0' }}>
     {receiptData && (
       <div id="customer-pdf-invoice" style={{ background: '#ffffff', color: '#000000', padding: '40px 25px', width: '420px', fontFamily: "'Inter', sans-serif" }}>
@@ -9303,7 +9303,7 @@ contentWrapper: {
   fabBadge: { position: 'absolute', top: '2px', right: '2px', background: '#fff', color: '#000', width: '20px', height: '20px', borderRadius: '50%', fontSize: '0.65rem', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   fullscreenModal: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#0b0b0c', zIndex: 5000, display: 'flex', flexDirection: 'column' },
   modalHeader: { padding: '24px 22px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(211,191,162,0.14)', background: 'rgba(11,11,12,0.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', fontFamily: "'Playfair Display', Georgia, serif" },
-  modalScrollBody: { flex: 1, overflowY: 'auto', paddingBottom: '50px' },
+  modalScrollBody: { flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '50px' },
   waiterCardGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', padding: '22px', maxWidth: 480, margin: '0 auto' },
   waiterCountCard: { background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.018))', borderRadius: '24px', padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', border: '1px solid rgba(211,191,162,0.14)', transition: 'border-color .2s, box-shadow .2s' },
   waiterLabel: { fontSize: '0.8rem', margin: '12px 0', fontWeight: '700', color: '#f7f3eb' },

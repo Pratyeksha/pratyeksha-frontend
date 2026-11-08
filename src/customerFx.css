@@ -95,7 +95,10 @@
 @media (prefers-reduced-motion: reduce) { .fx-billcard::after, .fx-billcard-dot { animation: none !important; } }
 
 /* ── menu quick filters, surprise-me, dish highlight ── */
-.qf-row { display: flex; gap: 8px; padding: 10px 16px 2px; overflow-x: auto; scroll-snap-type: x proximity; }
+.qf-row { display: flex; gap: 8px; padding: 10px 32px 2px 16px; overflow-x: auto; scroll-snap-type: x proximity; -webkit-mask-image: linear-gradient(90deg,#000 calc(100% - 28px),transparent); mask-image: linear-gradient(90deg,#000 calc(100% - 28px),transparent); }
+/* a dish card pulses once when something is added from it */
+@keyframes fxFlash { 0% { box-shadow: 0 0 0 0 rgba(211,191,162,.55); } 100% { box-shadow: 0 0 0 14px rgba(211,191,162,0); } }
+.px-dish.px-flash { animation: fxFlash .6s ease-out; }
 .qf-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; scroll-snap-align: start;
   font: 700 .72rem 'Poppins', sans-serif; color: rgba(247,243,235,.75); background: rgba(255,255,255,.04); border: 1px solid rgba(211,191,162,.2);
   transition: background .2s, color .2s, border-color .2s, box-shadow .2s; }
@@ -275,3 +278,12 @@ html[data-reduce-motion] .qf-row>*,html[data-reduce-motion] .fx-wiggle{animation
 .fx-prefs{position:relative}
 
 .fx-top{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+
+/* No light strips at the left/right edges of customer screens: the template's white :root background and the 1px light #root side borders
+   were showing on phones (and on overscroll). Everything behind the app is the app's own dark colour. */
+html[data-customer], html[data-customer] body { background: #0b0b0c; color-scheme: dark; overflow-x: clip; overscroll-behavior-x: none; }
+html[data-customer] #root { border-inline: 0; background: #0b0b0c; }
+/* Any vertically-scrolling panel (bill, drawers, sheets) never pans sideways; rows that need sideways scrolling set overflow-x themselves. */
+html[data-customer] [style*="overflow-y: auto"], html[data-customer] [style*="overflow-y:auto"] { overflow-x: hidden; }
+/* Headings without their own colour inherited the template's near-black (--text-h), e.g. "Preparing your bill" was invisible on the dark screen. */
+html[data-customer] h1, html[data-customer] h2, html[data-customer] h3 { color: #f7f3eb; }
