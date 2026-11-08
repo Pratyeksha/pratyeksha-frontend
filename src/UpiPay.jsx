@@ -65,7 +65,7 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
 
   const merchant = payInfo.merchant === true;
   // A personal UPI ID: PhonePe / Google Pay refuse (or cap) a pre-filled amount sent to it, so by default the app opens on the payee and the guest types the copied amount.
-  const personal = !merchant;
+  const personal = false; // pre-filled amount is the default for every payee; manual entry stays available as the fallback button
   const paramsFor = () => ({
     upiId: payInfo.upiId, payeeName: payInfo.payeeName, amount: amt, note,
     ...(merchant ? { merchantCode: payInfo.mcc || '5812', txnRef: `PX${String(txnSeed).replace(/[^A-Za-z0-9]/g, '').slice(-10)}${Date.now().toString(36)}`.slice(0, 35) } : {}),
