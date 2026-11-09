@@ -5605,7 +5605,7 @@ const renderMonthHeatmap = () => {
   const cooking = pickupEntries.filter(e => e.kitchenFired && e.status !== 'pickup-ready').length;
   const ready = pickupEntries.filter(e => e.status === 'pickup-ready').length;
   const toConfirm = reservationEntries.filter(r => r.status === 'pending').length;
-  const covers = reservationEntries.filter(r => ['pending', 'confirmed'].includes(r.status)).reduce((n, r) => n + (Number(r.partySize) || 0), 0);
+  const covers = reservationEntries.filter(r => r.status === 'pending').reduce((n, r) => n + (Number(r.partySize) || 0), 0);
   const rows = [
     { title: 'Floor', tiles: [
       { label: 'Free tables', value: b.free, sub: `of ${b.total}`, hot: false },
@@ -5617,7 +5617,7 @@ const renderMonthHeatmap = () => {
       { label: 'Dine-in waiting', value: dine, sub: dine ? `longest ${formatDuration(longest)}` : 'nobody waiting', hot: dine > 0 },
       { label: 'Pickups cooking', value: cooking, sub: 'in the kitchen', hot: false },
       { label: 'Ready to collect', value: ready, sub: 'call the guest', hot: ready > 0 },
-      { label: 'To confirm', value: toConfirm, sub: `${covers} covers booked`, hot: toConfirm > 0 },
+      { label: 'To confirm', value: toConfirm, sub: toConfirm ? `${covers} ${covers === 1 ? 'cover' : 'covers'} waiting` : 'all confirmed', hot: toConfirm > 0 },
     ] },
   ];
   const turn = turnTimeData?.today?.avg;
@@ -8000,7 +8000,7 @@ const renderMonthHeatmap = () => {
       </div>
 
       {/* ── LIFETIME VALUE HERO ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: '14px' }}>
         <div style={{ background: 'linear-gradient(150deg, rgba(211,191,162,0.16) 0%, rgba(211,191,162,0.03) 60%, #090909 100%)',
           border: `1px solid ${P.line}`, borderRadius: '18px', padding: '24px 26px', boxShadow: '0 18px 40px rgba(0,0,0,0.35)' }}>
           <div style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>Lifetime guest revenue</div>
@@ -8009,13 +8009,6 @@ const renderMonthHeatmap = () => {
           </div>
           <div style={{ marginTop: '6px', fontSize: '12px', color: P.muted }}>
             Average {money(avgPerGuest)} per guest across {sum.total || 0} {sum.total === 1 ? 'profile' : 'profiles'}
-          </div>
-        </div>
-        <div style={{ background: P.panel, border: `1px solid ${P.lineSoft}`, borderRadius: '18px', padding: '22px 24px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '10px' }}>
-          <div style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', color: P.muted, fontWeight: 800 }}>Showing</div>
-          <div style={{ fontFamily: P.serif, fontSize: '20px', color: P.ivory }}>{segLabel} guests</div>
-          <div style={{ fontSize: '12px', color: P.muted }}>
-            {rows.length} {rows.length === 1 ? 'result' : 'results'}{customerSearch ? ` matching "${customerSearch}"` : ''}
           </div>
         </div>
       </div>
@@ -9733,7 +9726,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
 
           {/* ── INTELLIGENCE ── */}
 {activeTab === 'intelligence' && (
-  <motion.div key="marketing" initial={false} animate={{ opacity: 1 }} style={styles.insightsWrapper}>
+  <motion.div key="marketing" initial={false} animate={{ opacity: 1 }} style={{ ...styles.insightsWrapper, textAlign: 'left' }}>
 
     {(() => {
       // ── Gold-only tone palette — no green/blue/red anywhere ──
@@ -11164,8 +11157,8 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
               <Sparkles size={15} color="#d3bfa2" strokeWidth={1.4} />
             </div>
             <div>
-              <img src="/pratyeksha-logo.png" alt="Pratyeksha" style={{width:120,height:'auto',background:'#f7f3eb',borderRadius:5,padding:'3px 5px'}} />
-              <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.35)', marginTop: '2px' }}>{aiBrain.dayOfWeek} · AI-powered daily forecast</div>
+<div style={{ fontSize: '0.72rem', fontWeight: '900', color: '#d3bfa2', letterSpacing: '2px', textTransform: 'uppercase' }}>Today's forecast</div>
+              <div style={{ fontSize: '0.5rem', color: 'rgba(211,191,162,0.6)', marginTop: '3px' }}>{aiBrain.dayOfWeek} · AI-powered daily forecast</div>
             </div>
           </div>
           <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.18)', fontFamily: 'monospace' }}>

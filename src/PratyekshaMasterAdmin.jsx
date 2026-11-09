@@ -6,8 +6,11 @@ import LeadCRM from './LeadCRM.jsx';
 import MasterTracking from './MasterTracking.jsx';
 import QrStudio from './QrStudio.jsx';
 import MasterDocuments from './MasterDocuments.jsx';
+import MasterFinance from './MasterFinance.jsx';
+import MasterInfluencers from './MasterInfluencers.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar, QrCode } from 'lucide-react';
+import { Megaphone } from 'lucide-react';   // (the main lucide import above only has Megaphone under an alias)
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
@@ -91,7 +94,7 @@ const GLOBAL_CSS = `
     outline: 2px solid #d3bfa2; outline-offset: 2px;
   }
   input::placeholder, textarea::placeholder { color: #7d7d86; }
-  .p-nav-group { font-size: 10px; color: rgba(211,191,162,0.72); font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; padding: 9px 11px 3px; }
+  .p-nav-group { font-size: 10px; color: rgba(211,191,162,0.72); font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; padding: 7px 11px 2px; }
   .p-nav-item:not([aria-current]):hover { background: rgba(255,255,255,0.045) !important; color: #f1ede4 !important; }
 
   /* Clients table: columns keep their width from row to row (they used to shift with each row's button count) */
@@ -1174,7 +1177,7 @@ const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
     return (
       <button type="button" onClick={()=>onNav(id)} className="p-nav-item" aria-current={isActive ? 'page' : undefined} style={{
         width:'100%', display:'flex', alignItems:'center', gap:10,
-        padding:'6px 11px', borderRadius:11, cursor:'pointer', fontFamily:'inherit',
+        padding:'5px 11px', borderRadius:11, cursor:'pointer', fontFamily:'inherit',
         /* same pill language as the Tracking tab's section tabs: gold outline + soft gold wash when selected */
         border:`1px solid ${isActive ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
         background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
@@ -1710,12 +1713,15 @@ function PratyekshaMasterAdminInner() {
             <NavItem active={activeSection} onNav={navTo} id="onboard" label="Onboard Client" icon={UserPlus} />
             <NavItem active={activeSection} onNav={navTo} id="documents" label="Documents" icon={FileText} />
             <NavItem active={activeSection} onNav={navTo} id="qrstudio" label="QR Studio" icon={QrCode} />
+            <div className="p-nav-group">Money</div>
+            <NavItem active={activeSection} onNav={navTo} id="finance" label="Finance" icon={Wallet} />
+            <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
+            <NavItem active={activeSection} onNav={navTo} id="influencers" label="Influencers" icon={Megaphone} />
             <div className="p-nav-group">Platform</div>
             <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
-            <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
           </nav>
 
-          <Div />
+          <div style={{ height:1, background:C.border, margin:'6px 0', flexShrink:0 }} />
 
           {/* Client list — scrollable and visible at the bottom of the control centre */}
           <button type="button" onClick={() => setSideClientsOpen(v => !v)} aria-expanded={sideClientsOpen} style={{
@@ -1738,7 +1744,7 @@ function PratyekshaMasterAdminInner() {
             ))}
             {clients.length === 0 && <div style={{ fontSize:11, color:C.textDim, padding:'12px 4px' }}>No clients yet.</div>}
           </div>}
-          <Div />
+          <div style={{ height:1, background:C.border, margin:'6px 0', flexShrink:0 }} />
           <div style={{ display: 'grid', gap: 8 }}>
             <InstallButton />
             <button type="button" onClick={refresh} style={{
@@ -2510,6 +2516,8 @@ function PratyekshaMasterAdminInner() {
           </div>
         )}
 
+        {activeSection==='finance' && <MasterFinance onOpenExpenses={() => navTo('expenses')} />}
+        {activeSection==='influencers' && <MasterInfluencers />}
         {activeSection==='tracking' && <MasterTracking onOpenClients={() => navTo('clients')} onOpenCrm={() => navTo('crm')} />}
 
         {activeSection==='crm' && <LeadCRM />}
