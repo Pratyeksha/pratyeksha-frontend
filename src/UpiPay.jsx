@@ -8,7 +8,7 @@ import { UPI_LOGOS } from './upiLogos.js';
 
 const GOLD = '#d3bfa2';
 const T = {
-  en: { roundNote: 'Bill', roundNote2: 'rounded to the nearest rupee for UPI', subManual: 'Tap your app. It opens on this payee and the amount is already copied: enter it, then your PIN.', tryPrefill: 'Try with the amount pre-filled instead', enterAmt: 'Enter this amount in your app',
+  en: { qrBtn: 'Pay with a pre-filled QR instead', qrHow: 'Save this QR, open Google Pay / PhonePe / Paytm, choose “Scan”, then pick it from your gallery. The amount and payee are filled in; it is not blocked like a link.', qrSave: 'Save QR image', qrHide: 'Hide QR', roundNote: 'Bill', roundNote2: 'rounded to the nearest rupee for UPI', subManual: 'Tap your app. It opens on this payee and the amount is already copied: enter it, then your PIN.', tryPrefill: 'Try with the amount pre-filled instead', enterAmt: 'Enter this amount in your app',
         title: 'Pay with UPI', sub: 'Tap your app. It opens with the amount ready; you only enter your PIN.', other: 'Other UPI app', copy: 'Copy UPI ID', copied: 'Copied',
         manual: 'Amount not accepted or limit error? Pay manually', manualHint: 'The amount is copied. Your app opens on this payee: paste or type', copyAmt: 'Copy amount', amtCopied: 'Amount copied',
         noOpen: 'Did not open? Choose “Other UPI app”, or pay this UPI ID manually.', scan: 'Scan with any UPI app on your phone', amount: 'Amount to pay',
@@ -20,7 +20,7 @@ const T = {
         h_noopen: 'Choose “Other UPI app” to pick from the apps on your phone, or copy the UPI ID and pay manually.',
         h_other: 'Please try another UPI app, or ask staff to take payment at the counter.',
         reported: 'Staff have been told about the problem.', tryAgain: 'Try another way', unsureH: 'Check your UPI app’s payment history. If the money left your account, tap “Yes, I paid”.' },
-  mr: { roundNote: 'बिल', roundNote2: 'UPI साठी जवळच्या रुपयात पूर्णांक केले', subManual: 'तुमचे अ‍ॅप निवडा. ते या payee वर उघडते आणि रक्कम कॉपी झाली आहे: ती टाका, मग PIN टाका.', tryPrefill: 'त्याऐवजी रक्कम आधीच भरून पाहा', enterAmt: 'तुमच्या अ‍ॅपमध्ये ही रक्कम टाका',
+  mr: { qrBtn: 'त्याऐवजी आधी भरलेल्या QR ने पैसे द्या', qrHow: 'हा QR सेव्ह करा, Google Pay / PhonePe / Paytm उघडा, “Scan” निवडा आणि गॅलरीतून हा QR निवडा. रक्कम व payee आधीच भरलेले असतात; लिंकसारखे ब्लॉक होत नाही.', qrSave: 'QR इमेज सेव्ह करा', qrHide: 'QR लपवा', roundNote: 'बिल', roundNote2: 'UPI साठी जवळच्या रुपयात पूर्णांक केले', subManual: 'तुमचे अ‍ॅप निवडा. ते या payee वर उघडते आणि रक्कम कॉपी झाली आहे: ती टाका, मग PIN टाका.', tryPrefill: 'त्याऐवजी रक्कम आधीच भरून पाहा', enterAmt: 'तुमच्या अ‍ॅपमध्ये ही रक्कम टाका',
         title: 'UPI ने पैसे द्या', sub: 'तुमचे अ‍ॅप निवडा. रक्कम तयार उघडते; तुम्ही फक्त PIN टाका.', other: 'इतर UPI अ‍ॅप', copy: 'UPI आयडी कॉपी करा', copied: 'कॉपी झाले',
         manual: 'रक्कम चालत नाही / मर्यादा त्रुटी? स्वतः पैसे द्या', manualHint: 'रक्कम कॉपी झाली. तुमचे अ‍ॅप या प्राप्तकर्त्यावर उघडेल: रक्कम पेस्ट करा किंवा टाईप करा', copyAmt: 'रक्कम कॉपी करा', amtCopied: 'रक्कम कॉपी झाली',
         noOpen: 'उघडले नाही? “इतर UPI अ‍ॅप” निवडा किंवा हा UPI आयडी वापरून पैसे द्या.', scan: 'तुमच्या फोनवरील कोणत्याही UPI अ‍ॅपने स्कॅन करा', amount: 'भरायची रक्कम',
@@ -51,6 +51,8 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
   const [showHint, setShowHint] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedAmt, setCopiedAmt] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const qrRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [step, setStep] = useState('ask');            // ask | failed | unsure | reported
@@ -87,6 +89,23 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
     clearTimeout(hintTimer.current);
     hintTimer.current = setTimeout(() => { if (!document.hidden) setShowHint(true); }, 2500);   // still visible => the app did not open
     window.location.href = link;
+  };
+  // Pre-filled QR: scanning is handled inside the UPI app (gallery scan), so it is not subject to the browser-link restrictions of GPay / PhonePe.
+  const saveQr = () => {
+    try {
+      const svg = qrRef.current && qrRef.current.querySelector('svg');
+      if (!svg) return;
+      const xml = new XMLSerializer().serializeToString(svg);
+      const img = new Image();
+      img.onload = () => {
+        const size = 640, pad = 48;
+        const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
+        const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, size, size); cx.imageSmoothingEnabled = false;
+        cx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
+        cv.toBlob((blob) => { if (!blob) return; const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = `pay-${formatUpiAmount(amt)}.png`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }, 'image/png');
+      };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    } catch { /* long-press the QR to save it instead */ }
   };
   const copyAmount = async () => { try { await navigator.clipboard.writeText(formatUpiAmount(amt)); setCopiedAmt(true); setTimeout(() => setCopiedAmt(false), 1800); } catch { /* blocked */ } };
   const copyId = async () => { try { await navigator.clipboard.writeText(payInfo.upiId); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* blocked */ } };
@@ -136,6 +155,18 @@ export default function UpiPay({ amount, payInfo, note, language = 'en', tenantI
           )}
           {platform !== 'desktop' && (
             <button type="button" onClick={() => open('any', !personal)} style={{ ...plain, width: '100%', marginTop: 10, fontSize: '0.72rem', borderStyle: 'dashed' }}>{personal ? tr.tryPrefill : tr.manual}</button>
+          )}
+          {platform !== 'desktop' && (
+            <>
+              <button type="button" onClick={() => setShowQr((v) => !v)} style={{ ...plain, width: '100%', marginTop: 8, fontSize: '0.72rem', borderStyle: 'dashed' }}>{showQr ? tr.qrHide : tr.qrBtn}</button>
+              {showQr && (
+                <div style={{ marginTop: 10, textAlign: 'center', padding: '12px 10px', borderRadius: 12, border: '1px solid rgba(211,191,162,0.3)' }}>
+                  <div ref={qrRef} style={{ display: 'inline-block', background: '#fff', padding: 10, borderRadius: 12, lineHeight: 0 }}><QRCodeSVG value={genericLink} size={176} level="M" /></div>
+                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.55, margin: '10px 0' }}>{tr.qrHow}</div>
+                  <button type="button" onClick={saveQr} style={{ ...plain, width: '100%' }}>{tr.qrSave}</button>
+                </div>
+              )}
+            </>
           )}
           {manualMsg && (
             <div role="status" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(224,196,143,0.45)', background: 'rgba(224,196,143,0.08)', textAlign: 'center' }}>

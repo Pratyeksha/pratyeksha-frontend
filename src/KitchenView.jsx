@@ -267,6 +267,8 @@ const buildModSpeech = (who, m, fallbackNote) => {
   return `Order modified. ${who}. ${parts.join('. ')}${parts.length ? '.' : ''}`;
 };
 
+// "just now" / "3 min ago" / "1h 05m ago" (computed once when a list opens, never ticking)
+const fmtAgo = ms => { const m = Math.max(0, Math.round((Date.now() - (ms || Date.now())) / 60000)); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)}h ${pad2(m % 60)}m ago`; };
 const sameName = (a, b) => String(a || '').toLowerCase().trim() === String(b || '').toLowerCase().trim();
 // A second change to the same ticket must not wipe the first one's highlight (a dish added earlier is still uncooked).
 // Keeps the very first "from" quantity and the latest "to"; a dish added then removed (or removed then added back) cancels out.
@@ -363,7 +365,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-duo .kx-nav{flex:1;min-width:0}
 .kx-duo .kx-nav.sq{flex:0 0 38px;justify-content:center;padding:6px 0}
 .kx-mini{display:flex;padding:2px;gap:2px;border-radius:10px;background:#070708;border:1px solid var(--line)}
-.kx-mini button{padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:30px}
+.kx-mini button{white-space:nowrap;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:30px}
 .kx-mini button.on{background:rgba(211,191,162,.2);color:var(--gold)}
 .kx-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 14px;border-radius:11px;border:1px solid var(--line2);background:rgba(211,191,162,.1);color:var(--gold);font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .18s var(--ease)}
 .kx-btn:not(:disabled):hover{background:rgba(211,191,162,.18)} .kx-btn:disabled{opacity:.4}
@@ -383,6 +385,17 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-toast.compact .ic{width:26px;height:26px;border-radius:8px}
 .kx-toast.compact b{font-size:.6rem;letter-spacing:.04em}
 .kx-toast.compact p{font-size:.58rem}
+.kx-offline{display:flex;align-items:center;gap:12px;margin:8px 8px 0;padding:7px 11px;border-radius:13px;background:linear-gradient(160deg,rgba(226,154,88,.18),rgba(226,154,88,.06)),#16120e;border:1px solid rgba(226,154,88,.5);flex-shrink:0}
+.kx-offline>div{flex:1;min-width:0}
+.kx-offline b{display:block;font-size:.66rem;letter-spacing:.12em;color:#f2bd88}
+.kx-offline span{display:block;margin-top:2px;font-size:.62rem;color:#e8b98a;line-height:1.35}
+.kx-undo{margin-left:auto;flex-shrink:0;padding:7px 14px;border-radius:9px;border:1px solid var(--line2);background:rgba(211,191,162,.18);color:var(--gold);font-size:.6rem;font-weight:800;letter-spacing:.14em}
+.kx-undo:hover{background:rgba(211,191,162,.3)}
+.kx-rc{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);text-align:left;min-height:40px}
+.kx-rc:hover{border-color:var(--line2);background:rgba(211,191,162,.08)}
+.kx-rc .n{font-weight:800;font-size:.82rem;min-width:54px}
+.kx-rc .m{flex:1;font-size:.6rem;color:var(--mute)}
+.kx-rc .go{display:inline-flex;align-items:center;gap:4px;font-size:.52rem;font-weight:800;letter-spacing:.1em;color:var(--gold)}
 .kx-alerts{display:flex;flex-direction:column;gap:6px;margin:8px 8px 0;flex-shrink:0}
 .kx-alert{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 11px;border-radius:13px;background:linear-gradient(160deg,rgba(226,154,88,.14),rgba(226,154,88,.05)),#16120e;border:1px solid rgba(226,154,88,.4)}
 .kx-alert .l{display:flex;align-items:center;gap:12px;min-width:0}
@@ -410,6 +423,8 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-ct.hot{background:rgba(211,191,162,.2);color:var(--gold)}
 .kx-86{width:20px;height:20px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line);color:var(--dim);transition:all .16s}
 .kx-86:hover{border-color:rgba(226,154,88,.55);color:var(--amber)}
+.kx-86.has{width:auto;min-width:20px;padding:0 5px;display:inline-flex;align-items:center;gap:3px;border-color:rgba(226,154,88,.55);color:var(--amber);background:rgba(226,154,88,.1)}
+.kx-86 em{font:700 .54rem 'JetBrains Mono',monospace;font-style:normal}
 .kx-vegseg{display:flex;padding:3px;gap:2px;border-radius:13px;background:#070708;border:1px solid var(--line);margin-bottom:10px;flex-shrink:0}
 .kx-vegseg button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:6px 4px;border:0;border-radius:9px;background:transparent;color:var(--mute);font-size:.58rem;font-weight:700;letter-spacing:.06em;min-height:30px}
 .kx-vegseg button.on.v{background:rgba(93,154,78,.18);color:#9fcb90} .kx-vegseg button.on.n{background:rgba(192,74,74,.18);color:#e29a9a}
@@ -418,7 +433,13 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-prep{display:flex;align-items:center;gap:8px;overflow-x:auto;min-width:0;flex:1}
 .kx-prep-l{display:flex;align-items:center;gap:6px;font-size:.55rem;letter-spacing:.2em;font-weight:700;color:var(--gold);flex-shrink:0;text-transform:uppercase}
 .kx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:.62rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6}
+.kx-chip{cursor:pointer;font-family:inherit}
+.kx-chip:hover{border-color:var(--line2);color:var(--cream)}
+.kx-chip.on{background:rgba(211,191,162,.2);border-color:var(--gold);color:var(--cream)}
 .kx-chip b{font:700 .7rem 'JetBrains Mono',monospace;color:var(--gold)}
+.kx-filterbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:rgba(211,191,162,.12);font-size:.54rem;font-weight:700;letter-spacing:.1em;color:var(--gold);flex-shrink:0;white-space:nowrap;text-transform:uppercase}
+.kx-filterbtn b{font:700 .64rem 'JetBrains Mono',monospace;color:var(--cream)}
+.kx-filterbtn:hover{background:rgba(211,191,162,.2)}
 .kx-latebtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid rgba(226,154,88,.5);background:rgba(226,154,88,.1);font-size:.54rem;font-weight:800;letter-spacing:.12em;color:#f0b87c;flex-shrink:0;text-transform:uppercase}
 .kx-latebtn b{font:700 .62rem 'JetBrains Mono',monospace}
 .kx-latebtn.on{background:rgba(226,154,88,.28);border-color:var(--amber);color:#ffe2c0}
@@ -486,7 +507,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-prog .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#b99f78,#e6d6b8);transition:width .4s var(--ease)}
 .kx-prog span{font:700 .56rem 'JetBrains Mono',monospace;color:var(--mute)}
 .kx-prog span.ok{color:var(--gold)}
-.kx-items{display:flex;flex-direction:column;gap:5px;padding:2px 6px 6px 11px;overflow-y:auto;flex:1 1 auto;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(211,191,162,.35) transparent}
+.kx-items{display:flex;flex-direction:column;gap:5px;padding:2px 6px 6px 11px;overflow-y:auto;flex:1 1 auto;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(211,191,162,.35) transparent;background:linear-gradient(#0f0e0d 30%,rgba(15,14,13,0)) top/100% 22px no-repeat local,linear-gradient(rgba(15,14,13,0),#0f0e0d 70%) bottom/100% 22px no-repeat local,radial-gradient(farthest-side at 50% 0,rgba(211,191,162,.34),rgba(211,191,162,0)) top/100% 10px no-repeat scroll,radial-gradient(farthest-side at 50% 100%,rgba(211,191,162,.34),rgba(211,191,162,0)) bottom/100% 10px no-repeat scroll;background-color:#0f0e0d}
 .kx-items::-webkit-scrollbar{width:4px}.kx-items::-webkit-scrollbar-thumb{background:rgba(211,191,162,.35);border-radius:2px}
 .kx-it{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;padding:6px 8px;border-radius:11px;flex-shrink:0;background:rgba(255,255,255,.035);border:1px solid rgba(211,191,162,.12);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:all .16s var(--ease)}
 .kx-it:hover{border-color:var(--line2)} .kx-it:active{transform:scale(.99)}
@@ -605,6 +626,9 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 @media (max-height:520px){.kx-health,.kx-ribbon{display:none}.kx-tk{--kx-maxh:max(230px,calc(100vh - 112px))}.kx-top{padding-top:4px;padding-bottom:4px}}
 .kx-ib.attn{border-color:rgba(226,154,88,.6);color:var(--amber);background:rgba(226,154,88,.1);animation:kxBreath 2s ease-in-out infinite}
 @media (max-width:599px){
+  .kx-row.stack{flex-direction:column;align-items:stretch;gap:8px}
+  .kx-row.stack .kx-mini{width:100%}
+  .kx-row.stack .kx-mini button{flex:1}
   .kx-top{margin:6px 6px 0;padding:5px 7px;gap:6px;border-radius:14px}
   .kx-logo img{width:76px} .kx-acts{gap:4px} .kx-mdot{display:inline-block}
   .kx-ib{height:36px;min-width:36px;padding:0 8px}
@@ -704,6 +728,9 @@ const KitchenViewInner = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [lateIds, setLateIds] = useState(() => new Set());      // tickets older than the overdue limit
   const [showLateOnly, setShowLateOnly] = useState(false);
+  const [dishFilter, setDishFilter] = useState('');            // show only tickets that contain this dish (tap a chip in the prep queue)
+  const [showRecall, setShowRecall] = useState(false);
+  const [offlineLong, setOfflineLong] = useState(false);        // the live connection has been down for a few seconds
   const [voiceList, setVoiceList] = useState([]);
   const [awakeOn, setAwakeOn] = useState(false);                // the screen wake lock is held
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -731,6 +758,8 @@ const KitchenViewInner = () => {
   const recentSocketRef = useRef(new Map()); // id -> { order, ts }: tickets the socket delivered in the last 20 s (a slower fetch must not drop them)
   const sortOldestRef = useRef(false);
   const displayRef = useRef(display);
+  const recallQueueRef = useRef([]);
+  const handleRecallRef = useRef(null);
   const alertedLateRef = useRef(new Set());  // tickets already announced as overdue
   const lateSeededRef = useRef(false);
   const checkLateRef = useRef(null);
@@ -741,6 +770,13 @@ const KitchenViewInner = () => {
   const metaLoadedRef = useRef(false);      // categories / menu / tenant have been loaded at least once
   useEffect(() => { ordersRef.current = orders; }, [orders]);
   useEffect(() => { sortOldestRef.current = sortOldest; }, [sortOldest]);
+  useEffect(() => { recallQueueRef.current = recallQueue; }, [recallQueue]);
+  // a short connection blip is not worth a banner: only after it has lasted a few seconds
+  useEffect(() => {
+    if (isOnline) { setOfflineLong(false); return undefined; }
+    const t = setTimeout(() => setOfflineLong(true), 4000);
+    return () => clearTimeout(t);
+  }, [isOnline]);
   useEffect(() => () => { timersRef.current.forEach(clearTimeout); clearTimeout(reconcileRef.current); }, []);
   const later = (fn, ms) => {
     const h = setTimeout(() => { timersRef.current = timersRef.current.filter(x => x !== h); fn(); }, ms);
@@ -1164,7 +1200,7 @@ const KitchenViewInner = () => {
     const idKey = String(orderId);
     if (voicePrefsRef.current.dispatchSound) playAlertSound('pickupReady'); // instant feedback on the tap, before the server answers
     setProcessingOrderIds(prev => new Set(prev).add(orderId));
-    setRecallQueue(prev => [order, ...prev].slice(0, 10));
+    setRecallQueue(prev => [{ ...order, _dispatchedAt: Date.now() }, ...prev].slice(0, 10));
     recentSocketRef.current.delete(idKey);
     setModInfo(prev => { if (!(idKey in prev)) return prev; const n = { ...prev }; delete n[idKey]; return n; });
     dispatchedRef.current.add(idKey); // a fetch that was already in flight must not bring this ticket back
@@ -1177,6 +1213,8 @@ const KitchenViewInner = () => {
     try {
       const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
       later(() => dispatchedRef.current.delete(idKey), 90000);
+      // a mis-tap is the most common KDS mistake: for a few seconds the call-out carries an UNDO button (the full list is under Recall)
+      pushToast({ kind: 'done', title: `DISPATCHED · ${shortLabel(order)}`, body: 'Mistake? Undo it.', action: { label: 'UNDO', id: idKey }, ttl: 8000 });
       try { localStorage.removeItem(`kds_note_${orderId}`); } catch { /* ignore */ } // the private ticket note is no longer needed
       fetchHealth({ summary: true }); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
@@ -1202,9 +1240,11 @@ const KitchenViewInner = () => {
 
   useEffect(() => { markAsReadyRef.current = markAsReady; });
 
-  const handleRecall = async () => {
-    if (!recallQueue.length) return;
-    const recalled = recallQueue[0];
+  const handleRecall = async id => {
+    const queue = recallQueueRef.current;
+    const recalled = id ? queue.find(o => String(o._id) === String(id)) : queue[0];
+    if (!recalled) return;
+    const drop = () => setRecallQueue(prev => prev.filter(o => o._id !== recalled._id));
     // Persist the recall: it only re-appeared locally, so the order stayed 'ready' on the server and vanished again
     // on the next refresh / on every other device.
     let recallRes;
@@ -1217,25 +1257,37 @@ const KitchenViewInner = () => {
     // The server answers { skipped: true } when the ticket already moved on (served/settled/rejected) or was recalled
     // elsewhere. Putting it back on the board then showed a ticket that is no longer pending.
     if (recallRes?.data?.skipped || recallRes?.data?.order?.status !== 'pending') {
-      setRecallQueue(prev => prev.slice(1));
+      drop();
       return;
     }
     dispatchedRef.current.delete(String(recalled._id));
     // Use the server's copy, not the snapshot taken when the ticket was dispatched (stale items / crossed state).
     const fresh = recallRes.data.order || recalled;
     setOrders(prev => prev.some(o => String(o._id) === String(recalled._id)) ? prev : [fresh, ...prev]);
-    setRecallQueue(prev => prev.slice(1));
+    drop();
     setCompletedTicketsCount(prev => { const n = Math.max(0, prev - 1); try { localStorage.setItem(`kds_completed_count_${tenantId}`, n); } catch { /* ignore */ } return n; });
     // The average is total/count, so the recalled ticket's time has to leave the total together with its count.
     const counted = Number(recalled._kdsCountedSeconds);
     if (Number.isFinite(counted) && counted > 0) setTotalProcessingTime(prev => { const n = Math.max(0, prev - counted); try { localStorage.setItem(`kds_processing_time_${tenantId}`, n); } catch { /* ignore */ } return n; });
     fetchHealth({ summary: true }); // the database-backed dispatched / average figures still counted the recalled ticket
   };
+  useEffect(() => { handleRecallRef.current = handleRecall; });
 
   const trigger86 = (categoryKey, categoryName) => {
     setEightySixModal({ categoryKey, categoryName });
     setSelectedDish86(null);
     setSelectedReason86('ran_out');
+  };
+
+  // un-86: the dish is back in stock (the same menu call, the other way round)
+  const restore86 = async dish => {
+    if (!dish || confirm86Busy.current) return;
+    confirm86Busy.current = true;
+    try {
+      await axios.patch(`${BASE_URL}/menu-item/${dish._id}`, { tenantId, isAvailable: true });
+      setMenuItems(prev => prev.map(m => m._id === dish._id ? { ...m, isAvailable: true, outOfStockReason: undefined, outOfStockAt: undefined, outOfStockBy: undefined } : m));
+    } catch { alert('Could not restore the dish.'); }
+    finally { confirm86Busy.current = false; }
   };
 
   const confirm86 = async () => {
@@ -1281,6 +1333,13 @@ const KitchenViewInner = () => {
     return p;
   }, [menuItems]);
 
+  // how many dishes are 86'd in each category (shown on the rail's 86 button, so a cook can see it without opening anything)
+  const eightySixCounts = useMemo(() => {
+    const c = {};
+    menuItems.forEach(m => { if (m.isAvailable === false) { const k = (m.categoryId || '').toLowerCase().trim(); if (k) c[k] = (c[k] || 0) + 1; } });
+    return c;
+  }, [menuItems]);
+
   const stationMatches = (otype, station) => {
     if (station === 'DINEIN') return otype === 'dine-in';
     if (station === 'PARCEL') return otype === 'parcel';
@@ -1317,7 +1376,7 @@ const KitchenViewInner = () => {
     return counts;
   }, [orders, stationFilter, dishToCategoryMap, dishToVegMap, checkedItemsGlobal, isNonVegMode]);
 
-  const filteredOrders = useMemo(() => {
+  const baseOrders = useMemo(() => {
     const list = orders.filter(order => {
       if (!(order.items || []).some(isKitchenItem)) return false;
       const otype = getOrderType(order);
@@ -1353,6 +1412,14 @@ const KitchenViewInner = () => {
     return [...list].sort((a, b) => sortOldest ? createdMs(a) - createdMs(b) : createdMs(b) - createdMs(a));
   }, [orders, stationFilter, selectedCategory, dishToCategoryMap, dishToVegMap, isNonVegMode, searchQuery, sortOldest, showLateOnly, lateIds]);
 
+  // "show only tickets with this dish": applied on top, so the prep-queue chips themselves keep listing every dish
+  const filteredOrders = useMemo(
+    () => dishFilter ? baseOrders.filter(o => (o.items || []).some(i => isKitchenItem(i) && sameName(i.name, dishFilter))) : baseOrders,
+    [baseOrders, dishFilter]
+  );
+  const activeFilterCount = (stationFilter !== 'ALL' ? 1 : 0) + (selectedCategory !== 'ALL' ? 1 : 0) + (searchQuery.trim() ? 1 : 0) + (showLateOnly && lateIds.size > 0 ? 1 : 0) + (dishFilter ? 1 : 0);
+  const clearFilters = () => { setStationFilter('ALL'); setSelectedCategory('ALL'); setSearchQuery(''); setShowSearch(false); setShowLateOnly(false); setDishFilter(''); setMobileCardIndex(0); };
+
   const aggregatedTotals = useMemo(() => {
     const totals = {};
     if (!isAggregateView) return totals; // only the batch-summary screen needs this
@@ -1374,13 +1441,13 @@ const KitchenViewInner = () => {
   const masterPrepMarqueeList = useMemo(() => {
     const m = {};
     const vis = { selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode };
-    filteredOrders.forEach(o => (o.items || []).forEach((i, idx) => {
+    baseOrders.forEach(o => (o.items || []).forEach((i, idx) => {
       if (!isDishVisible(i, vis)) return;
       if (checkedItemsGlobal[o._id] && checkedItemsGlobal[o._id][idx]) return;
       m[i.name] = (m[i.name] || 0) + (Number(i.quantity) || 1);
     }));
     return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  }, [filteredOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
+  }, [baseOrders, checkedItemsGlobal, selectedCategory, dishToCategoryMap, dishToVegMap, tenantOnlyVeg, isNonVegMode]);
 
   // Prefer the database figures (same on every KDS device and in the Owner app); the localStorage counters stay
   // only as an offline fallback before the first server response.
@@ -1558,13 +1625,14 @@ const KitchenViewInner = () => {
       if (showSettings) setShowSettings(false);
       else if (eightySixModal) setEightySixModal(null);
       else if (showWastagePanel) setShowWastagePanel(false);
+      else if (showRecall) setShowRecall(false);
       else if (showVoiceMenu) setShowVoiceMenu(false);
       else if (sidebarOpen) setSidebarOpen(false);
       else if (showSearch) { setShowSearch(false); setSearchQuery(''); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showSettings, eightySixModal, showWastagePanel, showVoiceMenu, sidebarOpen, showSearch]);
+  }, [showSettings, eightySixModal, showWastagePanel, showRecall, showVoiceMenu, sidebarOpen, showSearch]);
 
   /* ── breakpoint helpers ── */
   const showDrawerToggle = isMobile || isSmallTablet;
@@ -1621,10 +1689,10 @@ const KitchenViewInner = () => {
                 <button type="button" key={cat._id} className={`kx-nav${sel ? ' on' : ''}`} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); closeIf(); }}>
                   <span className="t"><Flame size={14} color={count > 0 ? '#d3bfa2' : undefined} /><span style={{ textTransform: 'uppercase' }}>{cat.name}</span></span>
                   <span className="r">
-                    <span role="button" tabIndex={0} className="kx-86" title={`86 a dish in "${cat.name}"`} aria-label={`86 a dish in ${cat.name}`}
+                    <span role="button" tabIndex={0} className={`kx-86${eightySixCounts[k] ? ' has' : ''}`} title={eightySixCounts[k] ? `${eightySixCounts[k]} dish(es) 86'd in "${cat.name}"` : `86 a dish in "${cat.name}"`} aria-label={`86 a dish in ${cat.name}`}
                       onClick={e => { e.stopPropagation(); trigger86(k, cat.name); }}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); trigger86(k, cat.name); } }}>
-                      <EyeOff size={12} />
+                      <EyeOff size={12} />{eightySixCounts[k] ? <em>{eightySixCounts[k]}</em> : null}
                     </span>
                     <span className={`kx-ct${count > 0 ? ' hot' : ''}`}>{pad2(count)}</span>
                   </span>
@@ -1673,12 +1741,31 @@ const KitchenViewInner = () => {
     <Motion.div key={t.id} initial={{ opacity: 0, y: compact ? 8 : -18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       className={`kx-toast${compact ? ' compact' : ''}${t.kind === 'cancel' || t.kind === 'late' ? ' cancel' : ''}`} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
-      <div className="ic">{t.kind === 'late' ? <Siren size={15} /> : t.kind === 'cancel' ? <AlertTriangle size={15} /> : <BellRing size={16} color="#d3bfa2" />}</div>
-      <div style={{ minWidth: 0 }}><b>{t.title}</b><p>{t.body}</p></div>
+      <div className="ic">{t.kind === 'late' ? <Siren size={15} /> : t.kind === 'cancel' ? <AlertTriangle size={15} /> : t.kind === 'done' ? <CheckCircle2 size={15} /> : <BellRing size={16} color="#d3bfa2" />}</div>
+      <div style={{ minWidth: 0, flex: 1 }}><b>{t.title}</b><p>{t.body}</p></div>
+      {t.action && <button type="button" className="kx-undo" onClick={e => { e.stopPropagation(); setToasts(prev => prev.filter(x => x.id !== t.id)); handleRecallRef.current?.(t.action.id); }}>{t.action.label}</button>}
     </Motion.div>
   );
 
+  // "nothing to show" has two very different meanings: the kitchen really is clear, or tickets are waiting but the filters hide them
+  const noMatch = boardState === 'ready' && filteredOrders.length === 0 && pendingCount > 0;
+  const renderEmpty = fill => noMatch ? (
+    <div className="kx-center" style={fill ? { flex: 1 } : undefined}>
+      <div className="ic"><Search size={30} /></div>
+      <h3>No tickets match</h3>
+      <p>{pendingCount} {pendingCount === 1 ? 'ticket is' : 'tickets are'} waiting, but your filters hide {pendingCount === 1 ? 'it' : 'them'}.</p>
+      <button type="button" className="kx-btn solid" onClick={clearFilters}>Clear filters</button>
+    </div>
+  ) : (
+    <div className="kx-center" style={fill ? { flex: 1 } : undefined}>
+      <div className="ic"><ChefHat size={30} /></div>
+      <h3>Kitchen clear</h3><p>All tickets dispatched. New ones appear here the moment they are placed.</p>
+      <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
+    </div>
+  );
+
   const wastageDisabled = wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim();
+  const dishesOut86 = eightySixModal ? menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable === false) : [];
   const dishesFor86 = eightySixModal ? menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false) : [];
 
   /* ═══════════════════════════════════════════════════════════
@@ -1719,9 +1806,9 @@ const KitchenViewInner = () => {
           <div className="kx-logo"><img src="/pratyeksha-logo.png" alt="Pratyeksha" /></div>
           <div className="kx-brand-t">
             <span className="kx-kds"><ChefHat size={12} /> Kitchen display</span>
-            <span className={`kx-live${isOnline ? '' : ' off'}`}>
+            <span className={`kx-live${isOnline && boardState !== 'error' ? '' : ' off'}`}>
               <i className="kx-dot" />
-              {isOnline ? (isMobile ? 'Live' : `Live${tenantName ? ` · ${tenantName}` : ''}`) : <><WifiOff size={11} /> Reconnecting…</>}
+              {boardState === 'error' ? <><WifiOff size={11} /> Can't load tickets</> : isOnline ? (isMobile ? 'Live' : `Live${tenantName ? ` · ${tenantName}` : ''}`) : <><WifiOff size={11} /> Reconnecting…</>}
             </span>
           </div>
         </div>
@@ -1757,10 +1844,31 @@ const KitchenViewInner = () => {
             </button>
           )}
           {recallQueue.length > 0 && (
-            <button type="button" className="kx-ib on" onClick={handleRecall} aria-label="Recall last ticket"
-              title={`Recall ${recallQueue.length}/10: ${recallQueue.map(o => `${shortLabel(o)} (${(o.items || []).filter(isKitchenItem).length})`).join(', ')}`}>
-              <History size={16} />{!isMobile && !isTablet && <span>RECALL {shortLabel(recallQueue[0])}</span>}<em className="kx-badge">{recallQueue.length}</em>
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button type="button" className={`kx-ib on${showRecall ? ' open' : ''}`} onClick={() => setShowRecall(v => !v)} aria-label="Recall last ticket" aria-expanded={showRecall}
+                title={`Recently dispatched: ${recallQueue.length}/10`}>
+                <History size={16} />{!isMobile && !isTablet && <span>RECALL {shortLabel(recallQueue[0])}</span>}<em className="kx-badge">{recallQueue.length}</em>
+              </button>
+              <AnimatePresence>
+                {showRecall && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 65 }} onClick={() => setShowRecall(false)} />
+                    <Motion.div className="kx-pop" role="dialog" aria-label="Recently dispatched" initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.97 }} transition={{ duration: 0.16 }}>
+                      <h4>Recently dispatched</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {recallQueue.map(o => (
+                          <button type="button" key={o._id} className="kx-rc" onClick={() => { setShowRecall(false); handleRecall(o._id); }}>
+                            <span className="n">{shortLabel(o)}</span>
+                            <span className="m">{(o.items || []).filter(isKitchenItem).length} dishes · {fmtAgo(o._dispatchedAt)}</span>
+                            <span className="go"><RotateCcw size={12} /> RECALL</span>
+                          </button>
+                        ))}
+                      </div>
+                    </Motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           )}
           {!isMobile && (
             <button type="button" aria-label="Wastage log" className={`kx-ib kx-hide-md${showWastagePanel ? ' on' : ''}`} onClick={() => setShowWastagePanel(true)}>
@@ -1853,28 +1961,45 @@ const KitchenViewInner = () => {
         </div>
       )}
 
+      {/* ── LIVE CONNECTION LOST: said plainly, only after it has lasted a few seconds ── */}
+      {offlineLong && boardState !== 'error' && (
+        <div className="kx-offline" role="alert">
+          <WifiOff size={18} color="#e29a58" />
+          <div><b>LIVE CONNECTION LOST</b><span>Tickets on screen may be out of date. Checking for new tickets every few seconds.</span></div>
+          <button type="button" className="kx-btn warn" onClick={manualRefresh}>Retry now</button>
+        </div>
+      )}
+
       {/* ══════════════ BODY ══════════════ */}
       <div className="kx-body">
         {showPermanentSide && <aside className="kx-rail" style={{ width: isLargeTablet ? 188 : 204 }}>{renderRail(false)}</aside>}
 
         <main className="kx-main">
           {/* prep queue + sort */}
-          {!isAggregateView && !showMetricsDashboard && (masterPrepMarqueeList.length > 0 || filteredOrders.length > 1 || lateIds.size > 0) && (
+          {!isAggregateView && !showMetricsDashboard && (masterPrepMarqueeList.length > 0 || filteredOrders.length > 1 || lateIds.size > 0 || activeFilterCount > 0) && (
             <div className="kx-ribbon">
               {masterPrepMarqueeList.length > 0 && (
                 <div className="kx-prep no-scrollbar">
                   <span className="kx-prep-l"><Activity size={12} /> Prep queue</span>
-                  {masterPrepMarqueeList.map(([name, qty]) => <span key={name} className="kx-chip"><b>{qty}×</b>{name}</span>)}
+                  {masterPrepMarqueeList.map(([name, qty]) => (
+                    <button type="button" key={name} className={`kx-chip${dishFilter === name ? ' on' : ''}`} aria-pressed={dishFilter === name} title={dishFilter === name ? 'Show all tickets' : `Show only tickets with ${name}`}
+                      onClick={() => setDishFilter(f => f === name ? '' : name)}><b>{qty}×</b>{name}</button>
+                  ))}
                 </div>
               )}
+              {activeFilterCount > 0 && (
+                <button type="button" className="kx-filterbtn" onClick={clearFilters} title="Show every ticket again">
+                  Showing <b>{filteredOrders.length}</b> of <b>{pendingCount}</b> · CLEAR <X size={11} />
+                </button>
+              )}
               {lateIds.size > 0 && (
-                <button type="button" className={`kx-latebtn${showLateOnly ? ' on' : ''}`} aria-pressed={showLateOnly} onClick={() => setShowLateOnly(v => !v)} style={{ marginLeft: 'auto' }}
+                <button type="button" className={`kx-latebtn${showLateOnly ? ' on' : ''}`} aria-pressed={showLateOnly} onClick={() => setShowLateOnly(v => !v)}
                   title={showLateOnly ? 'Show all tickets' : `Show only tickets older than ${Math.round(display.lateSec / 60)} minutes`}>
                   <Siren size={12} /> {showLateOnly ? 'Showing late' : 'Late'} <b>{lateIds.size}</b>
                 </button>
               )}
               {filteredOrders.length > 1 && (
-                <button type="button" className="kx-sortbtn" onClick={toggleSort} style={lateIds.size > 0 ? undefined : { marginLeft: 'auto' }}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
+                <button type="button" className="kx-sortbtn" onClick={toggleSort}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
               )}
             </div>
           )}
@@ -1935,7 +2060,7 @@ const KitchenViewInner = () => {
                 <span className="mono" style={{ marginLeft: 'auto', fontSize: '.64rem', color: '#9b978d' }}>{Object.keys(aggregatedTotals).length} items · {filteredOrders.length} tickets</span>
               </div>
               {Object.keys(aggregatedTotals).length === 0 ? (
-                <div className="kx-center"><div className="ic"><ChefHat size={32} /></div><h3>Kitchen clear</h3></div>
+                renderEmpty(false)
               ) : (
                 <div className="kx-sum">
                   {Object.entries(aggregatedTotals).map(([key, qty]) => {
@@ -1963,13 +2088,7 @@ const KitchenViewInner = () => {
               </div>
             ) : boardState === 'error' && orders.length === 0 ? (
               <KdsLoadError onRetry={retryBoardLoad} detail={boardError} />
-            ) : filteredOrders.length === 0 ? (
-              <div className="kx-center" style={{ flex: 1 }}>
-                <div className="ic"><ChefHat size={30} /></div>
-                <h3>Kitchen clear</h3><p>Waiting for the next ticket…</p>
-                <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
-              </div>
-            ) : (
+            ) : filteredOrders.length === 0 ? renderEmpty(true) : (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', minHeight: 0 }}>
                 <div className="kx-dots">{filteredOrders.map((o, i) => <i key={o._id} className={i === safeCardIndex ? 'on' : ''} onClick={() => setMobileCardIndex(i)} />)}</div>
                 <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }} {...swipeHandlers}>
@@ -1996,13 +2115,7 @@ const KitchenViewInner = () => {
               <AnimatePresence mode="popLayout">
                 {filteredOrders.map(order => <KDSOrderCard key={order._id} order={order} modInfo={modInfo[String(order._id)]} checked={checkedItemsGlobal[String(order._id)]} fresh={freshIds.has(String(order._id))} isMobile={false} {...cardProps} />)}
               </AnimatePresence>
-              {boardState === 'ready' && filteredOrders.length === 0 && (
-                <div className="kx-center">
-                  <div className="ic"><ChefHat size={32} /></div>
-                  <h3>Kitchen clear</h3><p>All tickets dispatched. New ones appear here the moment they are placed.</p>
-                  <KdsEmptyDetail loaded={orders.length} shown={filteredOrders.length} tenantId={tenantId} at={lastLoadedAt} />
-                </div>
-              )}
+              {boardState === 'ready' && filteredOrders.length === 0 && renderEmpty(false)}
             </div>
           )}
         </main>
@@ -2179,11 +2292,11 @@ const KitchenViewInner = () => {
                   <button type="button" className="kx-ib" aria-label="Close" style={{ height: 34, minWidth: 34, padding: 0 }} onClick={() => setShowSettings(false)}><X size={15} /></button>
                 </div>
                 <div style={{ padding: '12px 14px 14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div className="kx-row"><div>Ticket size<small>Make tickets smaller or larger</small></div>
+                  <div className="kx-row stack"><div>Ticket size<small>Make tickets smaller or larger</small></div>
                     <div className="kx-mini">{[['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']].map(([v, l]) => <button type="button" key={v} className={display.size === v ? 'on' : ''} onClick={() => updateDisplay({ size: v })}>{l}</button>)}</div></div>
-                  <div className="kx-row"><div>Delayed after<small>Ring turns gold, "DELAYED" shows</small></div>
+                  <div className="kx-row stack"><div>Delayed after<small>Ring turns gold, "DELAYED" shows</small></div>
                     <div className="kx-mini">{WARN_OPTIONS.map(([l, sec]) => <button type="button" key={sec} className={display.warnSec === sec ? 'on' : ''} onClick={() => updateDisplay({ warnSec: sec })}>{l}</button>)}</div></div>
-                  <div className="kx-row"><div style={{ minWidth: 0 }}>Overdue after<small>Amber glow, alert, late filter</small></div>
+                  <div className="kx-row stack"><div style={{ minWidth: 0 }}>Overdue after<small>Amber glow, alert, late filter</small></div>
                     <div className="kx-mini">{LATE_OPTIONS.map(([l, sec]) => <button type="button" key={sec} className={display.lateSec === sec ? 'on' : ''} onClick={() => updateDisplay({ lateSec: sec })}>{l}</button>)}</div></div>
                   <div className="kx-row"><div>Overdue alert<small>Chime + voice, once per ticket</small></div>
                     <button type="button" role="switch" aria-checked={voicePrefs.overdueAlert} aria-label="Overdue alert" className={`kx-sw${voicePrefs.overdueAlert ? ' on' : ''}`} onClick={() => updateVoicePrefs({ overdueAlert: !voicePrefs.overdueAlert })} /></div>
@@ -2219,6 +2332,22 @@ const KitchenViewInner = () => {
                     {dishesFor86.map(dish => <button type="button" key={dish._id} className={`kx-opt${selectedDish86?._id === dish._id ? ' on' : ''}`} onClick={() => setSelectedDish86(dish)}>{dish.name}</button>)}
                     {dishesFor86.length === 0 && <div style={{ fontSize: '.7rem', color: '#9b978d', fontStyle: 'italic', padding: '8px 2px' }}>Everything in this category is already 86'd.</div>}
                   </div>
+                  {dishesOut86.length > 0 && (
+                    <>
+                      <div className="kx-lbl">Out of stock — tap to restore</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                        {dishesOut86.map(d => (
+                          <div key={d._id} className="kx-ent" style={{ alignItems: 'center' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: '.8rem' }}>{d.name}</div>
+                              {d.outOfStockReason && <div style={{ fontSize: '.58rem', color: '#9b978d', marginTop: 2 }}>{(EIGHTY_SIX_REASONS.find(r => r.id === d.outOfStockReason) || {}).label || d.outOfStockReason}</div>}
+                            </div>
+                            <button type="button" className="kx-btn" style={{ minHeight: 32, padding: '0 12px' }} onClick={() => restore86(d)}>Restore</button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   {selectedDish86 && (
                     <>
                       <div className="kx-lbl">Why?</div>
@@ -2528,7 +2657,7 @@ const KDSOrderCard = React.memo(React.forwardRef(({
           <button type="button" className="kx-sq" aria-label="Read this ticket aloud" title="Read aloud" onClick={() => onSpeak?.(order)}><Volume2 size={17} /></button>
           <button type="button" className={`kx-go${urgency === 'high' ? ' late' : ''}`} onClick={() => onReady(order._id)} style={isMobile ? { minHeight: 46 } : undefined}>
             {urgency === 'high' && <Flame size={15} strokeWidth={2.5} />}
-            {urgency === 'high' ? 'Overdue — dispatch' : allDone ? <><CheckCircle2 size={15} /> All ready — dispatch</> : <>Complete ticket <ArrowRight size={14} /></>}
+            {urgency === 'high' ? 'Dispatch now' : allDone ? <><CheckCircle2 size={15} /> All ready — dispatch</> : <>Complete ticket <ArrowRight size={14} /></>}
           </button>
         </div>
       </div>
