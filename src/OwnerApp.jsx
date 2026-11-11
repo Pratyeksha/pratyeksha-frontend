@@ -34,7 +34,8 @@ import {
   Smartphone, UserCheck, UserX, Award, ThumbsUp, PackageX, PackageCheck, Zap, Activity,
   Receipt, ExternalLink, WifiOff, Loader2, BarChart3, Rocket, Shield, PlayCircle, Quote,
   Lock, ArrowLeftRight
-  , Crosshair
+  , Crosshair,
+  LifeBuoy, Lightbulb,
 } from 'lucide-react';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
@@ -1234,6 +1235,7 @@ const NAV_ITEMS = [
   { key: 'customers', label: 'Customers', icon: UserCircle2, group: 'Guests & growth', desc: 'Who comes back, and who is slipping away' },
   { key: 'listing', label: 'Guest Discovery', icon: Eye, group: 'Guests & growth', desc: 'How guests find and see your restaurant' },
   { key: 'growth', label: 'Why Pratyeksha', icon: Rocket, badge: true, group: 'Guests & growth', desc: 'What Pratyeksha does for you, compared with doing it by hand' },
+  { key: 'help', label: 'Help & feedback', icon: LifeBuoy, group: 'Account', desc: 'Contact support, suggest an idea, and rate Pratyeksha' },
   { key: 'settings', label: 'Settings', icon: SettingsIcon, group: 'Account', desc: 'Targets, hours, alerts, payments and password' },
 ];
 // Quick-access row on mobile; the 5th slot opens the full drawer with every tab.
@@ -1627,6 +1629,7 @@ const OwnerShell = ({ children }) => {
             padding: isDesktop ? '26px clamp(18px, 3vw, 40px) 56px' : '16px 14px 96px'
           }}>
           <RenewalReminder tenantId={ownerTenantId} />
+          <TermsBanner tenantId={ownerTenantId} />
           <div className="pown-content">
             <div key={`${location.pathname}-${refreshKey}`} className="pown-page-transition">
               {(() => { const page = NAV_ITEMS.find(i => i.key === location.pathname.split('/')[3]); return page ? <OwnerPageHeader item={page} /> : null; })()}
@@ -3697,6 +3700,200 @@ const ChangePasswordForm = ({ tenantId, onDone }) => {
   );
 };
 
+/* ═════════════════════════════════════════════════
+   HELP & FEEDBACK — terms, support tickets, ideas, rating (talks to Master Admin)
+   ═════════════════════════════════════════════════ */
+const apiErr = (e) => e?.response?.data?.error || e?.message || 'Something went wrong';
+
+/** Shows when Pratyeksha has published new terms this restaurant has not accepted. Never blocks the app. */
+const TermsBanner = ({ tenantId }) => {
+  const [info, setInfo] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let live = true;
+    api.get(`/api/owner/terms/${encodeURIComponent(tenantId)}`).then(r => { if (live) setInfo(r.data); }).catch(() => {});
+    return () => { live = false; };
+  }, [tenantId]);
+  if (!info?.terms || info.accepted) return null;
+  const accept = async () => {
+    setBusy(true); setErr('');
+    try { await api.post(`/api/owner/terms/${encodeURIComponent(tenantId)}/accept`); setInfo(i => ({ ...i, accepted: true })); setOpen(false); }
+    catch (e) { setErr(apiErr(e)); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '11px 14px', marginBottom: 14, borderRadius: 14, background: T.primarySoft, border: `1px solid ${T.borderStrong}` }}>
+        <FileText size={16} color={T.primary} />
+        <div style={{ flex: 1, minWidth: 200, fontSize: 12.5, color: T.textHigh, lineHeight: 1.5 }}>Updated terms of service are ready. Please read and accept them.</div>
+        <PrimaryBtn onClick={() => setOpen(true)}>Read & accept</PrimaryBtn>
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} title={info.terms.title} width={560}>
+        <div style={{ maxHeight: '52vh', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 12.5, lineHeight: 1.7, color: T.textMed, paddingRight: 6 }}>{info.terms.body}</div>
+        {err && <div role="alert" style={{ color: T.danger, fontSize: 12, marginTop: 10 }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+          <GhostBtn onClick={() => setOpen(false)}>Later</GhostBtn>
+          <PrimaryBtn onClick={accept} disabled={busy}>{busy ? 'Saving…' : 'I accept'}</PrimaryBtn>
+        </div>
+      </Modal>
+    </>
+  );
+};
+
+const TICKET_TONE = { open: T.warning, pending: T.warning, resolved: T.success, closed: T.textLow };
+
+const SupportCard = ({ tenantId, flash }) => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/support/:tenantId/tickets');
+  const [composing, setComposing] = useState(false);
+  const [form, setForm] = useState({ subject: '', category: 'howto', text: '' });
+  const [busy, setBusy] = useState(false);
+  const [openNo, setOpenNo] = useState(null);
+  const [reply, setReply] = useState('');
+  const create = async () => {
+    setBusy(true);
+    try { await api.post(`/api/owner/support/${encodeURIComponent(tenantId)}/tickets`, form); setForm({ subject: '', category: 'howto', text: '' }); setComposing(false); flash('Sent. We will reply here.'); refetch(); }
+    catch (e) { flash(apiErr(e)); } finally { setBusy(false); }
+  };
+  const send = async (no) => {
+    setBusy(true);
+    try { await api.post(`/api/owner/support/${encodeURIComponent(tenantId)}/tickets/${encodeURIComponent(no)}/reply`, { text: reply }); setReply(''); refetch(); }
+    catch (e) { flash(apiErr(e)); } finally { setBusy(false); }
+  };
+  const rows = Array.isArray(data) ? data : [];
+  return (
+    <Card>
+      <SectionHeading icon={LifeBuoy} title="Support" action={!composing && <PrimaryBtn icon={Plus} onClick={() => setComposing(true)}>New request</PrimaryBtn>} />
+      {composing && (
+        <div style={{ marginBottom: 16, padding: 14, borderRadius: 14, border: `1px solid ${T.border}`, background: 'rgba(255,255,255,0.02)' }}>
+          <Field label="WHAT DO YOU NEED HELP WITH?">
+            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={inputStyle} aria-label="Type of request">
+              <option value="howto">How do I…?</option><option value="bug">Something is not working</option><option value="billing">Billing or plan</option><option value="feature">I need a feature</option><option value="other">Something else</option>
+            </select>
+          </Field>
+          <Field label="SUBJECT"><input value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} style={inputStyle} maxLength={140} aria-label="Subject" /></Field>
+          <Field label="DETAILS"><textarea rows={4} value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} maxLength={2000} aria-label="Details" /></Field>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <GhostBtn onClick={() => setComposing(false)}>Cancel</GhostBtn>
+            <PrimaryBtn icon={Send} onClick={create} disabled={busy || form.subject.trim().length < 3 || !form.text.trim()}>{busy ? 'Sending…' : 'Send'}</PrimaryBtn>
+          </div>
+        </div>
+      )}
+      {error ? <div style={{ color: T.danger, fontSize: 12.5 }}>{String(error)}</div>
+        : loading && !data ? <div style={{ color: T.textLow, fontSize: 12.5 }}>Loading…</div>
+        : !rows.length ? <div style={{ color: T.textLow, fontSize: 12.5 }}>No requests yet. If something is not working, tell us here.</div>
+        : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {rows.map(t => (
+              <div key={t.number} style={{ border: `1px solid ${T.border}`, borderRadius: 13, overflow: 'hidden' }}>
+                <button type="button" onClick={() => setOpenNo(openNo === t.number ? null : t.number)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 14px', background: 'transparent', border: 0, color: T.textHigh, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textLow }}>{t.number}</span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{t.subject}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: TICKET_TONE[t.status] || T.textMed, textTransform: 'capitalize' }}>{t.status}</span>
+                </button>
+                {openNo === t.number && (
+                  <div style={{ padding: '4px 14px 14px', display: 'grid', gap: 8 }}>
+                    {(t.messages || []).map((m, i) => (
+                      <div key={i} style={{ justifySelf: m.from === 'client' ? 'end' : 'start', maxWidth: '88%', padding: '8px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', background: m.from === 'client' ? T.primarySoft : 'rgba(255,255,255,0.05)', color: T.textHigh }}>
+                        <div style={{ fontSize: 10, color: T.textLow, marginBottom: 2 }}>{m.from === 'client' ? 'You' : 'Pratyeksha'}</div>{m.text}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={reply} onChange={e => setReply(e.target.value)} placeholder={['resolved', 'closed'].includes(t.status) ? 'Reply to reopen this request' : 'Write a reply'} style={inputStyle} aria-label="Reply" maxLength={2000} />
+                      <PrimaryBtn icon={Send} onClick={() => send(t.number)} disabled={busy || !reply.trim()}>Send</PrimaryBtn>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+    </Card>
+  );
+};
+
+const IdeasCard = ({ tenantId, flash }) => {
+  const { data, loading, error, refetch } = useOwnerData('/api/owner/features/:tenantId');
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    setBusy(true);
+    try { const r = await api.post(`/api/owner/features/${encodeURIComponent(tenantId)}`, { title }); setTitle(''); flash(r.data?.merged ? 'Someone suggested this already — we added your vote.' : 'Thanks! Your idea is on the list.'); refetch(); }
+    catch (e) { flash(apiErr(e)); } finally { setBusy(false); }
+  };
+  const vote = async (id) => { try { await api.post(`/api/owner/features/${encodeURIComponent(tenantId)}/${id}/vote`); refetch(); } catch (e) { flash(apiErr(e)); } };
+  const rows = Array.isArray(data) ? data : [];
+  const STATUS = { new: 'Under review', planned: 'Planned', building: 'Being built', shipped: 'Released' };
+  return (
+    <Card>
+      <SectionHeading icon={Lightbulb} title="Ideas for Pratyeksha" />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="What would make your work easier?" style={inputStyle} aria-label="Your idea" maxLength={120} />
+        <PrimaryBtn icon={Plus} onClick={add} disabled={busy || title.trim().length < 4}>Suggest</PrimaryBtn>
+      </div>
+      {error ? <div style={{ color: T.danger, fontSize: 12.5 }}>{String(error)}</div>
+        : loading && !data ? <div style={{ color: T.textLow, fontSize: 12.5 }}>Loading…</div>
+        : !rows.length ? <div style={{ color: T.textLow, fontSize: 12.5 }}>No ideas yet — be the first.</div>
+        : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {rows.map(f => (
+              <div key={f._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: `1px solid ${T.border}`, borderRadius: 13 }}>
+                <button type="button" onClick={() => vote(f._id)} aria-pressed={!!f.mine} aria-label={`${f.mine ? 'Remove your vote from' : 'Vote for'} ${f.title}`} style={{ minWidth: 48, padding: '6px 8px', borderRadius: 11, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${f.mine ? T.primary : T.border}`, background: f.mine ? T.primarySoft : 'transparent', color: f.mine ? T.primary : T.textMed, fontWeight: 800, fontSize: 12 }}>▲ {f.votes}</button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.textHigh }}>{f.title}</div>
+                  <div style={{ fontSize: 11, color: T.textLow, marginTop: 2 }}>{STATUS[f.status] || f.status}{f.response ? ` · ${f.response}` : ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+    </Card>
+  );
+};
+
+const RatingCard = ({ tenantId, flash }) => {
+  const { data, refetch } = useOwnerData('/api/owner/feedback/:tenantId');
+  const [score, setScore] = useState(null);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try { await api.post(`/api/owner/feedback/${encodeURIComponent(tenantId)}`, { kind: 'nps', score, comment }); flash('Thank you for the feedback!'); setScore(null); setComment(''); refetch(); }
+    catch (e) { flash(apiErr(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Card>
+      <SectionHeading icon={Star} title="How are we doing?" />
+      {data && data.canRate === false ? <div style={{ fontSize: 12.5, color: T.textMed }}>Thanks — we have your rating for this month. You can rate again next month.</div> : (
+        <>
+          <div style={{ fontSize: 12.5, color: T.textMed, marginBottom: 10 }}>How likely are you to recommend Pratyeksha to another restaurant owner?</div>
+          <div role="radiogroup" aria-label="Recommendation score" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {Array.from({ length: 11 }, (_, i) => (
+              <button type="button" key={i} role="radio" aria-checked={score === i} onClick={() => setScore(i)} style={{ width: 38, height: 38, borderRadius: 11, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${score === i ? T.primary : T.border}`, background: score === i ? T.primarySoft : 'transparent', color: score === i ? T.primary : T.textMed }}>{i}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: T.textLow, marginBottom: 12 }}><span>Not likely</span><span>Very likely</span></div>
+          <Field label="ANYTHING YOU WOULD LIKE US TO KNOW? (OPTIONAL)"><textarea rows={2} value={comment} onChange={e => setComment(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} maxLength={400} aria-label="Comment" /></Field>
+          <PrimaryBtn onClick={submit} disabled={busy || score == null}>{busy ? 'Sending…' : 'Send rating'}</PrimaryBtn>
+        </>
+      )}
+    </Card>
+  );
+};
+
+const HelpPage = () => {
+  const { tenantId } = useOwner();
+  const [toast, flash] = useFlash();
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      <SupportCard tenantId={tenantId} flash={flash} />
+      <IdeasCard tenantId={tenantId} flash={flash} />
+      <RatingCard tenantId={tenantId} flash={flash} />
+      <Toast message={toast} />
+    </div>
+  );
+};
+
 /* ════════════════════════════════════════════════════════════
    ROOT — OwnerApp (mount at /owner/:tenantId/*)
    ════════════════════════════════════════════════════════════ */
@@ -3717,6 +3914,7 @@ const OwnerAppInner = () => (
       <Route path="compliance" element={<CompliancePage />} />
       <Route path="reports" element={<ReportsPage />} />
       <Route path="growth" element={<GrowthPage />} />
+      <Route path="help" element={<HelpPage />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="dashboard" replace />} />
     </Routes>

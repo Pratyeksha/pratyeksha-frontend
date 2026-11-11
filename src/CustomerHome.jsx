@@ -53,6 +53,7 @@ const L = {
     featured: 'Featured', isNew: 'New',
     didYouMean: 'Did you mean', voice: 'Voice search', listening: 'Listening…', servedAt: 'at',
     reserveNow: 'Reserve a table', joinWaitlist: 'Join waitlist', orderPickup: 'Order pickup', share: 'Share', copy: 'Copy', googleMaps: 'Google Maps',
+    reportBtn: 'Report a problem', reportWhy: 'What is wrong?', rWrong: 'Wrong information', rClosed: 'Closed or moved', rOffer: 'Offer is not valid', rBad: 'Inappropriate', rOther: 'Something else', reportNote: 'Add a note (optional)', reportSend: 'Send report', reportThanks: 'Thank you — we will look into it.', reportFail: 'Could not send. Try again.', reportLimit: 'Too many reports. Please try again later.',
     loadingMap: 'Loading map', noLocation: 'Location not added yet', surprise: 'Surprise me', backToTop: 'Back to top', addrCopied: 'Address copied', copyNA: 'Copy not available',
     nearLandmark: 'Near', validTill: 'Valid till', minBill: 'Min bill', useCode: 'Code', straightLine: 'in a straight line', away: 'away', featuredRail: 'Featured places', statOffers: 'live offers', statPickup: 'offer pickup', statReserve: 'take reservations',
     howTitle: 'How it works', how1t: 'Find', how1: 'Browse cafés & restaurants near you', how2t: 'Order', how2: 'Scan the table QR to order or reserve — no app to install',
@@ -78,6 +79,7 @@ const L = {
     featured: 'विशेष', isNew: 'नवीन',
     didYouMean: 'तुम्हाला हे म्हणायचे आहे का', voice: 'आवाजाने शोधा', listening: 'ऐकत आहे…', servedAt: 'येथे',
     reserveNow: 'टेबल आरक्षित करा', joinWaitlist: 'प्रतीक्षा यादीत सामील व्हा', orderPickup: 'पिकअप ऑर्डर करा', share: 'शेअर करा', copy: 'कॉपी', googleMaps: 'गुगल मॅप्स',
+    reportBtn: 'समस्या कळवा', reportWhy: 'काय चुकीचे आहे?', rWrong: 'चुकीची माहिती', rClosed: 'बंद किंवा स्थलांतरित', rOffer: 'ऑफर वैध नाही', rBad: 'अयोग्य मजकूर', rOther: 'इतर काही', reportNote: 'टीप लिहा (ऐच्छिक)', reportSend: 'तक्रार पाठवा', reportThanks: 'धन्यवाद — आम्ही तपासू.', reportFail: 'पाठवता आले नाही. पुन्हा प्रयत्न करा.', reportLimit: 'खूप तक्रारी. नंतर प्रयत्न करा.',
     loadingMap: 'नकाशा लोड होत आहे', noLocation: 'स्थान अजून जोडलेले नाही', surprise: 'काहीतरी नवीन सुचवा', backToTop: 'वर जा', addrCopied: 'पत्ता कॉपी केला', copyNA: 'कॉपी उपलब्ध नाही',
     nearLandmark: 'जवळ', validTill: 'वैध', minBill: 'किमान बिल', useCode: 'कोड', straightLine: 'सरळ रेषेत', away: 'दूर', featuredRail: 'विशेष ठिकाणे', statOffers: 'चालू ऑफर्स', statPickup: 'पिकअप देतात', statReserve: 'आरक्षण घेतात',
     howTitle: 'हे कसे चालते', how1t: 'शोधा', how1: 'तुमच्या जवळची कॅफे आणि रेस्टॉरंट्स पाहा', how2t: 'ऑर्डर करा', how2: 'टेबलचा QR स्कॅन करून ऑर्डर किंवा आरक्षण करा — अ‍ॅप नको',
@@ -780,6 +782,33 @@ function DishShare({ tenant, item, loading, lang, onClose, onMenu, onPlace, othe
   );
 }
 
+/* Guest "report this listing" — goes to Master Admin › Discovery › Reported listings. Five reports an hour per device on the server. */
+function ReportListing({ t, tr }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('wrong_info');
+  const [note, setNote] = useState('');
+  const [state, setState] = useState('idle'); // idle | sending | done | fail | limit
+  const send = async () => {
+    setState('sending');
+    try { await axios.post(`${BASE_URL}/public/listing-report`, { tenantId: t.tenantId, reason, note }, { timeout: 10000 }); setState('done'); }
+    catch (e) { setState(e?.response?.status === 429 ? 'limit' : 'fail'); }
+  };
+  const reasons = [['wrong_info', tr.rWrong], ['closed', tr.rClosed], ['bad_offer', tr.rOffer], ['inappropriate', tr.rBad], ['other', tr.rOther]];
+  if (state === 'done') return <div role="status" style={{ marginTop: 12, fontSize: 11.5, color: GOLD, display: 'flex', alignItems: 'center', gap: 5 }}><Check size={12} />{tr.reportThanks}</div>;
+  if (!open) return <button type="button" onClick={() => setOpen(true)} style={{ marginTop: 12, background: 'none', border: 0, padding: '6px 0', color: 'rgba(255,255,255,.45)', fontSize: 11, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit' }}>{tr.reportBtn}</button>;
+  return (
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 14, border: '1px solid rgba(211,191,162,.2)', background: 'rgba(255,255,255,.03)' }}>
+      <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)', marginBottom: 8 }}>{tr.reportWhy}</div>
+      <div role="radiogroup" aria-label={tr.reportWhy} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        {reasons.map(([id, label]) => <button key={id} type="button" role="radio" aria-checked={reason === id} onClick={() => setReason(id)} className="pxh-btn" style={{ padding: '6px 10px', fontSize: 11, borderColor: reason === id ? GOLD : undefined, color: reason === id ? GOLD : undefined }}>{label}</button>)}
+      </div>
+      <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={400} rows={2} placeholder={tr.reportNote} aria-label={tr.reportNote} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,.14)', background: 'rgba(0,0,0,.25)', color: '#fff', fontSize: 12, fontFamily: 'inherit' }} />
+      {(state === 'fail' || state === 'limit') && <div role="alert" style={{ marginTop: 6, fontSize: 11, color: '#e8a0a0' }}>{state === 'limit' ? tr.reportLimit : tr.reportFail}</div>}
+      <button type="button" className="pxh-btn" onClick={send} disabled={state === 'sending'} style={{ marginTop: 8, padding: '8px 14px', fontSize: 11.5 }}>{tr.reportSend}</button>
+    </div>
+  );
+}
+
 function PlaceDetail({ t, pos, onOrder, onService, tr }) {
   const [note, setNote] = useState('');
   const km = distanceKm(pos, t);
@@ -869,6 +898,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr }) {
             {note && <span role="status" style={{ alignSelf: 'center', fontSize: 11, color: GOLD, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={12} />{note}</span>}
           </div>
         )}
+        <ReportListing t={t} tr={tr} />
       </div>
     </div>
   );

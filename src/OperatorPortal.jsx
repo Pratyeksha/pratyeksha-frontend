@@ -368,6 +368,9 @@ const [pushDays, setPushDays]                   = useState(30);
 const [pushLoading, setPushLoading]             = useState(false);
 const [mktReady, setMktReady]                   = useState({ announcements:false, offers:false, campaigns:false }); // false until the first fetch settles -> skeleton
 const [marketingSubTab, setMarketingSubTab] = useState('offers');
+  // Master Admin › Control › Feature switch: a feature switched off for this restaurant disappears from its portal.
+  const [offFeatures, setOffFeatures] = useState([]);
+  useEffect(() => { let live = true; const t = localStorage.getItem('active_tenant'); if (!t) return; axios.get(`${BASE_URL}/public/feature-flags/${encodeURIComponent(t)}`).then(r => { if (live && Array.isArray(r.data?.disabled)) setOffFeatures(r.data.disabled); }).catch(() => {}); return () => { live = false; }; }, []);
 const [announcements, setAnnouncements] = useState([]);
 const [newAnnouncement, setNewAnnouncement] = useState({
   title: '', message: '', type: 'offer', accentColor: 'gold', icon: 'tag',
@@ -8301,7 +8304,7 @@ const renderMonthHeatmap = () => {
         badge: null },
       {id:'discovery',     label:'Directory Insights', icon:<Search size={13}/>,
         badge: null },
-    ].map(st=>{
+    ].filter(st => !(st.id === 'combos' && offFeatures.includes('combos'))).map(st=>{
       const isActive = marketingSubTab === st.id;
       return (
         <button type="button" key={st.id} onClick={()=>setMarketingSubTab(st.id)}

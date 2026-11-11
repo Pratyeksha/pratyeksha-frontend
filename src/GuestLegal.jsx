@@ -205,6 +205,8 @@ function MyData({ language, tenantId, tenantName, phone, name, onErased }) {
         )}
       </div>
 
+      <AskPlatform language={language} tenantId={tenantId} phone={cleanPhone} name={name} />
+
       {msg && (
         <div role="status" style={{ padding: '12px 14px', borderRadius: 14, fontSize: '0.72rem', lineHeight: 1.6, textAlign: 'left', background: 'rgba(211,191,162,0.08)', border: '1px solid rgba(211,191,162,0.25)', color: msg.ok ? GOLD : '#e8b87a' }}>{msg.text}</div>
       )}
@@ -212,6 +214,50 @@ function MyData({ language, tenantId, tenantName, phone, name, onErased }) {
         <Lock size={12} style={{ flexShrink: 0, marginTop: 2 }} />
         {T(language, `If this device can't prove the number is yours, we pass the request to ${tenantName} to verify before deleting.`, `हा नंबर तुमचा आहे हे या डिव्हाइसवरून सिद्ध न झाल्यास, हटवण्यापूर्वी पडताळणीसाठी विनंती ${tenantName} कडे जाते.`)}
       </p>
+    </div>
+  );
+}
+
+/* ── Ask Pratyeksha (platform-level request: copy, correction, or deletion the restaurant could not complete) ── */
+function AskPlatform({ language, tenantId, phone, name }) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState('access');
+  const [details, setDetails] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  const [err, setErr] = useState('');
+  const clean = String(phone || '').replace(/\D/g, '').slice(0, 10);
+  const send = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await axios.post(apiUrl('/public/data-request'), { type, phone: clean, name, tenantId, details });
+      setDone(r.data?.reference || 'sent');
+    } catch (e) { setErr(e?.response?.data?.error || T(language, 'Could not send. Please try again.', 'पाठवता आले नाही. पुन्हा प्रयत्न करा.')); }
+    finally { setBusy(false); }
+  };
+  const box = { padding: 16, borderRadius: 18, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(211,191,162,0.12)', marginTop: 14, textAlign: 'left' };
+  if (done) return <div role="status" style={{ ...box, fontSize: '0.72rem', lineHeight: 1.6, color: 'rgba(247,243,235,0.8)' }}>{T(language, `Request sent${done !== 'sent' ? ` (reference ${done})` : ''}. We reply within 30 days.`, `विनंती पाठवली${done !== 'sent' ? ` (संदर्भ ${done})` : ''}. आम्ही ३० दिवसांत उत्तर देऊ.`)}</div>;
+  return (
+    <div style={box}>
+      <b style={{ fontSize: '0.78rem', color: '#f7f3eb' }}>{T(language, 'Need more help with your data?', 'डेटाबाबत आणखी मदत हवी?')}</b>
+      <p style={{ margin: '6px 0 10px', fontSize: '0.68rem', lineHeight: 1.6, color: 'rgba(247,243,235,0.5)' }}>
+        {T(language, 'Ask the Pratyeksha team directly — for a copy, a correction, or deletion across the platform.', 'प्रत्यक्षा टीमला थेट विचारा — डेटाची प्रत, दुरुस्ती किंवा हटवणे यासाठी.')}
+      </p>
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} style={ghostBtn}>{T(language, 'Send a request', 'विनंती पाठवा')}</button>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          <select value={type} onChange={(e) => setType(e.target.value)} aria-label={T(language, 'What do you need', 'काय हवे')} style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(211,191,162,0.2)', color: '#f7f3eb', fontSize: '0.78rem' }}>
+            <option value="access">{T(language, 'A copy of my data', 'माझ्या डेटाची प्रत')}</option>
+            <option value="correct">{T(language, 'Correct my details', 'माझी माहिती दुरुस्त करा')}</option>
+            <option value="erase">{T(language, 'Delete my data', 'माझा डेटा हटवा')}</option>
+          </select>
+          <textarea value={details} onChange={(e) => setDetails(e.target.value.slice(0, 500))} rows={3} placeholder={T(language, 'Anything we should know (optional)', 'आम्हाला काही सांगायचे असल्यास (ऐच्छिक)')} style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(211,191,162,0.2)', color: '#f7f3eb', fontSize: '0.78rem', resize: 'vertical', fontFamily: 'inherit' }} />
+          {clean.length !== 10 && <div style={{ fontSize: '0.66rem', color: 'rgba(247,243,235,0.5)' }}>{T(language, 'Enter your 10-digit mobile number above first.', 'आधी वर तुमचा १० अंकी मोबाईल नंबर टाका.')}</div>}
+          {err && <div role="alert" style={{ fontSize: '0.7rem', color: '#e5736b' }}>{err}</div>}
+          <button type="button" disabled={busy || clean.length !== 10} onClick={send} style={{ ...ghostBtn, opacity: clean.length === 10 ? 1 : 0.45 }}>{busy ? T(language, 'Sending…', 'पाठवत आहे…') : T(language, 'Send request', 'विनंती पाठवा')}</button>
+        </div>
+      )}
     </div>
   );
 }
