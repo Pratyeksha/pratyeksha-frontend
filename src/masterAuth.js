@@ -26,11 +26,21 @@ export const getMasterToken = () => {
 };
 export const hasValidMasterToken = () => !!getMasterToken();
 
-export async function masterLogin(password) {
-  const { data } = await axios.post(`${API_BASE_URL}/admin/master/login`, { password });
+// Step 1. Owner: masterLogin(password). Team member: masterLogin(password, username).
+// Returns { need2fa, ticket } when a code is needed, otherwise stores the token and returns { token }.
+export async function masterLogin(password, username = '') {
+  const { data } = await axios.post(`${API_BASE_URL}/admin/master/login`, username ? { username, password } : { password });
+  if (data?.need2fa && data.ticket) return { need2fa: true, ticket: data.ticket };
   if (!data?.token) throw new Error('Login failed');
   try { localStorage.setItem(KEY, data.token); } catch { /* storage unavailable: session lasts until reload */ }
-  return data.token;
+  return { token: data.token };
+}
+// Step 2 (only when two-factor is on).
+export async function masterLogin2fa(ticket, code) {
+  const { data } = await axios.post(`${API_BASE_URL}/admin/master/login`, { ticket, code });
+  if (!data?.token) throw new Error('Login failed');
+  try { localStorage.setItem(KEY, data.token); } catch { /* storage unavailable */ }
+  return { token: data.token };
 }
 
 const isMasterUrl = (url) => typeof url === 'string'

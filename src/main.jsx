@@ -18,6 +18,7 @@ import API_BASE_URL from './apiBase.js'
 import { BrandLoader } from './PremiumUI.jsx'
 import { loaderMessageFor } from './loaderMessages.js'
 import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
+import PlatformNotice from './PlatformNotice.jsx'
 
 installSubscriptionInterceptor();
 
@@ -120,6 +121,7 @@ createRoot(document.getElementById('root')).render(
       <SplashGate>
       <BrowserRouter>
       <SurfaceFlag />
+      <PlatformNotice />
       <Suspense fallback={<BrandLoader message={loaderMessageFor(window.location.pathname)} />}>
       <Routes>
         {/* 1. 🌐 Pratyeksha Landing Page */}

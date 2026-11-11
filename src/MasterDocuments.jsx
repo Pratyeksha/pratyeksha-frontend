@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import axios from 'axios';
+import API_BASE_URL from './apiBase.js';
 import { Check, Download, FileCheck2, FileText, Plus, ReceiptText, Trash2, Layers, MessageCircle, MessagesSquare, UtensilsCrossed } from 'lucide-react';
 import './pratyeksha-docs.css';
 
@@ -76,6 +78,9 @@ function printDocument(title) {
 const joinAddress = (a) => [a?.street, a?.city, a?.state, a?.pincode].filter(Boolean).join(', ');
 
 export default function MasterDocuments({ clients = [], focusClientId = null, onFocusHandled }) {
+  // Wording and defaults saved in Master Admin › Settings (fall back to the built-in text if they cannot load).
+  const [tpl, setTpl] = useState({});
+  const T = (k, fb, client) => String(tpl[k] || fb).replace(/\{client\}/g, client || 'your team');
   const [doc, setDoc] = useState('welcome');
   const [product, setProduct] = useState('pratyeksha'); // 'pratyeksha' | 'feedback' | 'bundle'
   const [whatsapp, setWhatsapp] = useState(false);
@@ -90,6 +95,20 @@ export default function MasterDocuments({ clients = [], focusClientId = null, on
   const [effective, setEffective] = useState(istToday());
   const [invoiceSeq] = useState(() => String(Date.now()).slice(-5));
   const [itemsTouched, setItemsTouched] = useState(false);
+  useEffect(() => {
+    let live = true;
+    axios.get(`${API_BASE_URL}/admin/master/control/doc-templates`).then((r) => {
+      if (!live) return; const t = r.data.templates || {}; setTpl(t);
+      // Only replace the note if the user has not typed their own yet.
+      setF((x) => (x.notes === 'Thank you for choosing Pratyeksha.' && t.invoiceDefaultNote ? { ...x, notes: t.invoiceDefaultNote } : x));
+    }).catch(() => {});
+    axios.get(`${API_BASE_URL}/admin/master/growth/settings`).then((r) => {
+      const d = Number(r.data?.paymentTermsDays); if (!live || !Number.isFinite(d) || d < 0) return;
+      const due = new Date(Date.now() + 330 * 60000 + d * 86400000).toISOString().slice(0, 10);
+      setF((x) => (x.dueDate === x.date ? { ...x, dueDate: due } : x));
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []);
 
   const hasPrx = product !== 'feedback';
   const hasFb = product !== 'pratyeksha';
@@ -190,7 +209,7 @@ export default function MasterDocuments({ clients = [], focusClientId = null, on
         {header('WELCOME DOCUMENT')}
         <section className="welcome-cover">
           <span className="eyebrow">WELCOME TO {productName.toUpperCase()}</span>
-          <h1>Let's build a <em>better guest experience.</em></h1>
+          <h1>{T('welcomeHeadline', "Let's build a *better guest experience.*").split('*').map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part))}</h1>
           <p>We are pleased to welcome <strong>{f.clientName || 'your business'}</strong> to {productName}.</p>
           <div className="welcome-rule" />
         </section>
@@ -206,8 +225,8 @@ export default function MasterDocuments({ clients = [], focusClientId = null, on
         </section>
         <section className="paper-section welcome-closing">
           <span className="eyebrow">NEXT STEP</span>
-          <h2>A smooth start, with everything in one place.</h2>
-          <p>Your scope, commercial terms and billing are documented separately in the Contract &amp; Scope and Invoice documents. We look forward to working with {f.clientName || 'your team'}.</p>
+          <h2>{T('welcomeClosingTitle', 'A smooth start, with everything in one place.')}</h2>
+          <p>{T('welcomeClosingText', 'Your scope, commercial terms and billing are documented separately in the Contract & Scope and Invoice documents. We look forward to working with {client}.', f.clientName)}</p>
         </section>
         {footer}
       </article>
@@ -257,14 +276,14 @@ export default function MasterDocuments({ clients = [], focusClientId = null, on
     );
   } else {
     const sections = [
-      ['Purpose', <>This agreement records the intended scope and working understanding for the services described in this document. The accompanying invoice states the agreed fees and payment details.</>],
+      ['Purpose', <>{T('agreementPurpose', 'This agreement records the intended scope and working understanding for the services described in this document. The accompanying invoice states the agreed fees and payment details.', f.clientName)}</>],
       ['Scope of services', <ul>{modules.map((m) => <li key={m}>{m}</li>)}<li>Configuration of the features agreed for {f.clientName || 'the client'} and reasonable testing before go-live.</li></ul>],
       ['Subscription term', <>The subscription runs for {months} month{months === 1 ? '' : 's'} from the effective date and can be renewed. Active modules follow the products listed in this document.</>],
       ['Client responsibilities', <ul><li>Provide accurate business information, menu content, branding assets and access required for setup.</li><li>Review deliverables and provide timely feedback or approvals.</li><li>Provide any third-party accounts or approvals needed for integrations{hasWa ? ', including WhatsApp Business access' : ''}.</li></ul>],
-      ['Fees & payment', <>Fees, taxes and payment milestones are as stated in the applicable invoice. Work outside the agreed scope may require a separate estimate or written approval.</>],
+      ['Fees & payment', <>{T('agreementFees', 'Fees, taxes and payment milestones are as stated in the applicable invoice. Work outside the agreed scope may require a separate estimate or written approval.', f.clientName)}</>],
       ['Confidentiality & access', <>Both parties handle business information, credentials and customer data responsibly and only for the agreed purpose.{hasFb ? ' Each client workspace is isolated from every other client.' : ''} Access credentials must not be shared beyond authorised persons.</>],
       ...(hasWa ? [['Messaging & consent', <>WhatsApp campaigns are sent only to guests who may be contacted. The client is responsible for lawful consent, and guests who opt out are excluded from campaigns.</>]] : []),
-      ['Changes, delivery & termination', <>Material changes to scope are documented and approved before work starts. Cancellation conditions follow the commercial agreement between the parties; approved charges for completed work remain payable.</>],
+      ['Changes, delivery & termination', <>{T('agreementTermination', 'Material changes to scope are documented and approved before work starts. Cancellation conditions follow the commercial agreement between the parties; approved charges for completed work remain payable.', f.clientName)}</>],
     ];
     paper = (
       <article className="document-paper printable-document agreement-paper">

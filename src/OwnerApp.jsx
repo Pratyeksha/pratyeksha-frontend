@@ -302,6 +302,7 @@ function OwnerProvider({ tenantId, children }) {
   const [authStatus, setAuthStatus] = useState('checking');
   const [authToken, setAuthToken] = useState(null);
   const [ownerName, setOwnerName] = useState('');
+  const [supportView, setSupportView] = useState(false);
   const [authErrorDetail, setAuthErrorDetail] = useState(null);
   const [authBlocked, setAuthBlocked] = useState(false); // true when the server refused because the subscription expired / the account is paused
   const authSeq = useRef(0);
@@ -331,7 +332,15 @@ function OwnerProvider({ tenantId, children }) {
     setAuthErrorDetail(null);
     setAuthBlocked(false);
     let stored = null;
-    try { stored = localStorage.getItem(tokenKeyFor(outlet)); } catch (e) {}
+    // Support view from Master Admin: a short-lived token in the URL hash. It is kept in memory only
+    // (never saved), so it cannot replace the owner's own saved login.
+    let viaSupport = false;
+    try {
+      const m = /[#&]viewas=([^&]+)/.exec(window.location.hash || '');
+      if (m) { stored = decodeURIComponent(m[1]); viaSupport = true; }
+    } catch (e) {}
+    if (!viaSupport) { try { stored = localStorage.getItem(tokenKeyFor(outlet)); } catch (e) {} }
+    setSupportView(false);
 
     if (stored) {
       try {
@@ -340,6 +349,7 @@ function OwnerProvider({ tenantId, children }) {
         applyAuthHeader(stored);
         setAuthToken(stored);
         setOwnerName(res.data.ownerName || '');
+        if (viaSupport) setSupportView(true);
         setAuthStatus('authed');
         return;
       } catch (e) {
@@ -360,7 +370,7 @@ function OwnerProvider({ tenantId, children }) {
           return;
         }
         applyAuthHeader(null);
-        try { localStorage.removeItem(tokenKeyFor(outlet)); } catch (e2) {}
+        if (!viaSupport) { try { localStorage.removeItem(tokenKeyFor(outlet)); } catch (e2) {} }
       }
     }
     try {
@@ -462,18 +472,22 @@ function OwnerProvider({ tenantId, children }) {
 
   const value = useMemo(() => ({
     tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent,
-    authStatus, ownerName, completeAuth, logout, authErrorDetail, authBlocked, retryAuth: resolveAuth
-  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, authStatus, ownerName, completeAuth, logout, authErrorDetail, authBlocked, resolveAuth]);
+    authStatus, ownerName, supportView, completeAuth, logout, authErrorDetail, authBlocked, retryAuth: resolveAuth
+  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, authStatus, ownerName, supportView, completeAuth, logout, authErrorDetail, authBlocked, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
 }
 
 /** Gates the app behind auth — shows a splash while checking, then Setup/Login/Error/the real app. */
 function AuthGate({ children }) {
-  const { authStatus } = useOwner();
+  const { authStatus, supportView } = useOwner();
   if (authStatus === 'checking') return <AuthSplash />;
   if (authStatus === 'error') return <AuthErrorScreen />;
   if (authStatus === 'needsSetup') return <SetupScreen />;
   if (authStatus === 'needsLogin') return <LoginScreen />;
+  if (supportView) return (<>
+    <div role="status" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100000, background: '#d3bfa2', color: '#141416', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '5px 10px', letterSpacing: 0.3 }}>Support view — you are seeing this as the client. Access expires in 30 minutes and is logged.</div>
+    <div style={{ paddingTop: 28 }}>{children}</div>
+  </>);
   return children;
 }
 

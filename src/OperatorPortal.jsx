@@ -93,19 +93,26 @@ const OperatorLiveTimer = ({ createdAt }) => {
   );
 };
 
-const numberToWords = (num) => {
+const __intToWords = (num) => {
     const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
     const n = ('000000000' + Math.round(num)).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
     if (!n) return '';
-    if (Math.round(num) === 0) return 'Zero Only';
+    if (Math.round(num) === 0) return 'Zero';
     let str = '';
     str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + ' Crore ' : '';
     str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + ' Lakh ' : '';
     str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + ' Thousand ' : '';
     str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + ' Hundred ' : '';
     str += (n[5] != 0) ? (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + ' ' : '';
-    return str.replace(/\s+/g, ' ').trim() + " Only";
+    return str.replace(/\s+/g, ' ').trim();
+};
+const numberToWords = (num) => {
+    const amt = Math.round((Number(num) || 0) * 100) / 100;
+    const rupees = Math.floor(amt + 1e-9);
+    const paise = Math.round((amt - rupees) * 100);
+    if (paise === 0) return `${__intToWords(rupees)} Only`;
+    return `${rupees > 0 ? __intToWords(rupees) + ' and ' : ''}${__intToWords(paise)} Paise Only`;
 };
 
 // One cached <audio> per URL: `new Audio(url).play()` on every socket event re-requested the file and leaked a node each time.
@@ -2705,7 +2712,7 @@ if (activePaymentType === 'split') {
     }
     setConfirmModal({
         show: true, title: 'Finalize Table Settlement?',
-        subtitle: `Total: ₹${finalAmt} | Mode: ${activePaymentType.toUpperCase()}`,
+        subtitle: `Total: ₹${Number.isInteger(finalAmt) ? finalAmt : Number(finalAmt).toFixed(2)} | Paid by: ${activePaymentType === 'split' ? `Cash ₹${Number(paymentModes.cash || 0)} · UPI ₹${Number(paymentModes.upi || 0)} · Card ₹${Number(paymentModes.card || 0)}` : String(selectedSingleMode || '').toUpperCase()}`,
         onConfirm: handleFinalSettle
     });
 };
@@ -7432,8 +7439,8 @@ const renderMonthHeatmap = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}><div style={label}>Handovers</div><div style={{ display: 'flex', gap: '6px' }}>{[['open', 'Open'], ['urgent', 'Urgent'], ['resolved', 'Resolved'], ['all', 'All']].map(([k, t]) => (<button key={k} type="button" onClick={() => setShiftView(k)} style={{ padding: '6px 11px', borderRadius: '999px', cursor: 'pointer', fontSize: '0.58rem', fontWeight: '900', background: shiftView === k ? '#d3bfa2' : '#070707', color: shiftView === k ? '#0c0c0c' : '#969696', border: `1px solid ${shiftView === k ? '#d3bfa2' : 'rgba(211,191,162,0.15)'}` }}>{t}</button>))}</div></div>
           {notes.length === 0 ? (
             <div style={{ marginTop: '28px', textAlign: 'center', padding: '24px 12px' }}>
-              <div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>No handovers yet</div>
-              <div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>Write one at the end of each shift so nothing is lost between teams.</div>
+<div style={{ fontSize: '0.78rem', color: '#ECDCB9', fontWeight: '800' }}>{allNotes.length === 0 ? 'No handovers yet' : shiftView === 'urgent' ? 'No urgent handovers' : shiftView === 'resolved' ? 'No resolved handovers' : 'No open handovers'}</div>
+<div style={{ marginTop: '6px', fontSize: '0.64rem', color: '#8a8a8a' }}>{allNotes.length === 0 ? 'Write one at the end of each shift so nothing is lost between teams.' : 'Everything in this view is cleared. Try another filter to see the rest.'}</div>
             </div>
           ) : notes.map(n => (
             <div key={n._id} style={{ padding: '12px 4px', borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: n.status === 'resolved' ? 0.55 : 1 }}>
@@ -8246,7 +8253,7 @@ const renderMonthHeatmap = () => {
   const list = [...(offers || [])].sort((a, b) => (Number(b.totalDiscount) || 0) - (Number(a.totalDiscount) || 0));
   const given = list.reduce((n, o) => n + (Number(o.totalDiscount) || 0), 0);
   const live = list.filter(o => o.isActive !== false && (!o.expiresAt || new Date(o.expiresAt).getTime() > Date.now())).length;
-  const exportRows = () => downloadCsv('offers.csv', ['Offer', 'Active', 'Used', 'Discount given (₹)', 'Expires'], list.map(o => [o.title, o.isActive !== false ? 'yes' : 'no', o.usageCount || 0, o.totalDiscount || 0, o.expiresAt ? istDate(o.expiresAt) : 'never']));
+  const exportRows = () => downloadCsv('offers.csv', ['Offer', 'Active', 'Used', 'Discount given (₹)', 'Expires'], list.map(o => [o.title, (o.isActive !== false && !(o.expiresAt && new Date(o.expiresAt).getTime() <= Date.now())) ? 'yes' : 'no', o.usageCount || 0, o.totalDiscount || 0, o.expiresAt ? istDate(o.expiresAt) : 'never']));
   if (list.length === 0) return null;
   return (
     <div style={card}>
@@ -8261,7 +8268,7 @@ const renderMonthHeatmap = () => {
         {['Offer', 'Status', 'Used', 'Discount given', 'Expires'].map(h => <span key={h} style={P.label}>{h}</span>)}
         {list.slice(0, 6).map(o => [
           <span key={o._id + 't'} style={{ color: '#ECDCB9', fontWeight: '800', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title}</span>,
-          <span key={o._id + 's'} style={{ color: o.isActive !== false ? '#d3bfa2' : '#8a8a8a' }}>{o.isActive !== false ? 'Live' : 'Paused'}</span>,
+          <span key={o._id + 's'} style={{ color: (o.isActive !== false && !(o.expiresAt && new Date(o.expiresAt).getTime() <= Date.now())) ? '#d3bfa2' : '#8a8a8a' }}>{o.isActive === false ? 'Paused' : (o.expiresAt && new Date(o.expiresAt).getTime() <= Date.now()) ? 'Expired' : 'Live'}</span>,
           <span key={o._id + 'u'} style={{ fontFamily: 'monospace' }}>{o.usageCount || 0}</span>,
           <span key={o._id + 'd'} style={{ fontFamily: 'monospace', color: '#d3bfa2' }}>{money(o.totalDiscount)}</span>,
           <span key={o._id + 'e'}>{o.expiresAt ? istDate(o.expiresAt) : 'Never'}</span>,
@@ -8285,7 +8292,7 @@ const renderMonthHeatmap = () => {
       {id:'announcements', label:'Menu Banners',  icon:<Megaphone size={13}/>,
         badge: announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length },
       {id:'offers',        label:'Offers',        icon:<Tag size={13}/>,
-        badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length },
+        badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive&&(!o.expiresAt||new Date(o.expiresAt).getTime()>Date.now())).length },
       {id:'combos',        label:'Combos',        icon:<Layers size={13}/>,
         badge: null },
       {id:'campaigns',     label:'Campaigns',     icon:<Send size={13}/>,
@@ -8720,7 +8727,7 @@ const renderMonthHeatmap = () => {
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px'}}>
       {[
         {l:'Total Offers',  v:(Array.isArray(offers)?offers:[]).length,                                       c:'#d3bfa2', icon:<Tag size={13}/>},
-        {l:'Active',        v:(Array.isArray(offers)?offers:[]).filter(o=>o.isActive).length,                 c:'#ecdcb9', icon:<CheckCircle2 size={13}/>},
+        {l:'Active',        v:(Array.isArray(offers)?offers:[]).filter(o=>o.isActive&&(!o.expiresAt||new Date(o.expiresAt).getTime()>Date.now())).length,                 c:'#ecdcb9', icon:<CheckCircle2 size={13}/>},
         {l:'Percent Off',   v:(Array.isArray(offers)?offers:[]).filter(o=>o.type==='percent_off').length,     c:'#b8923a', icon:<Percent size={13}/>},
         {l:'Total Redeemed',v:(Array.isArray(offers)?offers:[]).reduce((a,o)=>a+(o.usageCount||0),0),         c:'#8a704d', icon:<ShoppingCart size={13}/>},
       ].map((s,i)=>(
@@ -8738,7 +8745,7 @@ const renderMonthHeatmap = () => {
     <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'16px',overflow:'hidden'}}>
       <div style={{padding:'15px 20px',borderBottom:'1px solid rgba(211,191,162,0.12)',background:'#070707',display:'flex',alignItems:'center',gap:'9px'}}>
         <Tag size={13} color="#d3bfa2"/>
-        <div>
+        <div style={{textAlign:'left'}}>
           <div style={{fontSize:'0.58rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>CREATE OFFER</div>
           <div style={{fontSize:'0.52rem',color:'#969696',marginTop:'1px'}}>Coupon codes, happy hours, discounts — trackable usage</div>
         </div>
@@ -9419,11 +9426,11 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       ['CARD',     dailySettlementBreakdown.card],
     ].map(([label,val])=>(
       <div key={label} style={{borderRight:'1px solid rgba(211,191,162,0.16)',paddingRight:'12px'}}>
-        <small style={{...styles.statLabel,color:'#b4b4b4',fontSize:'0.52rem',letterSpacing:'0.5px'}}>
+        <small style={{...styles.statLabel,color:'#b4b4b4',fontSize:'0.52rem',letterSpacing:'0.5px',whiteSpace:'nowrap'}}>
           DAILY {label}
         </small>
         <div style={{fontSize:'1rem',fontWeight:'900',color:'#fff',marginTop:'4px'}}>
-          ₹{Number(val).toLocaleString()}
+          ₹{Number(val).toLocaleString('en-IN',{minimumFractionDigits:Number.isInteger(Number(val))?0:2,maximumFractionDigits:2})}
         </div>
       </div>
     ))}
@@ -9457,13 +9464,13 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         </div>
       </div>
       <div style={{ borderLeft:'2px solid #d3bfa2', paddingLeft:'12px' }}>
-        <small style={{...styles.statLabel, color:'#d3bfa2', fontWeight:'900', fontSize:'0.52rem'}}>
+        <small style={{...styles.statLabel, color:'#d3bfa2', fontWeight:'900', fontSize:'0.52rem', whiteSpace:'nowrap'}}>
           GROSS SETTLED
         </small>
         <div style={{ fontSize:'1.2rem', fontWeight:'900', color:'#d3bfa2', marginTop:'2px' }}>
-          ₹{gross.toLocaleString()}
+          ₹{gross.toLocaleString('en-IN',{minimumFractionDigits:Number.isInteger(gross)?0:2,maximumFractionDigits:2})}
         </div>
-        <div style={{ fontSize:'0.52rem', color:'#b4b4b4', marginTop:'2px' }}>
+        <div style={{ fontSize:'0.52rem', color:'#b4b4b4', marginTop:'2px', whiteSpace:'nowrap' }}>
           NET ₹{Math.round(subtotal).toLocaleString()} + GST ₹{(cgst + sgst).toLocaleString()}
         </div>
       </div>
@@ -9551,13 +9558,13 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
         <span>₹{Number(tableBill.sgst).toFixed(2)}</span>
       </div>
       <p style={{fontSize:'0.58rem', fontStyle:'italic', marginTop:'8px', fontWeight:'700', color:'#888'}}>
-        {numberToWords(Math.round((() => {
+        {numberToWords((() => {
           const cgstPct = parseFloat(tableBill.cgstPct) / 100;
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
           const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
           // Flat ₹ discount comes off the final bill directly — see settleBill() for why.
           return billFinalAmount(tableBill, discountType, discount);
-        })()))}
+        })())}
       </p>
     </div>
 
@@ -9700,7 +9707,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
           const sgstPct = parseFloat(tableBill.sgstPct) / 100;
           const preDiscountTotal = tableBill.subtotal + tableBill.cgst + tableBill.sgst;
           const total = billFinalAmount(tableBill, discountType, discount);
-          return (Math.round(total * 100) / 100).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', maximumFractionDigits: 2 });
+          const rounded = Math.round(total * 100) / 100; return rounded.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2, maximumFractionDigits: 2 });
         })()}</span>
       </div>
       <div style={{fontSize:'0.56rem', fontWeight:'800', color:'#888', textAlign:'right', marginTop:'6px', letterSpacing:'0.5px'}}>
@@ -13122,8 +13129,8 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
     {[
       {
         label:'On Duty Now', icon:<Users size={16}/>,
-        val: (liveFloorIntelligence.activeChefs + liveFloorIntelligence.activeHelpers + (staff.filter(s=>s.role==='Waiter').length || 0)),
-        sub: `${liveFloorIntelligence.activeChefs} chefs · ${liveFloorIntelligence.activeHelpers} helpers`, accent:'#d3bfa2'
+val: new Set(attendanceLogs.filter(l=>l.date===istTodayStr&&l.clockIn&&!l.clockOut).map(l=>String(l.staffId))).size,
+sub: (()=>{const ids=new Set(attendanceLogs.filter(l=>l.date===istTodayStr&&l.clockIn&&!l.clockOut).map(l=>String(l.staffId)));const on=staff.filter(s=>ids.has(String(s._id)));const c=on.filter(s=>s.role==='Chef').length, w=on.filter(s=>s.role==='Waiter').length; return `${c} ${c===1?'chef':'chefs'} · ${w} ${w===1?'waiter':'waiters'}`;})(), accent:'#d3bfa2'
       },
       {
         label:'Table Coverage', icon:<TableProperties size={16}/>,
@@ -13137,7 +13144,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       },
       {
         label:'Today Attendance', icon:<CheckCircle2 size={16}/>,
-        val: attendanceLogs.filter(l => l.date === attendanceDate).length,
+        val: new Set(attendanceLogs.filter(l => l.date === istTodayStr && l.clockIn).map(l => String(l.staffId))).size,
         sub:'punched in today', accent:'#ecdcb9'
       },
     ].map((s,i)=>(
@@ -13185,7 +13192,7 @@ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete fai
       }}>
         <UserRoundCog size={16} color="#d3bfa2"/>
       </div>
-      <div>
+      <div style={{textAlign:'left'}}>
         <div style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2.5px'}}>WORKFORCE REGISTER TERMINAL</div>
         <div style={{fontSize:'0.6rem',color:'#969696',marginTop:'2px',fontWeight:'600'}}>Enroll new staff — role, shift, table assignments, pay scale</div>
       </div>
@@ -15508,7 +15515,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
       padding:'16px 22px',borderBottom:'1px solid rgba(211,191,162,0.12)',background:'#070707'
     }}>
       <Package2 size={14} color="#d3bfa2"/>
-      <div>
+      <div style={{textAlign:'left'}}>
         <div style={{fontSize:'0.6rem',color:'#d3bfa2',fontWeight:'900',letterSpacing:'2px'}}>REGISTER NEW ITEM</div>
         <div style={{fontSize:'0.56rem',color:'#969696',marginTop:'1px'}}>Add beverage, snack or any retail item to your catalog</div>
       </div>

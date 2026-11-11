@@ -20,7 +20,7 @@ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import { OPERATOR_AUTH_EVENT, setKitchenToken, getOperatorToken } from './operatorAuth.js';
 import { playAlertSound } from './alertSounds.js';
 import PwaInstallButton from './PwaInstallButton.jsx';
-import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import {
   ChefHat, Timer, StickyNote, X, Zap, History, LayoutGrid, BarChart3, Package, UtensilsCrossed, Activity, Coffee,
   Layers, Flame, EyeOff, Sparkles, TrendingUp, WifiOff, AlignJustify, Trash2, AlertTriangle, RotateCcw, TrendingDown,
@@ -35,6 +35,44 @@ const BASE_URL = API_BASE_URL;
 const LAYOUT_ANIM_MAX = 12;
 
 /* ─── helpers ─── */
+const useWheelSideways = ref => {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const onWheel = e => {
+      if (el.scrollWidth <= el.clientWidth + 1 || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;   // nothing hidden, or already a sideways gesture
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  });
+};
+
+// A dialog must take keyboard focus when it opens, keep Tab inside itself (the board behind stays out of reach) and hand focus back when it closes.
+const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const useFocusTrap = (ref, active) => {
+  useEffect(() => {
+    if (!active) return undefined;
+    const el = ref.current;
+    if (!el) return undefined;
+    const previous = document.activeElement;
+    const items = () => Array.from(el.querySelectorAll(FOCUSABLE)).filter(n => n.offsetParent !== null || n === document.activeElement);
+    const first = items()[0];
+    if (first) first.focus({ preventScroll: true }); else { el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
+    const onKey = e => {
+      if (e.key !== 'Tab') return;
+      const list = items();
+      if (!list.length) { e.preventDefault(); return; }
+      const a = list[0], z = list[list.length - 1];
+      if (e.shiftKey && (document.activeElement === a || !el.contains(document.activeElement))) { e.preventDefault(); z.focus(); }
+      else if (!e.shiftKey && (document.activeElement === z || !el.contains(document.activeElement))) { e.preventDefault(); a.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('keydown', onKey); try { if (previous && previous.focus && document.contains(previous)) previous.focus({ preventScroll: true }); } catch { /* ignore */ } };
+  }, [ref, active]);
+};
+
 const useWindowSize = () => {
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -269,6 +307,14 @@ const buildModSpeech = (who, m, fallbackNote) => {
 
 // "just now" / "3 min ago" / "1h 05m ago" (computed once when a list opens, never ticking)
 const fmtAgo = ms => { const m = Math.max(0, Math.round((Date.now() - (ms || Date.now())) / 60000)); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)}h ${pad2(m % 60)}m ago`; };
+// Numbers shown to cooks: 1000 -> "1000", 0.5 -> "0.5", 1093.5 -> "1093.5" would break a narrow badge, so counts are capped and rounded.
+const fmtQty = q => {
+  const n = Number(q);
+  if (q === undefined || q === null || q === '' || !Number.isFinite(n)) return String(q ?? '1').trim() || '1';
+  return Number.isInteger(n) ? String(n) : String(+n.toFixed(1));
+};
+const fmtPadQty = q => (Number.isInteger(Number(q)) ? pad2(Number(q)) : fmtQty(q));
+const fmtCount = n => { const v = Math.round(Number(n) || 0); return v > 999 ? '999+' : pad2(v); };
 const sameName = (a, b) => String(a || '').toLowerCase().trim() === String(b || '').toLowerCase().trim();
 // A second change to the same ticket must not wipe the first one's highlight (a dish added earlier is still uncooked).
 // Keeps the very first "from" quantity and the latest "to"; a dish added then removed (or removed then added back) cancels out.
@@ -306,7 +352,7 @@ const KX_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx,.kx *,.kx *::before,.kx *::after{box-sizing:border-box}
-.kx{--line:rgba(211,191,162,.16);--line2:rgba(211,191,162,.32);--gold:#d3bfa2;--gold2:#b99f78;--bronze:#8a704d;--cream:#f7f3eb;--mute:#9b978d;--dim:#6f6c64;--amber:#e29a58;--swiggy:#fc8019;--zomato:#e0343f;--veg:#5d9a4e;--nonveg:#c04a4a;
+.kx{--line:rgba(211,191,162,.16);--line2:rgba(211,191,162,.32);--gold:#d3bfa2;--gold2:#b99f78;--bronze:#8a704d;--cream:#f7f3eb;--mute:#9b978d;--dim:#8e8a80;--amber:#e29a58;--swiggy:#fc8019;--zomato:#e0343f;--veg:#5d9a4e;--nonveg:#c04a4a;
   --glass:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.016));--ease:cubic-bezier(.22,1,.36,1);
   position:fixed;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;overflow:hidden;color:var(--cream);
   font-family:Poppins,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-tap-highlight-color:transparent;
@@ -325,49 +371,52 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
   background:var(--glass),#0d0d0e;border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 40px -22px rgba(0,0,0,.85)}
 .kx-brand{display:flex;align-items:center;gap:10px;min-width:0;flex-shrink:0}
 .kx-logo{background:var(--cream);border-radius:9px;padding:3px 8px;border:1px solid rgba(211,191,162,.5);box-shadow:0 8px 22px -10px rgba(211,191,162,.45);flex-shrink:0}
+.kx-logo-txt{display:block;font:800 .72rem/1.5 Poppins,sans-serif;letter-spacing:.2em;color:#1b1814;white-space:nowrap;font-size:.66rem}
 .kx-logo img{display:block;width:88px;height:auto}
 .kx-brand-t{display:flex;flex-direction:column;gap:3px;min-width:0}
-.kx-kds{display:inline-flex;align-items:center;gap:6px;font-size:.52rem;font-weight:700;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;white-space:nowrap}
-.kx-live{display:inline-flex;align-items:center;gap:6px;font-size:.52rem;font-weight:600;letter-spacing:.12em;color:var(--mute);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.kx-kds{display:inline-flex;align-items:center;gap:6px;font-size:.64rem;font-weight:700;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;white-space:nowrap}
+.kx-live{display:inline-flex;align-items:center;gap:6px;font-size:.64rem;font-weight:600;letter-spacing:.12em;color:var(--mute);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 .kx-dot{position:relative;width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0}
 /* the pulse is a ring that grows and fades (transform + opacity only): animating box-shadow repainted the header every frame, forever */
 .kx-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--gold);opacity:0;animation:kxRing 2.2s ease-out infinite}
 .kx-live.off{color:var(--amber)} .kx-live.off .kx-dot,.kx-dot.off{background:var(--amber)} .kx-live.off .kx-dot::after,.kx-dot.off::after{animation:none}
 .kx-seg{display:flex;padding:2px;gap:2px;border-radius:12px;background:#070708;border:1px solid var(--line);flex-shrink:0}
-.kx-seg button{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:.58rem;font-weight:700;letter-spacing:.08em;white-space:nowrap;min-height:30px;transition:all .18s var(--ease)}
+.kx-seg button{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:.68rem;font-weight:700;letter-spacing:.08em;white-space:nowrap;min-height:34px;transition:all .18s var(--ease)}
 .kx-seg button:hover{color:var(--cream)}
 .kx-seg button.on{background:linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78);color:#14110c;box-shadow:0 8px 20px -10px rgba(211,191,162,.6)}
-.kx-seg button .n{font:700 .62rem 'JetBrains Mono',monospace;opacity:.8}
+.kx-seg button .n{font:700 0.65rem 'JetBrains Mono',monospace;opacity:.8}
 .kx-stats{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
 .kx-stat{min-width:60px;padding:3px 9px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);text-align:center}
 .kx-stat b{display:block;font:700 .98rem/1.1 'JetBrains Mono',monospace;color:var(--cream)}
-.kx-stat span{display:block;margin-top:1px;font-size:.44rem;letter-spacing:.14em;color:var(--mute);text-transform:uppercase;font-weight:600}
+.kx-stat span{display:block;margin-top:1px;font-size:.66rem;letter-spacing:.14em;color:var(--mute);text-transform:uppercase;font-weight:600}
 .kx-stat.hot{border-color:var(--line2);background:rgba(211,191,162,.1)} .kx-stat.hot b{color:var(--gold)}
 .kx-acts{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.kx-ib{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;min-width:34px;padding:0 9px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cfc7b8;font-size:.56rem;font-weight:700;letter-spacing:.1em;transition:all .18s var(--ease);flex-shrink:0}
+.kx-ib{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;min-width:36px;padding:0 9px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cfc7b8;font-size:0.65rem;font-weight:700;letter-spacing:.1em;transition:all .18s var(--ease);flex-shrink:0}
 .kx-ib:not(:disabled):hover{border-color:var(--line2);color:var(--cream);background:rgba(255,255,255,.06)}
 .kx-ib:not(:disabled):active{transform:scale(.96)}
 .kx-ib.on{border-color:var(--line2);background:rgba(211,191,162,.13);color:var(--gold)}
 .kx-ib.mute{color:var(--dim)}
-.kx-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:linear-gradient(135deg,#e6d6b8,#b99f78);color:#14110c;font:700 .54rem/17px 'JetBrains Mono',monospace;text-align:center;font-style:normal}
+.kx-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:linear-gradient(135deg,#e6d6b8,#b99f78);color:#14110c;font:700 0.65rem/17px 'JetBrains Mono',monospace;text-align:center;font-style:normal}
 .kx-eq{display:inline-flex;align-items:flex-end;gap:2px;height:14px}
 .kx-eq i{width:3px;border-radius:2px;background:var(--gold);animation:kxEq .9s ease-in-out infinite}
 .kx-eq i:nth-child(2){animation-delay:.18s} .kx-eq i:nth-child(3){animation-delay:.36s}
 .kx-pop{position:absolute;right:0;top:calc(100% + 10px);width:292px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:70;padding:14px;border-radius:16px;background:var(--glass),#101011;border:1px solid var(--line2);box-shadow:0 30px 70px -20px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:14px}
-.kx-pop h4{margin:0;font-size:.62rem;font-weight:700;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.kx-pop h4{margin:0;font-size:0.65rem;font-weight:700;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
 .kx-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.74rem;font-weight:500;color:#d8d1c3}
-.kx-row small{display:block;margin-top:2px;font-size:.6rem;color:var(--mute);font-weight:400}
-.kx-sw{position:relative;width:46px;height:26px;border-radius:13px;border:1px solid var(--line);background:#070708;flex-shrink:0;padding:0;transition:all .2s}
-.kx-sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#6f6c64;transition:all .2s var(--ease)}
-.kx-sw.on{background:rgba(211,191,162,.25);border-color:var(--line2)} .kx-sw.on::after{left:23px;background:var(--gold)}
-.kx-range{width:100%;accent-color:#d3bfa2;height:4px}
+.kx-row small{display:block;margin-top:2px;font-size:0.65rem;color:var(--mute);font-weight:400}
+.kx-sw{position:relative;width:54px;height:32px;border-radius:13px;border:1px solid var(--line);background:#070708;flex-shrink:0;padding:0;transition:all .2s}
+.kx-sw::after{content:'';position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;background:#6f6c64;transition:all .2s var(--ease)}
+.kx-sw::before{content:'';position:absolute;inset:-7px -3px}
+.kx-sw.on{background:rgba(211,191,162,.25);border-color:var(--line2)} .kx-sw.on::after{left:27px;background:var(--gold)}
+.kx-range{width:100%;accent-color:#d3bfa2;height:32px;margin:0}
+.kx-rail-f button{font-size:.7rem!important}
 .kx-duo{display:flex;gap:4px}
 .kx-duo .kx-nav{flex:1;min-width:0}
 .kx-duo .kx-nav.sq{flex:0 0 38px;justify-content:center;padding:6px 0}
 .kx-mini{display:flex;padding:2px;gap:2px;border-radius:10px;background:#070708;border:1px solid var(--line)}
-.kx-mini button{white-space:nowrap;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:30px}
+.kx-mini button{white-space:nowrap;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:0.65rem;font-weight:700;min-height:36px;min-width:38px}
 .kx-mini button.on{background:rgba(211,191,162,.2);color:var(--gold)}
-.kx-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 14px;border-radius:11px;border:1px solid var(--line2);background:rgba(211,191,162,.1);color:var(--gold);font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .18s var(--ease)}
+.kx-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 14px;border-radius:11px;border:1px solid var(--line2);background:rgba(211,191,162,.1);color:var(--gold);font-size:0.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .18s var(--ease)}
 .kx-btn:not(:disabled):hover{background:rgba(211,191,162,.18)} .kx-btn:disabled{opacity:.4}
 .kx-btn.solid{border:0;background:linear-gradient(135deg,#e6d6b8,#d3bfa2 45%,#b99f78);color:#14110c;box-shadow:0 12px 28px -12px rgba(211,191,162,.55)}
 .kx-btn.warn{border-color:rgba(226,154,88,.5);background:rgba(226,154,88,.12);color:#f0b87c}
@@ -379,29 +428,30 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-toast .ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;background:rgba(211,191,162,.14);border:1px solid var(--line2);color:var(--gold)}
 .kx-toast.cancel{border-color:rgba(226,154,88,.55)} .kx-toast.cancel .ic{background:rgba(226,154,88,.14);border-color:rgba(226,154,88,.45);color:var(--amber)}
 .kx-toast b{display:block;font-size:.7rem;font-weight:700;letter-spacing:.06em}
-.kx-toast p{margin:1px 0 0;font-size:.64rem;color:var(--mute);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.kx-toast p{margin:1px 0 0;font-size:0.65rem;color:var(--mute);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.kx-toast b{overflow-wrap:anywhere}
 .kx-feed{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
 .kx-toast.compact{padding:6px 8px;gap:8px;border-radius:11px;box-shadow:none}
 .kx-toast.compact .ic{width:26px;height:26px;border-radius:8px}
-.kx-toast.compact b{font-size:.6rem;letter-spacing:.04em}
-.kx-toast.compact p{font-size:.58rem}
+.kx-toast.compact b{font-size:0.65rem;letter-spacing:.04em}
+.kx-toast.compact p{font-size:0.65rem}
 .kx-offline{display:flex;align-items:center;gap:12px;margin:8px 8px 0;padding:7px 11px;border-radius:13px;background:linear-gradient(160deg,rgba(226,154,88,.18),rgba(226,154,88,.06)),#16120e;border:1px solid rgba(226,154,88,.5);flex-shrink:0}
 .kx-offline>div{flex:1;min-width:0}
 .kx-offline b{display:block;font-size:.66rem;letter-spacing:.12em;color:#f2bd88}
-.kx-offline span{display:block;margin-top:2px;font-size:.62rem;color:#e8b98a;line-height:1.35}
-.kx-undo{margin-left:auto;flex-shrink:0;padding:7px 14px;border-radius:9px;border:1px solid var(--line2);background:rgba(211,191,162,.18);color:var(--gold);font-size:.6rem;font-weight:800;letter-spacing:.14em}
+.kx-offline span{display:block;margin-top:2px;font-size:0.65rem;color:#e8b98a;line-height:1.35}
+.kx-undo{margin-left:auto;flex-shrink:0;padding:7px 14px;border-radius:9px;border:1px solid var(--line2);background:rgba(211,191,162,.18);color:var(--gold);font-size:0.65rem;font-weight:800;letter-spacing:.14em;min-height:36px}
 .kx-undo:hover{background:rgba(211,191,162,.3)}
 .kx-rc{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);text-align:left;min-height:40px}
 .kx-rc:hover{border-color:var(--line2);background:rgba(211,191,162,.08)}
 .kx-rc .n{font-weight:800;font-size:.82rem;min-width:54px}
-.kx-rc .m{flex:1;font-size:.6rem;color:var(--mute)}
-.kx-rc .go{display:inline-flex;align-items:center;gap:4px;font-size:.52rem;font-weight:800;letter-spacing:.1em;color:var(--gold)}
+.kx-rc .m{flex:1;font-size:0.65rem;color:var(--mute);min-width:0;overflow-wrap:anywhere}
+.kx-rc .go{display:inline-flex;align-items:center;gap:4px;font-size:0.65rem;font-weight:800;letter-spacing:.1em;color:var(--gold)}
 .kx-alerts{display:flex;flex-direction:column;gap:6px;margin:8px 8px 0;flex-shrink:0}
 .kx-alert{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 11px;border-radius:13px;background:linear-gradient(160deg,rgba(226,154,88,.14),rgba(226,154,88,.05)),#16120e;border:1px solid rgba(226,154,88,.4)}
 .kx-alert .l{display:flex;align-items:center;gap:12px;min-width:0}
 .kx-alert .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(226,154,88,.14);color:var(--amber);flex-shrink:0}
 .kx-alert h3{margin:0;font-size:.72rem;font-weight:700;letter-spacing:.04em}
-.kx-alert p{margin:2px 0 0;font-size:.64rem;color:#e8b98a;line-height:1.4}
+.kx-alert p{margin:2px 0 0;font-size:0.65rem;color:#e8b98a;line-height:1.4}
 .kx-unlock{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 16px);transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:#15120d;border:1px solid var(--line2);color:var(--gold);font-size:.66rem;font-weight:700;letter-spacing:.12em;box-shadow:0 18px 44px rgba(0,0,0,.6);pointer-events:none;animation:kxBreath 2.4s ease-in-out infinite;white-space:nowrap;text-transform:uppercase}
 
 /* ── layout ── */
@@ -410,48 +460,52 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-rail.drawer{position:fixed;left:0;top:0;bottom:0;z-index:100;width:290px;max-width:88vw;border-radius:0 22px 22px 0;padding-top:calc(env(safe-area-inset-top) + 16px)}
 .kx-rail-h{display:flex;align-items:center;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line);flex-shrink:0}
 .kx-rail-h .ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
-.kx-eyebrow{flex:1;font-size:.58rem;letter-spacing:.26em;font-weight:700;color:var(--gold);opacity:.8;text-transform:uppercase}
+.kx-eyebrow{flex:1;font-size:0.65rem;letter-spacing:.26em;font-weight:700;color:var(--gold);opacity:.8;text-transform:uppercase}
 .kx-rail-list{display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;min-height:0}
 .kx-rail-f{flex-shrink:0;display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
-.kx-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:34px;padding:6px 8px;border-radius:10px;border:1px solid transparent;background:transparent;color:#bdb6a8;font-size:.64rem;font-weight:600;letter-spacing:.04em;text-align:left;transition:all .16s var(--ease)}
+.kx-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:34px;padding:6px 8px;border-radius:10px;border:1px solid transparent;background:transparent;color:#bdb6a8;font-size:0.65rem;font-weight:600;letter-spacing:.04em;text-align:left;transition:all .16s var(--ease)}
 .kx-nav:hover{background:rgba(255,255,255,.04);color:var(--cream)}
 .kx-nav.on{background:rgba(211,191,162,.12);border-color:var(--line2);color:var(--cream);box-shadow:inset 3px 0 0 var(--gold)}
 .kx-nav .t{display:flex;align-items:center;gap:9px;min-width:0}
 .kx-nav .t span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kx-nav .r{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.kx-ct{min-width:28px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.07);color:var(--mute);font:700 .64rem/1.5 'JetBrains Mono',monospace;text-align:center}
+.kx-ct{min-width:28px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.07);color:var(--mute);font:700 0.65rem/1.5 'JetBrains Mono',monospace;text-align:center;flex-shrink:0;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kx-ct.hot{background:rgba(211,191,162,.2);color:var(--gold)}
-.kx-86{width:20px;height:20px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line);color:var(--dim);transition:all .16s}
+.kx-navrow{display:flex;align-items:center;gap:4px}
+.kx-navrow .kx-nav{flex:1;min-width:0;width:auto}
+.kx-86{flex-shrink:0;background:transparent;width:36px;height:36px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line);color:var(--dim);transition:all .16s}
 .kx-86:hover{border-color:rgba(226,154,88,.55);color:var(--amber)}
-.kx-86.has{width:auto;min-width:20px;padding:0 5px;display:inline-flex;align-items:center;gap:3px;border-color:rgba(226,154,88,.55);color:var(--amber);background:rgba(226,154,88,.1)}
-.kx-86 em{font:700 .54rem 'JetBrains Mono',monospace;font-style:normal}
+.kx-86.has{width:auto;min-width:36px;padding:0 6px;display:inline-flex;align-items:center;gap:3px;border-color:rgba(226,154,88,.55);color:var(--amber);background:rgba(226,154,88,.1)}
+.kx-86 em{font:700 0.65rem 'JetBrains Mono',monospace;font-style:normal}
 .kx-vegseg{display:flex;padding:3px;gap:2px;border-radius:13px;background:#070708;border:1px solid var(--line);margin-bottom:10px;flex-shrink:0}
-.kx-vegseg button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:6px 4px;border:0;border-radius:9px;background:transparent;color:var(--mute);font-size:.58rem;font-weight:700;letter-spacing:.06em;min-height:30px}
+.kx-vegseg button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:6px 4px;border:0;border-radius:9px;background:transparent;color:var(--mute);font-size:0.65rem;font-weight:700;letter-spacing:.06em;min-height:36px}
 .kx-vegseg button.on.v{background:rgba(93,154,78,.18);color:#9fcb90} .kx-vegseg button.on.n{background:rgba(192,74,74,.18);color:#e29a9a}
 .kx-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:8px}
 .kx-ribbon{display:flex;align-items:center;gap:8px;flex-shrink:0;min-height:30px}
-.kx-prep{display:flex;align-items:center;gap:8px;overflow-x:auto;min-width:0;flex:1}
-.kx-prep-l{display:flex;align-items:center;gap:6px;font-size:.55rem;letter-spacing:.2em;font-weight:700;color:var(--gold);flex-shrink:0;text-transform:uppercase}
-.kx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:.62rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6}
+.kx-prep{display:flex;align-items:center;gap:8px;overflow-x:auto;min-width:0;flex:1;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);padding-right:22px}
+.kx-prep-l{display:flex;align-items:center;gap:6px;font-size:0.65rem;letter-spacing:.2em;font-weight:700;color:var(--gold);flex-shrink:0;text-transform:uppercase}
+.kx-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.035);font-size:0.65rem;font-weight:600;white-space:nowrap;flex-shrink:0;color:#ddd5c6;min-height:34px;max-width:260px;overflow:hidden}
 .kx-chip{cursor:pointer;font-family:inherit}
 .kx-chip:hover{border-color:var(--line2);color:var(--cream)}
 .kx-chip.on{background:rgba(211,191,162,.2);border-color:var(--gold);color:var(--cream)}
 .kx-chip b{font:700 .7rem 'JetBrains Mono',monospace;color:var(--gold)}
-.kx-filterbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:rgba(211,191,162,.12);font-size:.54rem;font-weight:700;letter-spacing:.1em;color:var(--gold);flex-shrink:0;white-space:nowrap;text-transform:uppercase}
-.kx-filterbtn b{font:700 .64rem 'JetBrains Mono',monospace;color:var(--cream)}
+.kx-chip .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kx-filterbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:rgba(211,191,162,.12);font-size:0.65rem;font-weight:700;letter-spacing:.1em;color:var(--gold);flex-shrink:0;white-space:nowrap;text-transform:uppercase}
+.kx-filterbtn .slash{display:none}
+.kx-filterbtn b{font:700 0.65rem 'JetBrains Mono',monospace;color:var(--cream)}
 .kx-filterbtn:hover{background:rgba(211,191,162,.2)}
-.kx-latebtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid rgba(226,154,88,.5);background:rgba(226,154,88,.1);font-size:.54rem;font-weight:800;letter-spacing:.12em;color:#f0b87c;flex-shrink:0;text-transform:uppercase}
-.kx-latebtn b{font:700 .62rem 'JetBrains Mono',monospace}
+.kx-latebtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 10px;border-radius:9px;border:1px solid rgba(226,154,88,.5);background:rgba(226,154,88,.1);font-size:0.65rem;font-weight:800;letter-spacing:.12em;color:#f0b87c;flex-shrink:0;text-transform:uppercase}
+.kx-latebtn b{font:700 0.65rem 'JetBrains Mono',monospace}
 .kx-latebtn.on{background:rgba(226,154,88,.28);border-color:var(--amber);color:#ffe2c0}
-.kx-sortbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.54rem;font-weight:700;letter-spacing:.12em;color:var(--mute);flex-shrink:0;text-transform:uppercase}
+.kx-sortbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:0.65rem;font-weight:700;letter-spacing:.12em;color:var(--mute);flex-shrink:0;text-transform:uppercase}
 .kx-sortbtn:hover{color:var(--cream);border-color:var(--line2)}
 .kx-search{display:flex;align-items:center;gap:8px;margin:8px 8px 0;padding:7px 12px;border-radius:12px;background:var(--glass),#0d0d0e;border:1px solid var(--line2);flex-shrink:0}
-.kx-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--cream);font-size:.8rem}
+.kx-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--cream);font-size:.8rem;min-height:32px}
 .kx-search input::placeholder{color:var(--dim)}
 .kx-health{border-radius:12px;border:1px solid var(--line);background:var(--glass),#0d0d0e;flex-shrink:0;overflow:hidden}
-.kx-health-h{display:flex;align-items:center;gap:8px;width:100%;padding:6px 12px;border:0;background:transparent;text-align:left}
-.kx-health-h .tt{font-size:.58rem;letter-spacing:.22em;font-weight:700;color:var(--gold);text-transform:uppercase}
-.kx-health-h .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.6rem;font-weight:700;letter-spacing:.08em;color:var(--gold)}
+.kx-health-h{display:flex;align-items:center;gap:8px;width:100%;padding:6px 12px;border:0;background:transparent;text-align:left;min-height:38px;white-space:nowrap}
+.kx-health-h .tt{font-size:0.65rem;letter-spacing:.22em;font-weight:700;color:var(--gold);text-transform:uppercase}
+.kx-health-h .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:0.65rem;font-weight:700;letter-spacing:.08em;color:var(--gold)}
 .kx-health-h .st.warn{color:var(--amber)}
 .kx-health-b{padding:0 12px 10px;display:flex;flex-direction:column;gap:10px}
 .kx-stg{display:grid;gap:8px}
@@ -483,11 +537,11 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-tk.fresh::after{box-shadow:inset 0 0 0 1px rgba(230,214,184,.9),inset 0 0 28px rgba(230,214,184,.3);animation:kxGlow 1.6s ease-in-out 5}
 .kx-tk.fill{max-height:none;height:100%}
 .kx-tk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 10px 5px 13px}
-.kx-tk-type{display:inline-flex;align-items:center;gap:6px;font-size:.5rem;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
-.kx-tk-num{margin:2px 0 4px;font-size:1.5rem;font-weight:800;line-height:1;letter-spacing:-.02em}
+.kx-tk-type{display:inline-flex;align-items:center;gap:6px;font-size:.66rem;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+.kx-tk-num{margin:2px 0 4px;font-size:1.5rem;font-weight:800;line-height:1.05;letter-spacing:-.02em;overflow-wrap:anywhere;word-break:break-word}
 .kx-tk-num.sw{color:var(--swiggy)} .kx-tk-num.zo{color:var(--zomato)}
 .kx-tk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
-.kx-tag{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.48rem;font-weight:700;letter-spacing:.1em;color:#cfc7b8;text-transform:uppercase;white-space:nowrap}
+.kx-tag{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.67rem;font-weight:700;letter-spacing:.1em;color:#cfc7b8;text-transform:uppercase;white-space:nowrap;max-width:100%}
 .kx-tag.gold{background:rgba(211,191,162,.16);border-color:var(--line2);color:var(--gold)}
 .kx-tag.amber{background:rgba(226,154,88,.16);border-color:rgba(226,154,88,.45);color:#f0b87c}
 .kx-tag.sw{color:var(--swiggy);border-color:rgba(252,128,25,.4);background:rgba(252,128,25,.1)}
@@ -495,42 +549,43 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-tag.id{font-family:'JetBrains Mono',monospace;color:var(--mute);letter-spacing:.04em}
 .kx-time{position:relative;width:50px;height:50px;flex-shrink:0;display:grid;place-items:center}
 .kx-time svg{position:absolute;inset:0;transform:rotate(-90deg)}
-.kx-time .tv{position:relative;font:700 .66rem 'JetBrains Mono',monospace;letter-spacing:-.02em}
+.kx-time .tv{position:relative;font:700 .66rem 'JetBrains Mono',monospace;letter-spacing:-.02em;font-size:.7rem}
 .kx-time.high .tv{color:var(--amber)} .kx-time.med .tv{color:var(--gold)}
-.kx-late{margin-top:2px;display:block;text-align:center;font-size:.42rem;font-weight:800;letter-spacing:.16em;color:var(--amber)}
-.kx-strip{margin:0 8px 5px 12px;padding:4px 8px;border-radius:9px;font-size:.56rem;font-weight:600;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.kx-late{margin-top:2px;display:block;text-align:center;font-size:.66rem;font-weight:800;letter-spacing:.16em;color:var(--amber)}
+.kx-strip{margin:0 8px 5px 12px;padding:4px 8px;border-radius:9px;font-size:.68rem;font-weight:600;line-height:1.4;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;overflow-wrap:anywhere}
 .kx-strip.sw{background:rgba(252,128,25,.08);border:1px solid rgba(252,128,25,.28);color:#ffa760}
 .kx-strip.zo{background:rgba(224,52,63,.08);border:1px solid rgba(224,52,63,.28);color:#f2848b}
 .kx-strip.mod{display:block;background:rgba(226,154,88,.1);border:1px solid rgba(226,154,88,.4);color:#f0b87c}
 .kx-prog{display:flex;align-items:center;gap:8px;margin:0 10px 5px 13px}
 .kx-prog .bar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
 .kx-prog .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#b99f78,#e6d6b8);transition:width .4s var(--ease)}
-.kx-prog span{font:700 .56rem 'JetBrains Mono',monospace;color:var(--mute)}
+.kx-prog span{font:700 0.65rem 'JetBrains Mono',monospace;color:var(--mute);font-size:.66rem}
 .kx-prog span.ok{color:var(--gold)}
 .kx-items{display:flex;flex-direction:column;gap:5px;padding:2px 6px 6px 11px;overflow-y:auto;flex:1 1 auto;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(211,191,162,.35) transparent;background:linear-gradient(#0f0e0d 30%,rgba(15,14,13,0)) top/100% 22px no-repeat local,linear-gradient(rgba(15,14,13,0),#0f0e0d 70%) bottom/100% 22px no-repeat local,radial-gradient(farthest-side at 50% 0,rgba(211,191,162,.34),rgba(211,191,162,0)) top/100% 10px no-repeat scroll,radial-gradient(farthest-side at 50% 100%,rgba(211,191,162,.34),rgba(211,191,162,0)) bottom/100% 10px no-repeat scroll;background-color:#0f0e0d}
 .kx-items::-webkit-scrollbar{width:4px}.kx-items::-webkit-scrollbar-thumb{background:rgba(211,191,162,.35);border-radius:2px}
-.kx-it{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;padding:6px 8px;border-radius:11px;flex-shrink:0;background:rgba(255,255,255,.035);border:1px solid rgba(211,191,162,.12);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:all .16s var(--ease)}
+.kx-it{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:start;padding:6px 8px;border-radius:11px;flex-shrink:0;background:rgba(255,255,255,.035);border:1px solid rgba(211,191,162,.12);cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:all .16s var(--ease)}
 .kx-it:hover{border-color:var(--line2)} .kx-it:active{transform:scale(.99)}
 .kx-it.run{background:rgba(211,191,162,.06);border-color:rgba(211,191,162,.3)}
 /* a dish the customer added or changed: the only highlighted row on a modified ticket */
 .kx-it.mod{background:linear-gradient(160deg,rgba(226,154,88,.2),rgba(226,154,88,.07));border-color:rgba(226,154,88,.75);box-shadow:0 0 0 1px rgba(226,154,88,.25),0 0 18px -6px rgba(226,154,88,.55)}
 .kx-it.mod .kx-qty{background:rgba(226,154,88,.2);border-color:rgba(226,154,88,.6);color:#f0b87c}
-.kx-it.mod .kx-nm{color:#ffe2c0}
+.kx-it.mod .kx-nm{color:#ffe2c0;font-size:.9rem}
 .kx-it.done{background:transparent;opacity:.45}
 .kx-qty{min-width:30px;height:30px;padding:0 5px;border-radius:9px;display:grid;place-items:center;font:700 .88rem 'JetBrains Mono',monospace;background:rgba(211,191,162,.14);border:1px solid rgba(211,191,162,.3);color:var(--gold)}
 .kx-it.done .kx-qty{background:rgba(255,255,255,.04);border-color:var(--line);color:var(--dim)}
-.kx-it-b{min-width:0}
+.kx-it-b{min-width:0;overflow-wrap:anywhere}
 .kx-nm{display:flex;align-items:center;flex-wrap:wrap;gap:5px;font-size:.84rem;font-weight:600;line-height:1.25;color:var(--cream)}
 .kx-it.done .kx-nm{text-decoration:line-through;color:var(--mute)}
 .kx-nm .sp{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:7px;background:rgba(211,191,162,.18);color:var(--gold)}
-.kx-sub{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px;font-size:.54rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.kx-sub{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px;font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 .kx-sub .half{color:var(--gold)}
-.kx-tm{display:inline-flex;align-items:center;gap:3px;font:700 .56rem 'JetBrains Mono',monospace;color:var(--gold2);letter-spacing:0}
+.kx-tm{display:inline-flex;align-items:center;gap:3px;font:700 .68rem 'JetBrains Mono',monospace;color:var(--gold2);letter-spacing:0;font-size:.68rem;text-transform:none}
 .kx-tm.slow::after{content:'\\26A0  SLOW'}  /* drawn by CSS: no extra elements on every dish */
 .kx-tm.slow{padding:2px 7px;border-radius:7px;background:rgba(226,154,88,.16);border:1px solid rgba(226,154,88,.45);color:#f0b87c}
-.kx-hint{margin-top:3px;font-size:.5rem;color:var(--dim);font-style:italic}
-.kx-note{display:flex;align-items:flex-start;gap:6px;margin-top:5px;padding:4px 7px;border-radius:8px;background:rgba(226,154,88,.12);border:1px solid rgba(226,154,88,.42);color:#f2bd88;font-size:.66rem;font-weight:600;line-height:1.38}
+.kx-hint{margin-top:3px;font-size:0.65rem;color:var(--dim);font-style:italic}
+.kx-note{display:flex;align-items:flex-start;gap:6px;margin-top:5px;padding:4px 7px;border-radius:8px;background:rgba(226,154,88,.12);border:1px solid rgba(226,154,88,.42);color:#f2bd88;font-size:.74rem;font-weight:600;line-height:1.38}
 .kx-note svg{flex-shrink:0;margin-top:2px}
+.kx-note span{min-width:0;overflow-wrap:anywhere}
 .kx-chk{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(211,191,162,.42);display:grid;place-items:center;color:#14110c;flex-shrink:0;margin-top:3px;transition:all .16s var(--ease)}
 .kx-it.done .kx-chk{background:var(--gold);border-color:var(--gold)}
 .kx-vd{width:13px;height:13px;border-radius:3px;border:1.6px solid var(--veg);display:inline-grid;place-items:center;flex-shrink:0}
@@ -543,7 +598,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-sq{width:38px;min-height:38px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.04);display:grid;place-items:center;color:#cfc7b8;flex-shrink:0;transition:all .16s var(--ease)}
 .kx-sq:not(:disabled):hover{border-color:var(--line2);color:var(--gold)} .kx-sq:not(:disabled):active{transform:scale(.95)}
 .kx-sq.on{border-color:var(--line2);color:var(--gold);background:rgba(211,191,162,.12)}
-.kx-go{flex:1;min-height:38px;padding:0 10px;border-radius:11px;border:0;display:flex;align-items:center;justify-content:center;gap:7px;font-size:.66rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#14110c;background:linear-gradient(135deg,#e6d6b8 0%,#d3bfa2 45%,#b99f78 100%);box-shadow:0 14px 30px -14px rgba(211,191,162,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .16s var(--ease),filter .16s}
+.kx-go{flex:1;min-height:38px;padding:0 10px;border-radius:11px;border:0;display:flex;align-items:center;justify-content:center;gap:7px;font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#14110c;background:linear-gradient(135deg,#e6d6b8 0%,#d3bfa2 45%,#b99f78 100%);box-shadow:0 14px 30px -14px rgba(211,191,162,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .16s var(--ease),filter .16s}
 .kx-go:not(:disabled):hover{filter:brightness(1.06)} .kx-go:not(:disabled):active{transform:scale(.98)}
 .kx-go.late{background:linear-gradient(135deg,#f3c18a,#e29a58 55%,#c97a35);box-shadow:0 14px 30px -14px rgba(226,154,88,.6),inset 0 1px 0 rgba(255,255,255,.4)}
 
@@ -552,27 +607,30 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-sumc{padding:12px 9px 10px;border-radius:14px;text-align:center;background:var(--glass),#0e0e0f;border:1px solid var(--line);border-top:2px solid var(--line2)}
 .kx-sumc.p{border-color:var(--line2);border-top-color:var(--gold)}
 .kx-sumc b{display:block;font:700 1.8rem/1 'JetBrains Mono',monospace;color:var(--gold);margin-bottom:6px}
-.kx-sumc .n{font-size:.64rem;font-weight:600;color:#d8d1c3;line-height:1.3;margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+.kx-sumc .n{font-size:0.65rem;font-weight:600;color:#d8d1c3;line-height:1.3;margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;overflow-wrap:anywhere}
 .kx-metrics{flex:1;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;border-radius:24px;background:var(--glass),#0d0d0e;border:1px solid var(--line)}
 .kx-metrics h2{margin:0;font-family:'Playfair Display',Georgia,serif;font-size:1.25rem;font-weight:700;letter-spacing:.04em}
 .kx-metrics>p{margin:0 0 20px;font-size:.66rem;color:var(--mute);letter-spacing:.06em}
 .kx-mtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;width:100%;max-width:860px;margin-bottom:18px}
 .kx-mt{padding:16px 10px;border-radius:14px;text-align:center;background:#0b0b0c;border:1px solid var(--line);border-top:2px solid var(--gold)}
-.kx-mt span{display:block;font-size:.5rem;letter-spacing:.2em;font-weight:700;color:var(--mute);text-transform:uppercase;margin-bottom:10px}
+.kx-mt span{display:block;font-size:0.65rem;letter-spacing:.2em;font-weight:700;color:var(--mute);text-transform:uppercase;margin-bottom:10px}
 .kx-mt b{display:block;font:700 1.8rem/1 'JetBrains Mono',monospace;color:var(--gold)} .kx-mt b.sm{font-size:1.3rem;padding:.3rem 0}
-.kx-mt small{display:block;margin-top:8px;font-size:.6rem;color:var(--dim)}
+.kx-mt small{display:block;margin-top:8px;font-size:0.65rem;color:var(--dim)}
 
 /* ── mobile ── */
-.kx-dots{display:flex;justify-content:center;gap:5px;flex-wrap:wrap;flex-shrink:0;padding:0 20px}
+.kx-dots{display:flex;justify-content:center;gap:0;flex-wrap:wrap;flex-shrink:0;padding:0 20px}
+.kx-dots button{display:inline-flex;align-items:center;justify-content:center;padding:0 4px;height:28px;min-width:20px;border:0;background:none;cursor:pointer}
+.kx-dots button::before{content:'';height:6px;width:6px;border-radius:3px;background:#3a3a3a;transition:all .25s}
+.kx-dots button.on::before{width:22px;background:var(--gold)}
 .kx-dots i{height:6px;width:6px;border-radius:3px;background:#262626;transition:all .25s;cursor:pointer}
 .kx-dots i.on{width:22px;background:var(--gold)}
 .kx-pager{display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
 .kx-pager button{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.7rem;font-weight:700;letter-spacing:.1em}
 .kx-pager button:disabled{opacity:.25}
 .kx-bnav{display:flex;gap:3px;margin:0 10px 10px;padding:4px;border-radius:20px;background:var(--glass),#0d0d0e;border:1px solid var(--line);flex-shrink:0}
-.kx-bnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:46px;padding:7px 2px;border:0;border-radius:16px;background:transparent;color:var(--mute);font-size:.5rem;font-weight:700;letter-spacing:.08em}
+.kx-bnav button{white-space:nowrap;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:46px;padding:7px 2px;border:0;border-radius:16px;background:transparent;color:var(--mute);font-size:0.65rem;font-weight:700;letter-spacing:.08em}
 .kx-bnav button.on{background:rgba(211,191,162,.16);color:var(--gold)}
-.kx-bnav button .n{font:700 .5rem 'JetBrains Mono',monospace;color:var(--gold)}
+.kx-bnav button .n{font:700 0.65rem 'JetBrains Mono',monospace;color:var(--gold)}
 
 /* ── side sheet (wastage) + modal (86) ── */
 .kx-scrim{position:fixed;inset:0;background:rgba(4,4,4,.62);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
@@ -581,18 +639,18 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 .kx-sheet-h .t{display:flex;align-items:center;gap:12px}
 .kx-sheet-h .ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:rgba(211,191,162,.1);border:1px solid var(--line2);color:var(--gold)}
 .kx-sheet-h h3{margin:0;font-size:.8rem;font-weight:700;letter-spacing:.08em}
-.kx-sheet-h small{display:block;margin-top:3px;font-size:.52rem;letter-spacing:.18em;color:var(--mute);text-transform:uppercase;font-weight:600}
+.kx-sheet-h small{display:block;margin-top:3px;font-size:0.65rem;letter-spacing:.18em;color:var(--mute);text-transform:uppercase;font-weight:600}
 .kx-tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
-.kx-tabs button{flex:1;padding:10px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mute);font-size:.6rem;font-weight:700;letter-spacing:.16em}
+.kx-tabs button{flex:1;padding:10px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mute);font-size:0.65rem;font-weight:700;letter-spacing:.16em}
 .kx-tabs button.on{color:var(--gold);border-bottom-color:var(--gold)}
 .kx-card{padding:12px;border-radius:14px;background:#0a0a0b;border:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
-.kx-card>.hd{font-size:.56rem;letter-spacing:.22em;font-weight:700;color:var(--mute);text-transform:uppercase;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.kx-lbl{display:block;margin-bottom:6px;font-size:.54rem;font-weight:700;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
+.kx-card>.hd{font-size:0.65rem;letter-spacing:.22em;font-weight:700;color:var(--mute);text-transform:uppercase;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.kx-lbl{display:block;margin-bottom:6px;font-size:0.65rem;font-weight:700;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
 .kx-in{width:100%;padding:8px 11px;border-radius:10px;border:1px solid var(--line);background:#070708;color:var(--cream);font-size:.76rem;outline:0;transition:border-color .16s,box-shadow .16s}
 .kx select.kx-in{background-color:#070708;color:var(--cream);color-scheme:dark}
 .kx-in:focus{border-color:var(--line2);box-shadow:0 0 0 4px rgba(211,191,162,.08)}
 .kx-in option{background:#0d0d0e;color:var(--cream)}
-.kx-pill{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:.62rem;font-weight:700;min-height:34px}
+.kx-pill{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:0.65rem;font-weight:700;min-height:36px}
 .kx-pill.on{border-color:var(--line2);background:rgba(211,191,162,.16);color:var(--gold)}
 .kx-ent{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:9px 11px;border-radius:12px;background:#0a0a0b;border:1px solid var(--line);border-left:3px solid var(--gold2)}
 .kx-modalwrap{position:fixed;inset:0;z-index:3101;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
@@ -616,7 +674,7 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
 
 /* ── responsive ── */
 .kx-mdot{display:none}
-@media (max-width:1180px){.kx-stat.opt{display:none}}
+@media (max-width:1320px){.kx-stat.opt{display:none}}
 @media (max-width:1100px){.kx-stats{display:none}.kx-acts{margin-left:auto}.kx-seg button span.lb{display:none}.kx-seg button{padding:5px 9px}}
 @media (max-width:980px){.kx-brand-t{display:none}.kx-hide-md{display:none!important}.kx-toasts{top:calc(env(safe-area-inset-top) + 62px)}}
 /* newer-CSS upgrades, only where the browser understands them (older kitchen tablets keep the plain fallbacks above) */
@@ -629,6 +687,12 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
   .kx-row.stack{flex-direction:column;align-items:stretch;gap:8px}
   .kx-row.stack .kx-mini{width:100%}
   .kx-row.stack .kx-mini button{flex:1}
+  .kx-prep-l{display:none}
+  .kx-latebtn .lbl,.kx-sortbtn .lbl,.kx-filterbtn .lbl{display:none}
+  .kx-filterbtn .slash{display:inline}
+  .kx-latebtn,.kx-sortbtn,.kx-filterbtn{padding:0 9px;gap:4px}
+  .kx-health-h .tt{overflow:hidden;text-overflow:ellipsis}
+  .kx-health-h .st{min-width:0;overflow:hidden;text-overflow:ellipsis}
   .kx-top{margin:6px 6px 0;padding:5px 7px;gap:6px;border-radius:14px}
   .kx-logo img{width:76px} .kx-acts{gap:4px} .kx-mdot{display:inline-block}
   .kx-ib{height:36px;min-width:36px;padding:0 8px}
@@ -638,8 +702,11 @@ html,body{margin:0;background:#0b0b0c;overflow:hidden;overscroll-behavior:none}
   .kx-mtiles{grid-template-columns:1fr} .kx-pop{position:fixed;left:8px;right:8px;top:56px;width:auto}
   .kx-toasts{top:calc(env(safe-area-inset-top) + 56px)}
   .kx-unlock{bottom:calc(env(safe-area-inset-bottom) + 76px);white-space:normal;text-align:center;width:calc(100vw - 24px);justify-content:center;border-radius:14px}
-  .kx-bnav{margin:0 6px 6px} .kx-bnav button{font-size:.46rem;letter-spacing:.04em}
+  .kx-bnav{margin:0 6px 6px} .kx-bnav button{font-size:.65rem;letter-spacing:0;padding-left:1px;padding-right:1px}
 }
+@media (max-width:359px){.kx-top{gap:4px;padding:5px;margin:5px 5px 0}.kx-logo{padding:3px 5px}.kx-logo img{width:60px}.kx-logo-txt{letter-spacing:.08em}.kx-ib{min-width:34px;padding:0 6px}.kx-acts{gap:3px}.kx-stat{min-width:46px;padding:3px 6px}.kx-brand{gap:4px}}
+/* short phones (e.g. 320x568): the ticket scrolls as a whole and keeps Complete pinned at the bottom, instead of cutting the button off */
+@media (max-width:599px) and (max-height:700px){.kx-tk.fill{overflow-y:auto}.kx-tk.fill .kx-items{overflow:visible;flex:none;background:none}.kx-tk.fill .kx-tk-f{position:sticky;bottom:0;z-index:4;background:#0f0e0d}}
 @media (prefers-reduced-motion:reduce){.kx *,.kx *::before,.kx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `;
 
@@ -665,7 +732,8 @@ const KitchenViewInner = () => {
   const [orders, setOrders] = useState([]);
   const [recallQueue, setRecallQueue] = useState([]);
   const [isAggregateView, setIsAggregateView] = useState(false);
-  const [isNonVegMode, setIsNonVegMode] = useState(false);
+  const [isNonVegMode, setIsNonVegModeState] = useState(() => { try { return localStorage.getItem(`kds_nonveg_${tenantId}`) === '1'; } catch { return false; } });
+  const setIsNonVegMode = v => { setIsNonVegModeState(v); try { localStorage.setItem(`kds_nonveg_${tenantId}`, v ? '1' : '0'); } catch { /* ignore */ } };
   const [tenantOnlyVeg, setTenantOnlyVeg] = useState(true);
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -1634,7 +1702,33 @@ const KitchenViewInner = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [showSettings, eightySixModal, showWastagePanel, showRecall, showVoiceMenu, sidebarOpen, showSearch]);
 
+  const prepRowRef = useRef(null);
+  useWheelSideways(prepRowRef);
+
+  /* ── dialogs: keyboard focus ── */
+  const drawerRef = useRef(null);
+  const settingsRef = useRef(null);
+  const wastageRef = useRef(null);
+  const modal86Ref = useRef(null);
+  useFocusTrap(drawerRef, sidebarOpen);
+  useFocusTrap(settingsRef, showSettings);
+  useFocusTrap(wastageRef, showWastagePanel);
+  useFocusTrap(modal86Ref, !!eightySixModal);
+
+  // the browser tab / installed app is named after the restaurant, and shows how many tickets are waiting
+  useEffect(() => {
+    const prev = document.title;
+    document.title = `${pendingCount > 0 ? `(${pendingCount}) ` : ''}Kitchen${tenantName ? ` · ${tenantName}` : ''}`;
+    return () => { document.title = prev; };
+  }, [pendingCount, tenantName]);
+
+  // switching station or opening the summary must leave the speed-metrics screen, otherwise the tap seems to do nothing
+  const selectStation = v => { setStationFilter(v); setShowMetricsDashboard(false); };
+  const toggleSummary = () => { setShowMetricsDashboard(false); setIsAggregateView(v => !v); };
+  const toggleMetrics = () => { setIsAggregateView(false); setShowMetricsDashboard(v => !v); };
+
   /* ── breakpoint helpers ── */
+  const wide = w >= 1520;                       // only then is there room for the words beside the header icons
   const showDrawerToggle = isMobile || isSmallTablet;
   const showPermanentSide = isLargeTablet || w >= 1200;
   const useCardView = isMobile;
@@ -1661,7 +1755,7 @@ const KitchenViewInner = () => {
         <div className="kx-rail-h">
           <div className="ic"><Layers size={15} /></div>
           <span className="kx-eyebrow">Sections</span>
-          {inDrawer && <button type="button" className="kx-ib" aria-label="Close" onClick={() => setSidebarOpen(false)} style={{ height: 36, minWidth: 36, padding: 0 }}><X size={15} /></button>}
+          {inDrawer && <button type="button" className="kx-ib" aria-label="Close" onClick={() => setSidebarOpen(false)} style={{ height: 40, minWidth: 40, padding: 0 }}><X size={15} /></button>}
         </div>
 
         {!tenantOnlyVeg && (
@@ -1679,24 +1773,23 @@ const KitchenViewInner = () => {
           <div className="kx-rail-list no-scrollbar">
             <button type="button" className={`kx-nav${allSel ? ' on' : ''}`} onClick={() => { setSelectedCategory('ALL'); setShowMetricsDashboard(false); closeIf(); }}>
               <span className="t"><Coffee size={14} /><span>ALL SECTIONS</span></span>
-              <span className="r"><span className={`kx-ct${pendingCount > 0 ? ' hot' : ''}`}>{pad2(pendingCount)}</span></span>
+              <span className="r"><span className={`kx-ct${pendingCount > 0 ? ' hot' : ''}`}>{fmtCount(pendingCount)}</span></span>
             </button>
             {visibleCategories.map(cat => {
               const k = cat.categoryId?.toLowerCase().trim() || '';
               const count = categoryPendingCounts[k] || 0;
               const sel = selectedCategory === k && !showMetricsDashboard;
               return (
-                <button type="button" key={cat._id} className={`kx-nav${sel ? ' on' : ''}`} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); closeIf(); }}>
-                  <span className="t"><Flame size={14} color={count > 0 ? '#d3bfa2' : undefined} /><span style={{ textTransform: 'uppercase' }}>{cat.name}</span></span>
-                  <span className="r">
-                    <span role="button" tabIndex={0} className={`kx-86${eightySixCounts[k] ? ' has' : ''}`} title={eightySixCounts[k] ? `${eightySixCounts[k]} dish(es) 86'd in "${cat.name}"` : `86 a dish in "${cat.name}"`} aria-label={`86 a dish in ${cat.name}`}
-                      onClick={e => { e.stopPropagation(); trigger86(k, cat.name); }}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); trigger86(k, cat.name); } }}>
-                      <EyeOff size={12} />{eightySixCounts[k] ? <em>{eightySixCounts[k]}</em> : null}
-                    </span>
-                    <span className={`kx-ct${count > 0 ? ' hot' : ''}`}>{pad2(count)}</span>
-                  </span>
-                </button>
+                <div className="kx-navrow" key={cat._id}>
+                  <button type="button" className={`kx-nav${sel ? ' on' : ''}`} aria-pressed={sel} onClick={() => { setSelectedCategory(k); setShowMetricsDashboard(false); closeIf(); }}>
+                    <span className="t"><Flame size={14} color={count > 0 ? '#d3bfa2' : undefined} /><span style={{ textTransform: 'uppercase' }}>{cat.name}</span></span>
+                    <span className="r"><span className={`kx-ct${count > 0 ? ' hot' : ''}`}>{fmtCount(count)}</span></span>
+                  </button>
+                  <button type="button" className={`kx-86${eightySixCounts[k] ? ' has' : ''}`} title={eightySixCounts[k] ? `${eightySixCounts[k]} ${eightySixCounts[k] === 1 ? 'dish is' : 'dishes are'} 86'd in "${cat.name}"` : `86 a dish in "${cat.name}"`} aria-label={eightySixCounts[k] ? `${eightySixCounts[k]} ${eightySixCounts[k] === 1 ? 'dish' : 'dishes'} 86'd in ${cat.name}: manage or 86 another` : `86 a dish in ${cat.name}`}
+                    onClick={() => { trigger86(k, cat.name); closeIf(); }}>
+                    <EyeOff size={13} />{eightySixCounts[k] ? <em>{eightySixCounts[k]}</em> : null}
+                  </button>
+                </div>
               );
             })}
             {!inDrawer && showPermanentSide && toasts.length > 0 && (
@@ -1764,6 +1857,8 @@ const KitchenViewInner = () => {
     </div>
   );
 
+  // Enter in any text box of the wastage form saves the entry (when it is complete)
+  const wastageEnter = e => { if (e.key === 'Enter' && !wastageDisabled) { e.preventDefault(); saveWastageEntry(); } };
   const wastageDisabled = wastageSaving || !wastageForm.itemName.trim() || !wastageForm.quantity || !wastageForm.loggedBy.trim();
   const dishesOut86 = eightySixModal ? menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable === false) : [];
   const dishesFor86 = eightySixModal ? menuItems.filter(m => (m.categoryId || '').toLowerCase().trim() === eightySixModal.categoryKey && m.isAvailable !== false) : [];
@@ -1772,6 +1867,7 @@ const KitchenViewInner = () => {
      RENDER
   ═══════════════════════════════════════════════════════════ */
   return (
+    <MotionConfig reducedMotion="user">
     <div className="kx">
       <style>{KX_CSS}</style>
       {boardState === 'loading' && <span role="status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Loading kitchen tickets…</span>}
@@ -1792,7 +1888,7 @@ const KitchenViewInner = () => {
         {sidebarOpen && showDrawerToggle && (
           <>
             <Motion.div className="kx-scrim" style={{ zIndex: 90 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSidebarOpen(false)} />
-            <Motion.aside className="kx-rail drawer" initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
+            <Motion.aside ref={drawerRef} className="kx-rail drawer" role="dialog" aria-modal="true" aria-label="Sections and tools" initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
               {renderRail(true)}
             </Motion.aside>
           </>
@@ -1803,7 +1899,7 @@ const KitchenViewInner = () => {
       <header className="kx-top">
         <div className="kx-brand">
           {showDrawerToggle && <button type="button" className="kx-ib" aria-label="Open sections" onClick={() => setSidebarOpen(true)}><AlignJustify size={18} /></button>}
-          <div className="kx-logo"><img src="/pratyeksha-logo.png" alt="Pratyeksha" /></div>
+          <BrandLogo />
           <div className="kx-brand-t">
             <span className="kx-kds"><ChefHat size={12} /> Kitchen display</span>
             <span className={`kx-live${isOnline && boardState !== 'error' ? '' : ' off'}`}>
@@ -1816,7 +1912,7 @@ const KitchenViewInner = () => {
         {!isMobile && (
           <div className="kx-seg" role="tablist" aria-label="Station">
             {STATIONS.map(s => (
-              <button type="button" key={s.val} role="tab" aria-label={s.lbl} aria-selected={stationFilter === s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => setStationFilter(s.val)}>
+              <button type="button" key={s.val} role="tab" aria-label={s.lbl} aria-selected={stationFilter === s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => selectStation(s.val)}>
                 <s.Icon size={13} /><span className="lb">{s.lbl}</span>{stationCounts[s.val] > 0 && <span className="n">{stationCounts[s.val]}</span>}
               </button>
             ))}
@@ -1839,15 +1935,15 @@ const KitchenViewInner = () => {
           )}
           <button type="button" aria-label="Search" className={`kx-ib${showSearch ? ' on' : ''}`} onClick={() => setShowSearch(v => !v)}><Search size={16} /></button>
           {!isMobile && (
-            <button type="button" aria-label={isAggregateView ? 'Show tickets' : 'Show batch summary'} className={`kx-ib${isAggregateView ? ' on' : ''}`} onClick={() => setIsAggregateView(v => !v)}>
-              {isAggregateView ? <LayoutGrid size={16} /> : <BarChart3 size={16} />}{!isTablet && <span>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
+            <button type="button" aria-label={isAggregateView ? 'Show tickets' : 'Show batch summary'} className={`kx-ib${isAggregateView ? ' on' : ''}`} onClick={toggleSummary}>
+              {isAggregateView ? <LayoutGrid size={16} /> : <BarChart3 size={16} />}{wide && <span>{isAggregateView ? 'TICKETS' : 'SUMMARY'}</span>}
             </button>
           )}
           {recallQueue.length > 0 && (
             <div style={{ position: 'relative' }}>
               <button type="button" className={`kx-ib on${showRecall ? ' open' : ''}`} onClick={() => setShowRecall(v => !v)} aria-label="Recall last ticket" aria-expanded={showRecall}
                 title={`Recently dispatched: ${recallQueue.length}/10`}>
-                <History size={16} />{!isMobile && !isTablet && <span>RECALL {shortLabel(recallQueue[0])}</span>}<em className="kx-badge">{recallQueue.length}</em>
+                <History size={16} />{wide && <span>RECALL {shortLabel(recallQueue[0])}</span>}<em className="kx-badge">{recallQueue.length}</em>
               </button>
               <AnimatePresence>
                 {showRecall && (
@@ -1878,9 +1974,9 @@ const KitchenViewInner = () => {
 
           {/* Voice announcements: output only, automatic. This is where they are tuned. */}
           <div style={{ position: 'relative' }}>
-            <button type="button" aria-label="Voice announcements" aria-expanded={showVoiceMenu} className={`kx-ib${!audioUnlocked ? ' attn' : voicePrefs.voice ? ' on' : ' mute'}`} onClick={() => setShowVoiceMenu(v => !v)}>
+            <button type="button" aria-label="Voice announcements" title="Voice announcements" aria-expanded={showVoiceMenu} className={`kx-ib${!audioUnlocked ? ' attn' : voicePrefs.voice ? ' on' : ' mute'}`} onClick={() => setShowVoiceMenu(v => !v)}>
               {speaking ? <span className="kx-eq"><i /><i /><i /></span> : voicePrefs.voice ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              {!isMobile && !isTablet && <span>{!audioUnlocked ? 'TAP FOR SOUND' : voicePrefs.voice ? 'VOICE ON' : 'VOICE OFF'}</span>}
+              {wide && <span>{!audioUnlocked ? 'TAP FOR SOUND' : voicePrefs.voice ? 'VOICE ON' : 'VOICE OFF'}</span>}
             </button>
             <AnimatePresence>
               {showVoiceMenu && (
@@ -1890,22 +1986,22 @@ const KitchenViewInner = () => {
                     <h4>Ticket announcements</h4>
                     {!speechEngine.supported() && <div className="kx-err">This browser cannot speak. Chime and cards still work.</div>}
                     <div className="kx-row"><div>Speak ticket details<small>Table or source, every dish, portion and notes</small></div>
-                      <button type="button" role="switch" aria-checked={voicePrefs.voice} className={`kx-sw${voicePrefs.voice ? ' on' : ''}`} onClick={() => updateVoicePrefs({ voice: !voicePrefs.voice })} /></div>
+                      <button type="button" role="switch" aria-label="Speak ticket details" aria-checked={voicePrefs.voice} className={`kx-sw${voicePrefs.voice ? ' on' : ''}`} onClick={() => updateVoicePrefs({ voice: !voicePrefs.voice })} /></div>
                     <div className="kx-row"><div>New-ticket chime<small>Different tune for dine-in and delivery</small></div>
-                      <button type="button" role="switch" aria-checked={voicePrefs.chime} className={`kx-sw${voicePrefs.chime ? ' on' : ''}`} onClick={() => updateVoicePrefs({ chime: !voicePrefs.chime })} /></div>
+                      <button type="button" role="switch" aria-label="New-ticket chime" aria-checked={voicePrefs.chime} className={`kx-sw${voicePrefs.chime ? ' on' : ''}`} onClick={() => updateVoicePrefs({ chime: !voicePrefs.chime })} /></div>
                     <div className="kx-row"><div>Dispatch sound<small>A soft ding when you complete a ticket</small></div>
-                      <button type="button" role="switch" aria-checked={voicePrefs.dispatchSound} className={`kx-sw${voicePrefs.dispatchSound ? ' on' : ''}`} onClick={() => { const on = !voicePrefs.dispatchSound; updateVoicePrefs({ dispatchSound: on }); if (on) playAlertSound('pickupReady'); }} /></div>
+                      <button type="button" role="switch" aria-label="Dispatch sound" aria-checked={voicePrefs.dispatchSound} className={`kx-sw${voicePrefs.dispatchSound ? ' on' : ''}`} onClick={() => { const on = !voicePrefs.dispatchSound; updateVoicePrefs({ dispatchSound: on }); if (on) playAlertSound('pickupReady'); }} /></div>
                     <div className="kx-row"><span>Repeat</span>
                       <div className="kx-mini">{[1, 2].map(n => <button type="button" key={n} className={voicePrefs.repeat === n ? 'on' : ''} onClick={() => updateVoicePrefs({ repeat: n })}>{n}×</button>)}</div></div>
                     <div className="kx-row"><span>Speed</span>
                       <div className="kx-mini">{[['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']].map(([v, l]) => <button type="button" key={v} className={voicePrefs.rate === v ? 'on' : ''} onClick={() => updateVoicePrefs({ rate: v })}>{l}</button>)}</div></div>
                     <div className="kx-row"><div>Overdue alert<small>Chime + voice when a ticket passes {Math.round(display.lateSec / 60)} min</small></div>
-                      <button type="button" role="switch" aria-checked={voicePrefs.overdueAlert} className={`kx-sw${voicePrefs.overdueAlert ? ' on' : ''}`} onClick={() => updateVoicePrefs({ overdueAlert: !voicePrefs.overdueAlert })} /></div>
+                      <button type="button" role="switch" aria-label="Overdue alert" aria-checked={voicePrefs.overdueAlert} className={`kx-sw${voicePrefs.overdueAlert ? ' on' : ''}`} onClick={() => updateVoicePrefs({ overdueAlert: !voicePrefs.overdueAlert })} /></div>
                     <div><div className="kx-row" style={{ marginBottom: 6 }}><span>Volume</span><span className="mono" style={{ fontSize: '.66rem', color: '#9b978d' }}>{Math.round((voicePrefs.volume || 1) * 100)}%</span></div>
                       <input className="kx-range" type="range" min="30" max="100" step="10" aria-label="Voice volume" value={Math.round((voicePrefs.volume || 1) * 100)} onChange={e => updateVoicePrefs({ volume: Number(e.target.value) / 100 })} /></div>
                     {voiceList.length > 1 && (
-                      <div><label className="kx-lbl">Voice</label>
-                        <select className="kx-in" aria-label="Voice" value={voicePrefs.voiceName || ''} onChange={e => updateVoicePrefs({ voiceName: e.target.value })}>
+                      <div><label className="kx-lbl" htmlFor="kx-voice-pick">Voice</label>
+                        <select id="kx-voice-pick" className="kx-in" aria-label="Voice" value={voicePrefs.voiceName || ''} onChange={e => updateVoicePrefs({ voiceName: e.target.value })}>
                           <option value="">Automatic (Indian English)</option>
                           {voiceList.map(v => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
                         </select></div>
@@ -1927,9 +2023,9 @@ const KitchenViewInner = () => {
         {showSearch && (
           <Motion.div className="kx-search" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
             <Search size={15} color="#b99f78" />
-            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source or dish name…" />
+            <input autoFocus aria-label="Search tickets" type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by table number, source or dish name…" />
             {searchQuery && <button type="button" className="kx-pill" onClick={() => setSearchQuery('')}>CLEAR</button>}
-            <button type="button" aria-label="Close search" onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ background: 'transparent', border: 0, color: '#9b978d', display: 'flex' }}><X size={16} /></button>
+            <button type="button" aria-label="Close search" className="kx-ib" onClick={() => { setShowSearch(false); setSearchQuery(''); }} style={{ width: 40, minWidth: 40, padding: 0, border: 0, background: 'transparent' }}><X size={16} /></button>
           </Motion.div>
         )}
       </AnimatePresence>
@@ -1979,27 +2075,27 @@ const KitchenViewInner = () => {
           {!isAggregateView && !showMetricsDashboard && (masterPrepMarqueeList.length > 0 || filteredOrders.length > 1 || lateIds.size > 0 || activeFilterCount > 0) && (
             <div className="kx-ribbon">
               {masterPrepMarqueeList.length > 0 && (
-                <div className="kx-prep no-scrollbar">
+                <div className="kx-prep no-scrollbar" ref={prepRowRef}>
                   <span className="kx-prep-l"><Activity size={12} /> Prep queue</span>
                   {masterPrepMarqueeList.map(([name, qty]) => (
                     <button type="button" key={name} className={`kx-chip${dishFilter === name ? ' on' : ''}`} aria-pressed={dishFilter === name} title={dishFilter === name ? 'Show all tickets' : `Show only tickets with ${name}`}
-                      onClick={() => setDishFilter(f => f === name ? '' : name)}><b>{qty}×</b>{name}</button>
+                      onClick={() => setDishFilter(f => f === name ? '' : name)}><b>{fmtQty(qty)}×</b><span className="nm">{name}</span></button>
                   ))}
                 </div>
               )}
               {activeFilterCount > 0 && (
-                <button type="button" className="kx-filterbtn" onClick={clearFilters} title="Show every ticket again">
-                  Showing <b>{filteredOrders.length}</b> of <b>{pendingCount}</b> · CLEAR <X size={11} />
+                <button type="button" className="kx-filterbtn" onClick={clearFilters} title="Show every ticket again" aria-label={`Showing ${filteredOrders.length} of ${pendingCount} tickets. Clear filters`}>
+                  <span className="lbl">Showing </span><b>{filteredOrders.length}</b><span className="lbl"> of </span><span className="slash">/</span><b>{pendingCount}</b><span className="lbl"> · CLEAR </span><X size={12} />
                 </button>
               )}
               {lateIds.size > 0 && (
                 <button type="button" className={`kx-latebtn${showLateOnly ? ' on' : ''}`} aria-pressed={showLateOnly} onClick={() => setShowLateOnly(v => !v)}
                   title={showLateOnly ? 'Show all tickets' : `Show only tickets older than ${Math.round(display.lateSec / 60)} minutes`}>
-                  <Siren size={12} /> {showLateOnly ? 'Showing late' : 'Late'} <b>{lateIds.size}</b>
+                  <Siren size={13} /> <span className="lbl">{showLateOnly ? 'Showing late' : 'Late'}</span> <b>{lateIds.size}</b>
                 </button>
               )}
               {filteredOrders.length > 1 && (
-                <button type="button" className="kx-sortbtn" onClick={toggleSort}><ArrowUpDown size={13} />{sortOldest ? 'Oldest first' : 'Newest first'}</button>
+                <button type="button" className="kx-sortbtn" onClick={toggleSort} aria-label={sortOldest ? 'Sorted oldest first. Switch to newest first' : 'Sorted newest first. Switch to oldest first'}><ArrowUpDown size={14} /><span className="lbl">{sortOldest ? 'Oldest first' : 'Newest first'}</span></button>
               )}
             </div>
           )}
@@ -2020,7 +2116,7 @@ const KitchenViewInner = () => {
                   <div className="kx-stg" style={{ gridTemplateColumns: `repeat(${Math.min(kitchenHealth.stations.slice(0, 5).length, isMobile ? 2 : 5)},1fr)` }}>
                     {kitchenHealth.stations.slice(0, 5).map(s => (
                       <div key={s.name} className={s.isBottleneck ? 'bn' : ''}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: '.64rem', fontWeight: 600, color: s.isBottleneck ? '#e29a58' : '#cfc7b8' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: '.68rem', fontWeight: 600, color: s.isBottleneck ? '#e29a58' : '#cfc7b8' }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                           <span className="mono">{s.orderCount ?? s.pending ?? 0}</span>
                         </div>
@@ -2057,7 +2153,7 @@ const KitchenViewInner = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
                 <BarChart3 size={15} color="#b99f78" />
                 <span className="kx-prep-l" style={{ color: '#cfc7b8' }}>Batch prep summary</span>
-                <span className="mono" style={{ marginLeft: 'auto', fontSize: '.64rem', color: '#9b978d' }}>{Object.keys(aggregatedTotals).length} items · {filteredOrders.length} tickets</span>
+                <span className="mono" style={{ marginLeft: 'auto', fontSize: '.68rem', color: '#9b978d' }}>{Object.keys(aggregatedTotals).length} items · {filteredOrders.length} tickets</span>
               </div>
               {Object.keys(aggregatedTotals).length === 0 ? (
                 renderEmpty(false)
@@ -2069,7 +2165,7 @@ const KitchenViewInner = () => {
                     const isDelivery = typePart === 'S';
                     return (
                       <div key={key} className={`kx-sumc${isParcel ? ' p' : ''}`}>
-                        <b>{pad2(qty)}</b>
+                        <b>{fmtPadQty(qty)}</b>
                         <div className="n">{namePart}</div>
                         <span className={`kx-tag${isParcel ? ' gold' : isDelivery ? ' amber' : ''}`}>{isParcel ? <Package size={10} /> : isDelivery ? <Bike size={10} /> : <UtensilsCrossed size={10} />}{isParcel ? 'PARCEL' : isDelivery ? 'DELIVERY' : 'DINE-IN'}</span>
                       </div>
@@ -2090,7 +2186,7 @@ const KitchenViewInner = () => {
               <KdsLoadError onRetry={retryBoardLoad} detail={boardError} />
             ) : filteredOrders.length === 0 ? renderEmpty(true) : (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', minHeight: 0 }}>
-                <div className="kx-dots">{filteredOrders.map((o, i) => <i key={o._id} className={i === safeCardIndex ? 'on' : ''} onClick={() => setMobileCardIndex(i)} />)}</div>
+                {filteredOrders.length <= 14 && <div className="kx-dots" role="tablist" aria-label="Tickets">{filteredOrders.map((o, i) => <button type="button" role="tab" aria-selected={i === safeCardIndex} aria-label={`Ticket ${i + 1} of ${filteredOrders.length}: ${shortLabel(o)}`} key={o._id} className={i === safeCardIndex ? 'on' : ''} onClick={() => setMobileCardIndex(i)} />)}</div>}
                 <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }} {...swipeHandlers}>
                   <AnimatePresence mode="wait">
                     <Motion.div key={filteredOrders[safeCardIndex]?._id} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} style={{ height: '100%' }}>
@@ -2125,12 +2221,12 @@ const KitchenViewInner = () => {
       {isMobile && (
         <nav className="kx-bnav">
           {STATIONS.map(s => (
-            <button type="button" key={s.val} className={stationFilter === s.val ? 'on' : ''} onClick={() => setStationFilter(s.val)}>
+            <button type="button" key={s.val} className={stationFilter === s.val ? 'on' : ''} aria-pressed={stationFilter === s.val} onClick={() => selectStation(s.val)}>
               <s.Icon size={17} />{s.lbl}{s.val !== 'ALL' && stationCounts[s.val] > 0 ? <span className="n">{stationCounts[s.val]}</span> : null}
             </button>
           ))}
-          <button type="button" className={isAggregateView ? 'on' : ''} onClick={() => { setShowMetricsDashboard(false); setIsAggregateView(v => !v); }}><BarChart3 size={17} />SUMMARY</button>
-          <button type="button" className={showMetricsDashboard ? 'on' : ''} onClick={() => setShowMetricsDashboard(v => !v)}><TrendingUp size={17} />METRICS</button>
+          <button type="button" className={isAggregateView ? 'on' : ''} aria-pressed={isAggregateView && !showMetricsDashboard} onClick={toggleSummary}><BarChart3 size={17} />SUMMARY</button>
+          <button type="button" className={showMetricsDashboard ? 'on' : ''} aria-pressed={showMetricsDashboard} onClick={toggleMetrics}><TrendingUp size={17} />METRICS</button>
         </nav>
       )}
 
@@ -2139,11 +2235,11 @@ const KitchenViewInner = () => {
         {showWastagePanel && (
           <>
             <Motion.div className="kx-scrim" style={{ zIndex: 3000 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWastagePanel(false)} />
-            <Motion.div className="kx-sheet" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 32 }}
+            <Motion.div ref={wastageRef} className="kx-sheet" role="dialog" aria-modal="true" aria-label="Wastage log" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 32 }}
               style={{ width: isMobile ? '100vw' : isTablet ? 390 : 430, borderRadius: isMobile ? 0 : undefined }}>
               <div className="kx-sheet-h">
                 <div className="t"><div className="ic"><Trash2 size={17} /></div><div><h3>WASTAGE LOG</h3><small>Spoilage · Overcooked · Dropped · Excess</small></div></div>
-                <button type="button" className="kx-ib" aria-label="Close" style={{ height: 38, minWidth: 38, padding: 0 }} onClick={() => setShowWastagePanel(false)}><X size={16} /></button>
+                <button type="button" className="kx-ib" aria-label="Close" style={{ height: 40, minWidth: 40, padding: 0 }} onClick={() => setShowWastagePanel(false)}><X size={16} /></button>
               </div>
               <div className="kx-tabs">
                 {[['log', 'LOG ENTRY'], ['report', 'MONTHLY REPORT']].map(([t, lbl]) => <button type="button" key={t} className={wastageTab === t ? 'on' : ''} onClick={() => setWastageTab(t)}>{lbl}</button>)}
@@ -2154,8 +2250,8 @@ const KitchenViewInner = () => {
                     <div className="kx-card">
                       <div className="hd">New entry</div>
                       <div style={{ position: 'relative' }}>
-                        <label className="kx-lbl">Ingredient *</label>
-                        <input className="kx-in" value={wastageForm.itemName} placeholder="Type ingredient name…"
+                        <label className="kx-lbl" htmlFor="kx-w-item">Ingredient *</label>
+                        <input id="kx-w-item" autoComplete="off" onKeyDown={wastageEnter} className="kx-in" value={wastageForm.itemName} placeholder="Type ingredient name…"
                           onChange={e => {
                             const v = e.target.value;
                             setWastageForm(p => ({ ...p, itemName: v, inventoryId: null }));
@@ -2168,22 +2264,22 @@ const KitchenViewInner = () => {
                             {wastageSuggestions.map(s => (
                               <button type="button" key={s._id} onMouseDown={() => { setWastageForm(p => ({ ...p, itemName: s.itemName, inventoryId: s._id, unit: s.unit || 'kg' })); setShowWastageSuggest(false); }}
                                 style={{ width: '100%', padding: '11px 14px', background: 'transparent', border: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.78rem', fontWeight: 600, textAlign: 'left' }}>
-                                <span>{s.itemName}</span><span className="mono" style={{ fontSize: '.62rem', color: '#9b978d' }}>{s.currentStock}{s.unit}</span>
+                                <span>{s.itemName}</span><span className="mono" style={{ fontSize: '.68rem', color: '#9b978d' }}>{s.currentStock}{s.unit}</span>
                               </button>
                             ))}
                           </div>
                         )}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <div><label className="kx-lbl">Quantity *</label><input className="kx-in" type="number" min="0.01" step="0.01" placeholder="0.00" value={wastageForm.quantity} onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))} /></div>
-                        <div><label className="kx-lbl">Unit</label><select className="kx-in" value={wastageForm.unit} onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}>{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+                        <div><label className="kx-lbl" htmlFor="kx-w-qty">Quantity *</label><input id="kx-w-qty" onKeyDown={wastageEnter} inputMode="decimal" className="kx-in" type="number" min="0.01" step="0.01" placeholder="0.00" value={wastageForm.quantity} onChange={e => setWastageForm(p => ({ ...p, quantity: e.target.value }))} /></div>
+                        <div><label className="kx-lbl" htmlFor="kx-w-unit">Unit</label><select id="kx-w-unit" className="kx-in" value={wastageForm.unit} onChange={e => setWastageForm(p => ({ ...p, unit: e.target.value }))}>{UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
                       </div>
                       <div>
                         <label className="kx-lbl">Reason *</label>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{REASON_OPTIONS.map(r => <button type="button" key={r} className={`kx-pill${wastageForm.reason === r ? ' on' : ''}`} onClick={() => setWastageForm(p => ({ ...p, reason: r }))}>{r}</button>)}</div>
                       </div>
-                      <div><label className="kx-lbl">Logged by *</label><input className="kx-in" value={wastageForm.loggedBy} onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))} placeholder="Chef / Staff name" /></div>
-                      <div><label className="kx-lbl">Notes (optional)</label><input className="kx-in" value={wastageForm.notes} onChange={e => setWastageForm(p => ({ ...p, notes: e.target.value }))} placeholder="Any context…" /></div>
+                      <div><label className="kx-lbl" htmlFor="kx-w-by">Logged by *</label><input id="kx-w-by" onKeyDown={wastageEnter} autoComplete="name" className="kx-in" value={wastageForm.loggedBy} onChange={e => setWastageForm(p => ({ ...p, loggedBy: e.target.value }))} placeholder="Chef / Staff name" /></div>
+                      <div><label className="kx-lbl" htmlFor="kx-w-notes">Notes (optional)</label><input id="kx-w-notes" onKeyDown={wastageEnter} className="kx-in" value={wastageForm.notes} onChange={e => setWastageForm(p => ({ ...p, notes: e.target.value }))} placeholder="Any context…" /></div>
                       {wastageError && <div className="kx-err">{wastageError}</div>}
                       <button type="button" className="kx-btn solid block" onClick={saveWastageEntry} disabled={wastageDisabled} style={{ minHeight: 48 }}>
                         {wastageSaving ? <><RotateCcw size={14} className="spin" /> Saving…</> : <><Trash2 size={14} /> Log wastage</>}
@@ -2206,8 +2302,8 @@ const KitchenViewInner = () => {
                                 </div>
                                 <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
                                   <span className="kx-tag">{e.reason}</span>
-                                  <span style={{ fontSize: '.62rem', color: '#9b978d' }}>{e.loggedBy}</span>
-                                  {e.notes && <span style={{ fontSize: '.62rem', color: '#6f6c64', fontStyle: 'italic' }}>{e.notes}</span>}
+                                  <span style={{ fontSize: '.68rem', color: '#9b978d' }}>{e.loggedBy}</span>
+                                  {e.notes && <span style={{ fontSize: '.68rem', color: '#8e8a80', fontStyle: 'italic' }}>{e.notes}</span>}
                                 </div>
                               </div>
                               <button type="button" aria-label="Remove entry" className="kx-sq" style={{ width: 34, minHeight: 34, borderRadius: 10 }} onClick={() => deleteWastageEntry(e._id)}><X size={13} /></button>
@@ -2285,11 +2381,11 @@ const KitchenViewInner = () => {
           <>
             <Motion.div className="kx-scrim" style={{ zIndex: 3100 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSettings(false)} />
             <div className="kx-modalwrap" onClick={() => setShowSettings(false)}>
-              <Motion.div className="kx-modal" role="dialog" aria-label="Display and alerts" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              <Motion.div ref={settingsRef} className="kx-modal" role="dialog" aria-modal="true" aria-label="Display and alerts" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 30 }} style={{ width: isMobile ? '92vw' : 400, maxHeight: 'calc(88vh - 20px)' }}>
                 <div className="kx-sheet-h">
                   <div className="t"><div className="ic"><Settings size={15} /></div><div><h3>DISPLAY &amp; ALERTS</h3><small>Saved on this screen only</small></div></div>
-                  <button type="button" className="kx-ib" aria-label="Close" style={{ height: 34, minWidth: 34, padding: 0 }} onClick={() => setShowSettings(false)}><X size={15} /></button>
+                  <button type="button" className="kx-ib" aria-label="Close" style={{ height: 40, minWidth: 40, padding: 0 }} onClick={() => setShowSettings(false)}><X size={15} /></button>
                 </div>
                 <div style={{ padding: '12px 14px 14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div className="kx-row stack"><div>Ticket size<small>Make tickets smaller or larger</small></div>
@@ -2320,11 +2416,11 @@ const KitchenViewInner = () => {
             <Motion.div className="kx-scrim" style={{ zIndex: 3100 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEightySixModal(null)} />
             {/* Centering wrapper must stay transform-free: framer-motion owns the transform on the modal below. */}
             <div className="kx-modalwrap" onClick={() => setEightySixModal(null)}>
-              <Motion.div className="kx-modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              <Motion.div ref={modal86Ref} className="kx-modal" role="dialog" aria-modal="true" aria-label="86 a dish" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.94, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 16 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 30 }} style={{ width: isMobile ? '92vw' : 380, maxHeight: 'calc(88vh - 40px)' }}>
                 <div className="kx-sheet-h">
                   <div className="t"><div className="ic" style={{ background: 'rgba(226,154,88,.12)', borderColor: 'rgba(226,154,88,.4)', color: '#e29a58' }}><PackageX size={17} /></div><div><h3>86 A DISH</h3><small>{eightySixModal.categoryName}</small></div></div>
-                  <button type="button" className="kx-ib" aria-label="Close" style={{ height: 38, minWidth: 38, padding: 0 }} onClick={() => setEightySixModal(null)}><X size={16} /></button>
+                  <button type="button" className="kx-ib" aria-label="Close" style={{ height: 40, minWidth: 40, padding: 0 }} onClick={() => setEightySixModal(null)}><X size={16} /></button>
                 </div>
                 <div style={{ padding: '12px 14px 14px', overflowY: 'auto' }}>
                   <div className="kx-lbl">Which dish?</div>
@@ -2340,7 +2436,7 @@ const KitchenViewInner = () => {
                           <div key={d._id} className="kx-ent" style={{ alignItems: 'center' }}>
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontWeight: 600, fontSize: '.8rem' }}>{d.name}</div>
-                              {d.outOfStockReason && <div style={{ fontSize: '.58rem', color: '#9b978d', marginTop: 2 }}>{(EIGHTY_SIX_REASONS.find(r => r.id === d.outOfStockReason) || {}).label || d.outOfStockReason}</div>}
+                              {d.outOfStockReason && <div style={{ fontSize: '.68rem', color: '#9b978d', marginTop: 2 }}>{(EIGHTY_SIX_REASONS.find(r => r.id === d.outOfStockReason) || {}).label || d.outOfStockReason}</div>}
                             </div>
                             <button type="button" className="kx-btn" style={{ minHeight: 32, padding: '0 12px' }} onClick={() => restore86(d)}>Restore</button>
                           </div>
@@ -2363,6 +2459,17 @@ const KitchenViewInner = () => {
           </>
         )}
       </AnimatePresence>
+    </div>
+    </MotionConfig>
+  );
+};
+
+// If the logo picture cannot be loaded (offline kiosk, missing file) show the name, not a broken-image icon.
+const BrandLogo = () => {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="kx-logo">
+      {failed ? <span className="kx-logo-txt">PRATYEKSHA</span> : <img src="/pratyeksha-logo.png" alt="Pratyeksha" onError={() => setFailed(true)} />}
     </div>
   );
 };
@@ -2396,7 +2503,7 @@ const AgeRing = React.memo(function AgeRing({ startMs, lateSec, urgency, ringCol
   useLayoutEffect(() => {
     const paint = now => {
       const s = Math.max(0, Math.floor((now - startMs) / 1000));
-      if (txt.current) { txt.current.textContent = fmt(s); txt.current.style.fontSize = s >= 3600 ? '.54rem' : ''; }
+      if (txt.current) { txt.current.textContent = fmt(s); txt.current.style.fontSize = s >= 3600 ? '.64rem' : ''; txt.current.style.letterSpacing = s >= 3600 ? '-.04em' : ''; }
       if (arc.current) arc.current.setAttribute('stroke-dasharray', `${Math.min(1, s / lateSec) * RING_C} ${RING_C}`);
     };
     paint(Date.now());
@@ -2618,14 +2725,14 @@ const KDSOrderCard = React.memo(React.forwardRef(({
               onClick={() => toggleItemCrossed(idx)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleItemCrossed(idx); } }}
             >
-              <div className="kx-qty">{item.quantity}</div>
+              <div className="kx-qty">{fmtQty(item.quantity)}</div>
               <div className="kx-it-b">
                 <div className="kx-nm">
                   {!tenantOnlyVeg && <span className={`kx-vd${isVeg ? '' : ' n'}`}><i /></span>}
                   <span className={item.isChefSpecial && !crossed ? 'sp' : undefined} style={item.isChefSpecial && !crossed ? undefined : { display: 'contents' }}>
-                    {item.isChefSpecial && !crossed && <Sparkles size={12} />}{item.name}
+                    {item.isChefSpecial && !crossed && <Sparkles size={12} />}{String(item.name || '').trim() || 'Unnamed dish'}
                   </span>
-                  {mod && <span className="kx-tag amber">{mod.kind === 'new' ? 'ADDED' : `QTY ${mod.from ?? '?'}→${mod.to ?? item.quantity}`}</span>}
+                  {mod && <span className="kx-tag amber">{mod.kind === 'new' ? 'ADDED' : `QTY ${mod.from ?? '?'}→${mod.to ?? fmtQty(item.quantity)}`}</span>}
                 </div>
                 {!crossed && (
                   <div className="kx-sub">
@@ -2713,9 +2820,9 @@ const KdsEmptyDetail = ({ loaded, shown, tenantId, at }) => {
   try { host = new URL(BASE_URL, window.location.origin).host; } catch { host = String(BASE_URL || ''); }
   const hidden = Math.max(0, loaded - shown);
   return (
-    <p data-testid="kds-empty-detail" style={{ fontSize: '.62rem', color: '#6f6c64', margin: '4px 0 0', fontWeight: 500, maxWidth: 440, lineHeight: 1.55, wordBreak: 'break-word' }}>
-      {`Loaded ${loaded} pending order${loaded === 1 ? '' : 's'} for "${tenantId || '?'}" from ${host}${at ? ` at ${new Date(at).toLocaleTimeString()}` : ''}.`}
-      {hidden > 0 ? ` ${hidden} hidden by the station / veg / category / search filter or because ${hidden === 1 ? 'it has' : 'they have'} only extra items.` : (loaded === 0 ? ' Nothing is waiting in the kitchen.' : '')}
+    <p data-testid="kds-empty-detail" style={{ fontSize: '.7rem', color: '#8e8a80', margin: '4px 0 0', fontWeight: 500, maxWidth: 440, lineHeight: 1.55, wordBreak: 'break-word' }}>
+      {`Checked ${at ? `at ${new Date(at).toLocaleTimeString()}` : 'just now'}: ${loaded} pending order${loaded === 1 ? '' : 's'} (${tenantId || '?'} · ${host}).`}
+      {hidden > 0 ? ` ${hidden} not shown: ${hidden === 1 ? 'it has' : 'they have'} only packaged extras that never go to the kitchen.` : ''}
     </p>
   );
 };
@@ -2768,7 +2875,7 @@ const KitchenView = () => {
     <div className="kx" style={{ display: 'grid', placeItems: 'center', padding: 24 }}>
       <style>{KX_CSS}</style>
       <form onSubmit={submit} className="kx-modal" style={{ width: '100%', maxWidth: 400, padding: 28, gap: 14 }}>
-        <div className="kx-logo" style={{ alignSelf: 'flex-start' }}><img src="/pratyeksha-logo.png" alt="Pratyeksha" /></div>
+        <div style={{ alignSelf: 'flex-start' }}><BrandLogo /></div>
         <div className="kx-kds" style={{ marginTop: 6 }}><ChefHat size={13} /> Kitchen display</div>
         <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '1.6rem', fontWeight: 700 }}>Kitchen sign-in</div>
         <div style={{ fontSize: '.8rem', color: '#9b978d', lineHeight: 1.5 }}>Sign in with the restaurant account to open the kitchen screen on this device.</div>

@@ -1,16 +1,28 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useContext, createContext } from 'react';
 import axios from 'axios';
 import API_BASE_URL from './apiBase.js';
-import { hasValidMasterToken, masterLogin, MASTER_EXPIRED_EVENT } from './masterAuth.js';
+import { hasValidMasterToken, masterLogin, masterLogin2fa, clearMasterToken, MASTER_EXPIRED_EVENT } from './masterAuth.js';
 import LeadCRM from './LeadCRM.jsx';
 import MasterTracking from './MasterTracking.jsx';
 import QrStudio from './QrStudio.jsx';
 import MasterDocuments from './MasterDocuments.jsx';
 import MasterFinance from './MasterFinance.jsx';
 import MasterInfluencers from './MasterInfluencers.jsx';
+import MasterSales from './MasterSales.jsx';
+import MasterClientSuccess from './MasterClientSuccess.jsx';
+import MasterPlans from './MasterPlans.jsx';
+import MasterControl from './MasterControl.jsx';
+import MasterSettings from './MasterSettings.jsx';
+import MasterDiscovery from './MasterDiscovery.jsx';
+import MasterSupport from './MasterSupport.jsx';
+import MasterPlatform from './MasterPlatform.jsx';
+import MasterTeam, { MasterCompliance } from './MasterTeam.jsx';
+import MasterSearch from './MasterSearch.jsx';
+import MasterComms from './MasterComms.jsx';
+import MasterReports, { MasterQrStock } from './MasterReports.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar, QrCode } from 'lucide-react';
-import { Megaphone } from 'lucide-react';   // (the main lucide import above only has Megaphone under an alias)
+import { Megaphone, TrendingUp, HeartPulse, Layers, Settings2, Compass, LifeBuoy, Activity, Scale, KeyRound, MessageSquare, FileBarChart, Boxes } from 'lucide-react';   // (the main lucide import above only has Megaphone under an alias)
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
@@ -1172,7 +1184,16 @@ const AdminSkeleton = () => (
 
 /* Module-level on purpose: declared inside the page component it was a new component type on every render, so the whole
    sidebar remounted on every state change (each keystroke in any form). */
+/* Role-based menu: the signed-in person's modules (from /team/me). null = not loaded yet or owner, so everything shows. */
+const NavAccess = createContext(null);
+const NavGroup = ({ label, ids }) => {
+  const mods = useContext(NavAccess);
+  if (mods && !ids.some((i) => mods.includes(i))) return null;
+  return <div className="p-nav-group">{label}</div>;
+};
 const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
+    const mods = useContext(NavAccess);
+    if (mods && !mods.includes(id)) return null;
     const isActive = active===id;
     return (
       <button type="button" onClick={()=>onNav(id)} className="p-nav-item" aria-current={isActive ? 'page' : undefined} style={{
@@ -1202,6 +1223,19 @@ const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
 function PratyekshaMasterAdminInner() {
   useAdminGlobalStyles();
   const [activeSection, setActiveSection] = useState('demos');
+  const [access, setAccess] = useState(null);       // { role, modules, name } from /team/me — drives the role-based menu
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    axios.get(`${API_BASE_URL}/admin/master/team/me`).then((r) => {
+      if (!alive) return; setAccess(r.data);
+      if (r.data.role !== 'owner' && !r.data.modules.includes('demos')) setActiveSection((cur) => (r.data.modules.includes(cur) ? cur : r.data.modules[0] || 'team'));
+    }).catch(() => {});
+    const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true); } };
+    window.addEventListener('keydown', onKey);
+    return () => { alive = false; window.removeEventListener('keydown', onKey); };
+  }, []);
+  const navMods = access && access.role !== 'owner' ? access.modules : null;
   const [sideClientsOpen, setSideClientsOpen] = useState(false); // the sidebar's ranked client list is collapsed by default so the whole menu fits
   const [docsClientId, setDocsClientId] = useState(null);
   const [clients,       setClients]       = useState([]);
@@ -1276,7 +1310,7 @@ function PratyekshaMasterAdminInner() {
     try {
       const [cRes, sRes] = await Promise.all([
         axios.get(`${BASE_URL}/admin/master/tenants`),
-        axios.get(`${BASE_URL}/admin/master/analytics`),
+        axios.get(`${BASE_URL}/admin/master/analytics`).catch((e) => (e?.response?.data?.code === 'MASTER_FORBIDDEN' ? { data: {} } : Promise.reject(e))),   // revenue totals are for roles that may see money
       ]);
       if (mySeq !== fetchSeq.current) return;
       setClients(cRes.data || []);
@@ -1293,7 +1327,7 @@ function PratyekshaMasterAdminInner() {
     } catch(e){
       console.error(e);
       // A failed load left an empty list reading "No requests found", which looks like there are none. Background refreshes stay quiet.
-      if (!silent) flash(e?.response?.data?.error || 'Could not load demo requests. Check the connection and refresh.', 'error');
+      if (!silent && e?.response?.data?.code !== 'MASTER_FORBIDDEN') flash(e?.response?.data?.error || 'Could not load demo requests. Check the connection and refresh.', 'error');
     }
     finally{ if (!silent) setDemoLoading(false); }
   }, [flash]);
@@ -1478,7 +1512,7 @@ function PratyekshaMasterAdminInner() {
     } catch (e) {
       console.error(e);
       // A failed load left "No notifications sent yet", which reads as if nothing had ever been sent.
-      flash(e?.response?.data?.error || 'Could not load notifications. Check the connection and refresh.', 'error');
+      if (e?.response?.data?.code !== 'MASTER_FORBIDDEN') flash(e?.response?.data?.error || 'Could not load notifications. Check the connection and refresh.', 'error');
     }
     finally { setNotifLoading(false); }
   }, [flash]);
@@ -1533,7 +1567,7 @@ function PratyekshaMasterAdminInner() {
     } catch (e) {
       console.error(e);
       // Same as above: "No costs logged yet" is wrong when the load simply failed, and the net-revenue figures silently disappear.
-      flash(e?.response?.data?.error || 'Could not load operating costs. Check the connection and refresh.', 'error');
+      if (e?.response?.data?.code !== 'MASTER_FORBIDDEN') flash(e?.response?.data?.error || 'Could not load operating costs. Check the connection and refresh.', 'error');
     }
     finally { setExpenseLoading(false); }
   }, [flash]);
@@ -1644,6 +1678,7 @@ function PratyekshaMasterAdminInner() {
      RENDER
   ════════════════════════════════════════ */
   return (
+    <NavAccess.Provider value={navMods}>
     <div style={{ display:'flex', width:'100vw', height:'100vh', background:'radial-gradient(1100px 520px at 12% -8%, rgba(211,191,162,0.09), transparent 62%), radial-gradient(900px 480px at 100% 105%, rgba(211,191,162,0.05), transparent 60%), #141416', color:C.text, overflow:'hidden', position:'fixed', top:0, left:0 }}>
 
       {/* Mobile topbar */}
@@ -1701,24 +1736,42 @@ function PratyekshaMasterAdminInner() {
             </div>
           </div>
 
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search everything" style={{ ...ghost, width:'100%', justifyContent:'flex-start', gap:8, padding:'8px 11px', marginBottom:6, flexShrink:0, color:C.textDim }}>
+            <Search size={13} /> <span style={{ flex:1, textAlign:'left' }}>Search</span> <span style={{ fontSize:10, fontFamily:MONO, opacity:0.7 }}>Ctrl K</span>
+          </button>
+          {access && <div style={{ fontSize:10.5, color:C.textDim, margin:'0 2px 8px', display:'flex', justifyContent:'space-between', gap:6, flexShrink:0 }}><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{access.name}</span><span style={{ textTransform:'capitalize', color:'#d3bfa2' }}>{access.role}</span></div>}
+
           {/* Nav — grouped; it takes the free height and scrolls only if the window is very short */}
           <nav aria-label="Main" className="no-sb" style={{ display:'flex', flexDirection:'column', gap:1, marginBottom:8, overflowY:'auto', minHeight:0, flex:'1 1 auto', paddingRight:2 }}>
             <NavItem active={activeSection} onNav={navTo} id="dashboard" label="Dashboard" icon={BarChart3} />
-            <div className="p-nav-group">Sales pipeline</div>
+            <NavGroup label="Sales pipeline" ids={['demos','crm','tracking','sales']} />
             <NavItem active={activeSection} onNav={navTo} id="demos" label="Demo Requests" icon={CalendarClock} count={demoCounts.Pending} urgent />
             <NavItem active={activeSection} onNav={navTo} id="crm" label="Lead CRM" icon={Users} />
             <NavItem active={activeSection} onNav={navTo} id="tracking" label="Tracking" icon={Radar} />
-            <div className="p-nav-group">Clients</div>
+            <NavItem active={activeSection} onNav={navTo} id="sales" label="Sales" icon={TrendingUp} />
+            <NavGroup label="Clients" ids={['clients','onboard','success','plans','control','documents','qrstudio','qrstock','discovery','support','platform']} />
             <NavItem active={activeSection} onNav={navTo} id="clients" label="Client Partners" icon={Building2} count={clients.length} />
             <NavItem active={activeSection} onNav={navTo} id="onboard" label="Onboard Client" icon={UserPlus} />
+            <NavItem active={activeSection} onNav={navTo} id="success" label="Client Success" icon={HeartPulse} />
+            <NavItem active={activeSection} onNav={navTo} id="plans" label="Plans & Trials" icon={Layers} />
+            <NavItem active={activeSection} onNav={navTo} id="control" label="Client Control" icon={ShieldCheck} />
             <NavItem active={activeSection} onNav={navTo} id="documents" label="Documents" icon={FileText} />
             <NavItem active={activeSection} onNav={navTo} id="qrstudio" label="QR Studio" icon={QrCode} />
-            <div className="p-nav-group">Money</div>
+            <NavItem active={activeSection} onNav={navTo} id="qrstock" label="QR Stands" icon={Boxes} />
+            <NavItem active={activeSection} onNav={navTo} id="discovery" label="Discovery" icon={Compass} />
+            <NavItem active={activeSection} onNav={navTo} id="support" label="Support" icon={LifeBuoy} />
+            <NavItem active={activeSection} onNav={navTo} id="platform" label="Platform" icon={Activity} />
+            <NavGroup label="Money" ids={['finance','expenses','influencers']} />
             <NavItem active={activeSection} onNav={navTo} id="finance" label="Finance" icon={Wallet} />
             <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
             <NavItem active={activeSection} onNav={navTo} id="influencers" label="Influencers" icon={Megaphone} />
-            <div className="p-nav-group">Platform</div>
+            <NavGroup label="Platform" ids={['comms','reports','notifications','settings','compliance','team']} />
+            <NavItem active={activeSection} onNav={navTo} id="comms" label="Messages" icon={MessageSquare} />
+            <NavItem active={activeSection} onNav={navTo} id="reports" label="Reports" icon={FileBarChart} />
             <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
+            <NavItem active={activeSection} onNav={navTo} id="settings" label="Settings" icon={Settings2} />
+            <NavItem active={activeSection} onNav={navTo} id="compliance" label="Compliance" icon={Scale} />
+            <NavItem active={activeSection} onNav={navTo} id="team" label="Team & security" icon={KeyRound} />
           </nav>
 
           <div style={{ height:1, background:C.border, margin:'6px 0', flexShrink:0 }} />
@@ -2521,6 +2574,19 @@ function PratyekshaMasterAdminInner() {
         {activeSection==='tracking' && <MasterTracking onOpenClients={() => navTo('clients')} onOpenCrm={() => navTo('crm')} />}
 
         {activeSection==='crm' && <LeadCRM />}
+        {activeSection==='sales' && <MasterSales />}
+        {activeSection==='success' && <MasterClientSuccess />}
+        {activeSection==='plans' && <MasterPlans />}
+        {activeSection==='control' && <MasterControl />}
+        {activeSection==='settings' && <MasterSettings />}
+        {activeSection==='discovery' && <MasterDiscovery />}
+        {activeSection==='support' && <MasterSupport />}
+        {activeSection==='platform' && <MasterPlatform />}
+        {activeSection==='compliance' && <MasterCompliance />}
+        {activeSection==='comms' && <MasterComms />}
+        {activeSection==='reports' && <MasterReports />}
+        {activeSection==='qrstock' && <MasterQrStock />}
+        {activeSection==='team' && <MasterTeam isOwner={!access || access.role==='owner'} />}
 
         {activeSection==='qrstudio' && <QrStudio clients={clients} />}
 
@@ -2830,7 +2896,9 @@ function PratyekshaMasterAdminInner() {
         )}
       </AnimatePresence>
       <Toast toast={toast} />
+      <MasterSearch open={searchOpen} onClose={() => setSearchOpen(false)} onGo={(sec) => { if (!navMods || navMods.includes(sec)) navTo(sec); }} />
     </div>
+    </NavAccess.Provider>
   );
 }
 
@@ -2838,38 +2906,61 @@ function PratyekshaMasterAdminInner() {
    (MASTER_ADMIN_PASSWORD on the server); the signed token lasts 12 hours. Nothing inside loads until login succeeds. */
 function MasterLoginGate({ children }) {
   const [authed, setAuthed] = useState(() => hasValidMasterToken());
+  const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
+  const [ticket, setTicket] = useState('');
+  const [code, setCode] = useState('');
+  const [team, setTeam] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const onExpired = () => { setAuthed(false); setPw(''); setErr('Your session expired. Please sign in again.'); };
+    const onExpired = () => { setAuthed(false); setPw(''); setTicket(''); setCode(''); setErr('Your session expired. Please sign in again.'); };
     window.addEventListener(MASTER_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(MASTER_EXPIRED_EVENT, onExpired);
   }, []);
   if (authed) return children;
+  const fail = (ex) => {
+    const st = ex?.response?.status;
+    setErr(ex?.response?.data?.error || (st ? 'Sign-in failed. Please try again.' : 'Cannot reach the server. Check your connection.'));
+  };
   const submit = async (e) => {
     e.preventDefault();
-    if (busy || !pw) return;
+    if (busy) return;
     setBusy(true); setErr('');
-    try { await masterLogin(pw); setPw(''); setAuthed(true); }
-    catch (ex) {
-      const st = ex?.response?.status;
-      setErr(ex?.response?.data?.error || (st ? 'Sign-in failed. Please try again.' : 'Cannot reach the server. Check your connection.'));
+    try {
+      if (ticket) { if (code.length !== 6) return; await masterLogin2fa(ticket, code); setPw(''); setCode(''); setTicket(''); setAuthed(true); return; }
+      if (!pw || (team && !username.trim())) return;
+      const r = await masterLogin(pw, team ? username.trim() : '');
+      if (r.need2fa) { setTicket(r.ticket); setCode(''); setPw(''); return; }
+      setPw(''); setAuthed(true);
+    } catch (ex) {
+      fail(ex);
+      if (ticket && /expired|Too many|Start again/i.test(String(ex?.response?.data?.error || ''))) { setTicket(''); setCode(''); }
     } finally { setBusy(false); }
   };
+  const inp = { background: C.bgInput, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px', color: C.text, fontSize: 15, outline: 'none' };
+  const disabled = busy || (ticket ? code.length !== 6 : (!pw || (team && !username.trim())));
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'grid', placeItems: 'center', padding: 24 }}>
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <img src={BRAND_LOGO} alt="" style={{ height: 36, alignSelf: 'flex-start', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
         <div style={{ fontSize: 20, fontWeight: 600, color: C.goldPrimary }}>Platform admin</div>
-        <div style={{ fontSize: 13, color: C.textMid }}>Enter the platform admin password to continue.</div>
-        <input type="password" autoFocus autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password"
-          style={{ background: C.bgInput, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px', color: C.text, fontSize: 15, outline: 'none' }} />
+        {ticket ? (<>
+          <div style={{ fontSize: 13, color: C.textMid }}>Enter the 6-digit code from your authenticator app.</div>
+          <input inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="123456" aria-label="Authenticator code" style={{ ...inp, letterSpacing: 6, textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }} />
+        </>) : (<>
+          <div style={{ fontSize: 13, color: C.textMid }}>{team ? 'Sign in with your team username and password.' : 'Enter the platform admin password to continue.'}</div>
+          {team && <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" aria-label="Username" style={inp} />}
+          <input type="password" autoFocus={!team} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password" aria-label="Password" style={inp} />
+        </>)}
         {err && <div role="alert" style={{ fontSize: 13, color: '#e5736b' }}>{err}</div>}
-        <button type="submit" disabled={busy || !pw}
-          style={{ background: C.goldPrimary, color: '#1a1a1a', border: 'none', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontWeight: 600, cursor: busy || !pw ? 'not-allowed' : 'pointer', opacity: busy || !pw ? 0.6 : 1 }}>
-          {busy ? 'Signing in...' : 'Sign in'}
+        <button type="submit" disabled={disabled}
+          style={{ background: C.goldPrimary, color: '#1a1a1a', border: 'none', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+          {busy ? 'Signing in...' : ticket ? 'Verify' : 'Sign in'}
         </button>
+        {ticket
+          ? <button type="button" onClick={() => { setTicket(''); setCode(''); setErr(''); }} style={{ background: 'none', border: 'none', color: C.textDim, fontSize: 12.5, cursor: 'pointer' }}>Start again</button>
+          : <button type="button" onClick={() => { setTeam((v) => !v); setErr(''); }} style={{ background: 'none', border: 'none', color: C.textDim, fontSize: 12.5, cursor: 'pointer' }}>{team ? 'Sign in as owner instead' : 'Team member? Sign in with your username'}</button>}
       </form>
     </div>
   );
