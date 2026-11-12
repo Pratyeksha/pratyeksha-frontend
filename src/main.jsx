@@ -19,6 +19,8 @@ import { BrandLoader } from './PremiumUI.jsx'
 import { loaderMessageFor } from './loaderMessages.js'
 import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
 import PlatformNotice from './PlatformNotice.jsx'
+import { MotionRoot } from './motionKit.jsx'
+import './premium-polish.css'
 
 installSubscriptionInterceptor();
 
@@ -119,6 +121,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AppErrorBoundary>
       <SplashGate>
+      <MotionRoot>
       <BrowserRouter>
       <SurfaceFlag />
       <PlatformNotice />
@@ -160,6 +163,7 @@ createRoot(document.getElementById('root')).render(
       </Routes>
       </Suspense>
       </BrowserRouter>
+      </MotionRoot>
       </SplashGate>
     </AppErrorBoundary>
   </StrictMode>

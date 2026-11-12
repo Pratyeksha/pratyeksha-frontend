@@ -1,0 +1,436 @@
+--- a/src/OwnerApp.jsx
++++ b/src/OwnerApp.jsx
+@@ -12,7 +12,7 @@
+  * Requires: react-router-dom, axios, socket.io-client, recharts,
+  * lucide-react (all already in the Pratyeksha dependency tree).
+  */
+-import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from 'react';
++import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, useId } from 'react';
+ import SupportContact from './SupportContact.jsx';
+ import { Routes, Route, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
+ import axios from 'axios';
+@@ -41,10 +41,10 @@
+ } from 'lucide-react';
+ import SpoonForkIcon from './SpoonForkIcon.jsx';
+ const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
+-import {
+-  ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
+-  XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell
+-} from 'recharts';
++import './bklit.css';
++import { BkArea, BkLine, BkColumns, BkHBars, BkDonut, BkMiniBars } from './ownerCharts.jsx';
++import { OwnerMotion, PageTransition } from './ownerMotion.jsx';
++import { motion as Motion, AnimatePresence } from 'motion/react'; // alias keeps this project's lint (which misses <Motion.x> JSX uses) clean
+ 
+ /* ════════════════════════════════════════════════════════════
+    THEME — identical to Pratyeksha's design system
+@@ -950,30 +950,38 @@
+   }}><Icon size={15} /></button>
+ );
+ 
+-const PillTabs = ({ options, value, onChange }) => (
+-  <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+-    {options.map(opt => {
+-      const on = value === opt.value;
+-      return (
+-        <button type="button" role="tab" aria-selected={on} key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
+-          padding: '9px 14px', borderRadius: 13, fontSize: 12, fontWeight: 700,
+-          border: `1px solid ${on ? 'rgba(211,191,162,0.5)' : 'rgba(211,191,162,0.16)'}`,
+-          background: on ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
+-          color: on ? '#f7f3eb' : 'rgba(255,255,255,0.55)'
+-        }}>{opt.label}</button>
+-      );
+-    })}
+-  </div>
+-);
++const PillTabs = ({ options, value, onChange }) => {
++  const group = useId().replace(/:/g, '');
++  return (
++    <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
++      {options.map(opt => {
++        const on = value === opt.value;
++        return (
++          <button type="button" role="tab" aria-selected={on} key={opt.value} onClick={() => onChange(opt.value)} className="pown-btn" style={{
++            position: 'relative', padding: '9px 14px', borderRadius: 13, fontSize: 12, fontWeight: 700,
++            border: `1px solid ${on ? 'transparent' : 'rgba(211,191,162,0.16)'}`, background: 'transparent',
++            color: on ? '#f7f3eb' : 'rgba(255,255,255,0.55)'
++          }}>
++            {on && (
++              <Motion.span layoutId={`pilltab-${group}`} aria-hidden="true" transition={{ type: 'spring', stiffness: 500, damping: 38 }}
++                style={{ position: 'absolute', inset: -1, borderRadius: 13, border: '1px solid rgba(211,191,162,0.5)', background: 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' }} />
++            )}
++            <span style={{ position: 'relative' }}>{opt.label}</span>
++          </button>
++        );
++      })}
++    </div>
++  );
++};
+ 
+ const Toggle = ({ checked, onChange }) => (
+   <button type="button" role="switch" aria-checked={!!checked} onClick={() => onChange(!checked)} className="pown-btn" style={{
+     width: 40, height: 23, borderRadius: 100, background: checked ? T.primary : 'rgba(255,255,255,0.12)',
+-    position: 'relative', flexShrink: 0
++    position: 'relative', flexShrink: 0, transition: 'background .2s ease'
+   }}>
+-    <span style={{
+-      position: 'absolute', top: 2, left: checked ? 19 : 2, width: 19, height: 19, borderRadius: '50%',
+-      background: checked ? '#1a1a1d' : '#fff', transition: 'left .18s ease'
++    <Motion.span initial={false} animate={{ x: checked ? 17 : 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }} style={{
++      position: 'absolute', top: 2, left: 2, width: 19, height: 19, borderRadius: '50%',
++      background: checked ? '#1a1a1d' : '#fff'
+     }} />
+   </button>
+ );
+@@ -986,24 +994,32 @@
+     document.addEventListener('keydown', onKey);
+     return () => document.removeEventListener('keydown', onKey);
+   }, [open, onClose]);
+-  if (!open) return null;
+   return (
+-    <div role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} style={{
+-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
+-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16
+-    }} onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget; }}
+-      onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose?.(); downOnBackdrop.current = false; }}>
+-      <div className="pown-fade-in" onClick={e => e.stopPropagation()} style={{
+-        width, maxWidth: '100%', maxHeight: '85vh', overflowY: 'auto', background: T.surfaceRaised,
+-        border: `1px solid ${T.borderStrong}`, borderRadius: 18, padding: 22
+-      }}>
+-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+-          <h3 style={{ margin: 0, fontFamily: 'inherit', fontSize: 15, fontWeight: 700, color: T.textHigh, textAlign: 'left' }}>{title}</h3>
+-          <button type="button" onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textMed }}><X size={18} /></button>
+-        </div>
+-        {children}
+-      </div>
+-    </div>
++    <AnimatePresence>
++      {open && (
++        <Motion.div key="modal" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
++          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
++          style={{
++            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
++            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16
++          }} onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget; }}
++          onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose?.(); downOnBackdrop.current = false; }}>
++          <Motion.div onClick={e => e.stopPropagation()}
++            initial={{ opacity: 0, y: 18, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}
++            transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
++            style={{
++              width, maxWidth: '100%', maxHeight: '85vh', overflowY: 'auto', background: T.surfaceRaised,
++              border: `1px solid ${T.borderStrong}`, borderRadius: 18, padding: 22
++            }}>
++            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
++              <h3 style={{ margin: 0, fontFamily: 'inherit', fontSize: 15, fontWeight: 700, color: T.textHigh, textAlign: 'left' }}>{title}</h3>
++              <button type="button" onClick={onClose} className="pown-btn" style={{ background: 'transparent', color: T.textMed }}><X size={18} /></button>
++            </div>
++            {children}
++          </Motion.div>
++        </Motion.div>
++      )}
++    </AnimatePresence>
+   );
+ };
+ 
+@@ -1359,13 +1375,21 @@
+           <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
+             display: 'flex', alignItems: 'center', gap: 11, padding: compact ? '9px 12px' : '9px 12px', borderRadius: 12,
+             marginBottom: 3, fontSize: compact ? 13.5 : 12.5, fontWeight: 700,
+-            border: `1px solid ${isActive ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
+-            background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
++            border: `1px solid ${isActive ? 'transparent' : 'transparent'}`,
++            background: 'transparent',
+             color: isActive ? '#f7f3eb' : 'rgba(255,255,255,0.58)'
+           })}>
+-            <item.icon size={16} strokeWidth={2} color={undefined} />
+-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+-            {item.badge && <span aria-hidden="true" style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary, flexShrink: 0 }} />}
++            {({ isActive }) => (
++              <>
++                {isActive && (
++                  <Motion.span layoutId={compact ? 'owner-nav-pill-drawer' : 'owner-nav-pill'} aria-hidden="true" transition={{ type: 'spring', stiffness: 460, damping: 38 }}
++                    style={{ position: 'absolute', inset: 0, borderRadius: 12, border: '1px solid rgba(211,191,162,0.5)', background: 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))', zIndex: 0 }} />
++                )}
++                <item.icon size={16} strokeWidth={2} color={undefined} style={{ position: 'relative' }} />
++                <span style={{ position: 'relative', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
++                {item.badge && <span aria-hidden="true" style={{ position: 'relative', marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: T.primary, flexShrink: 0 }} />}
++              </>
++            )}
+           </NavLink>
+         ))}
+       </div>
+@@ -1706,24 +1730,11 @@
+   );
+ };
+ 
+-/** Simple bar sparkline (recharts) used across modules */
+-const MiniBarChart = ({ data, dataKey = 'value', xKey = 'x', height = 64, color = T.primary }) => (
+-  <ResponsiveContainer width="100%" height={height}>
+-    <BarChart data={data}>
+-      {height >= 100 && <XAxis dataKey={xKey} tick={AxisTick} axisLine={false} tickLine={false} interval="preserveStartEnd" />}
+-      {height >= 100 && <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [fmtINRc(v), 'Revenue']} labelFormatter={(l) => `Hour ${l}`} />}
+-      <Bar dataKey={dataKey} radius={[3, 3, 0, 0]} fill={color} />
+-    </BarChart>
+-  </ResponsiveContainer>
+-);
+-
+-// Axis text was 35% white (hard to read on the dark cards); dates print as "25 Oct" and money as "₹34k" so ticks stop colliding.
+-const AxisTick = { fill: 'rgba(255,255,255,0.62)', fontSize: 10.5, fontFamily: T.mono };
+-const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+-const fmtDay = (v) => {
+-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? ''));
+-  return m ? `${Number(m[3])} ${MONTHS_SHORT[Number(m[2]) - 1] || ''}` : String(v ?? '');
+-};
++/** Hourly revenue bars (Bklit BarSparkline) used across modules */
++const MiniBarChart = ({ data, dataKey = 'value', xKey = 'x', height = 64, color = 'var(--chart-1)' }) => (
++  <BkMiniBars data={data} dataKey={dataKey} xKey={xKey} height={height} color={color} valueFormat={fmtINRc} hoverLabel={(h) => `Hour ${h}`} />
++);
++
+ const fmtCompactINR = (v) => {
+   const n = Number(v) || 0, a = Math.abs(n);
+   if (a >= 10000000) return `₹${+(n / 10000000).toFixed(1)}Cr`;
+@@ -1731,10 +1742,6 @@
+   if (a >= 1000) return `₹${+(n / 1000).toFixed(a >= 10000 ? 0 : 1)}k`;
+   return `₹${Math.round(n)}`;
+ };
+-const chartTooltipStyle = {
+-  contentStyle: { background: '#1a1a1d', border: `1px solid ${T.borderStrong}`, borderRadius: 10, fontSize: 12, fontFamily: T.mono },
+-  labelStyle: { color: T.textMed }, itemStyle: { color: T.primary }
+-};
+ 
+ /* ════════════════════════════════════════════════════════════
+    CHART KIT — shared visuals for every owner module
+@@ -1766,20 +1773,7 @@
+   if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
+   return (
+     <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+-      <div style={{ position: 'relative', width: size, height: size, flex: '0 0 auto', margin: '0 auto' }}>
+-        <ResponsiveContainer width="100%" height="100%">
+-          <PieChart>
+-            <Pie data={rows} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="98%" paddingAngle={rows.length > 1 ? 2 : 0} stroke="#2b2b30" strokeWidth={2} isAnimationActive={false}>
+-              {rows.map((r, i) => <Cell key={`${r.label}-${i}`} fill={r.color || VIZ[i % VIZ.length]} />)}
+-            </Pie>
+-            <Tooltip {...chartTooltipStyle} formatter={(v, n) => [valueFormat(v), n]} />
+-          </PieChart>
+-        </ResponsiveContainer>
+-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+-          <span className="pown-mono" style={{ fontSize: 17, fontWeight: 800, color: T.textHigh }}>{centerValue ?? valueFormat(total)}</span>
+-          {centerLabel && <span style={{ fontSize: 9.5, letterSpacing: 1, fontWeight: 800, color: T.textLow, marginTop: 2 }}>{centerLabel}</span>}
+-        </div>
+-      </div>
++      <BkDonut rows={rows.map((r, i) => ({ ...r, color: r.color || VIZ[i % VIZ.length] }))} valueFormat={valueFormat} centerValue={centerValue} centerLabel={centerLabel} size={size} />
+       <div style={{ flex: '1 1 160px', minWidth: 150, display: 'grid', gap: 9 }}>
+         {rows.map((r, i) => (
+           <div key={`${r.label}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12 }}>
+@@ -1794,38 +1788,16 @@
+   );
+ };
+ 
+-const HBarChart = ({ data, valueFormat = (v) => v, color = T.primary, rowHeight = 30, nameWidth = 112 }) => {
+-  const rows = (data || []).filter(r => r && r.label != null);
++const HBarChart = ({ data, valueFormat = (v) => v, color = 'var(--chart-1)', rowHeight = 30, nameWidth = 112 }) => {
++  const rows = (data || []).filter(r => r && r.label != null).map(r => ({ ...r, label: clipLabel(r.label) }));
+   if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
+-  return (
+-    <ResponsiveContainer width="100%" height={Math.max(120, rows.length * rowHeight + 28)}>
+-      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 18, bottom: 0, left: 0 }}>
+-        <CartesianGrid stroke="rgba(255,255,255,0.05)" horizontal={false} />
+-        <XAxis type="number" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={valueFormat} />
+-        <YAxis type="category" dataKey="label" width={nameWidth} interval={0} tick={{ ...AxisTick, fill: 'rgba(255,255,255,0.62)' }} tickFormatter={(v) => clipLabel(v)} axisLine={false} tickLine={false} />
+-        <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [valueFormat(v), '']} />
+-        <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={16} isAnimationActive={false} />
+-      </BarChart>
+-    </ResponsiveContainer>
+-  );
++  return <BkHBars rows={rows} valueFormat={valueFormat} color={color} rowHeight={rowHeight} nameWidth={nameWidth} />;
+ };
+ 
+-const ColumnChart = ({ data, valueFormat = (v) => v, height = 200, color = T.primary, highlightLabel }) => {
+-  const rows = (data || []).filter(r => r && r.label != null);
++const ColumnChart = ({ data, valueFormat = (v) => v, height = 200, color = 'var(--chart-1)', highlightLabel }) => {
++  const rows = (data || []).filter(r => r && r.label != null).map(r => ({ ...r, label: clipLabel(r.label, 11) }));
+   if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
+-  return (
+-    <ResponsiveContainer width="100%" height={height}>
+-      <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+-        <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+-        <XAxis dataKey="label" tick={AxisTick} axisLine={false} tickLine={false} interval={0} tickFormatter={(v) => clipLabel(v, 11)} />
+-        <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={44} tickFormatter={valueFormat} />
+-        <Tooltip {...chartTooltipStyle} cursor={{ fill: 'rgba(211,191,162,0.06)' }} formatter={(v) => [valueFormat(v), '']} />
+-        <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={false}>
+-          {rows.map((r, i) => <Cell key={`${r.label}-${i}`} fill={highlightLabel && r.label === highlightLabel ? T.primary : color} fillOpacity={highlightLabel && r.label !== highlightLabel ? 0.55 : 1} />)}
+-        </Bar>
+-      </BarChart>
+-    </ResponsiveContainer>
+-  );
++  return <BkColumns rows={rows} valueFormat={valueFormat} height={height} color={color} highlightLabel={highlightLabel != null ? clipLabel(highlightLabel, 11) : undefined} />;
+ };
+ 
+ /* ════════════════════════════════════════════════════════════
+@@ -1989,21 +1961,7 @@
+ 
+             <Card>
+               <SectionHeading icon={BarChart3} title="Revenue Trend" />
+-              <ResponsiveContainer width="100%" height={220}>
+-                <AreaChart data={data.dailyBreakdown}>
+-                  <defs>
+-                    <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
+-                      <stop offset="0%" stopColor={T.primary} stopOpacity={0.35} />
+-                      <stop offset="100%" stopColor={T.primary} stopOpacity={0} />
+-                    </linearGradient>
+-                  </defs>
+-                  <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+-                  <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={fmtDay} minTickGap={22} interval="preserveStartEnd" />
+-                  <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={50} tickFormatter={fmtCompactINR} />
+-                  <Tooltip {...chartTooltipStyle} labelFormatter={fmtDay} formatter={(v) => [fmtINRc(v), 'Revenue']} />
+-                  <Area type="monotone" dataKey="revenue" stroke={T.primary} strokeWidth={2} fill="url(#revFill)" />
+-                </AreaChart>
+-              </ResponsiveContainer>
++              <BkArea data={data.dailyBreakdown} yKey="revenue" label="Revenue" valueFormat={fmtINRc} axisFormat={fmtCompactINR} height={220} />
+             </Card>
+ 
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+@@ -2120,15 +2078,7 @@
+ 
+               <Card>
+                 <SectionHeading icon={TrendingUp} title="Daily Net Profit Trend" />
+-                <ResponsiveContainer width="100%" height={200}>
+-                  <LineChart data={data.revenueByDay}>
+-                    <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+-                    <XAxis dataKey="date" tick={AxisTick} axisLine={false} tickLine={false} tickFormatter={fmtDay} minTickGap={22} interval="preserveStartEnd" />
+-                    <YAxis tick={AxisTick} axisLine={false} tickLine={false} width={50} tickFormatter={fmtCompactINR} />
+-                    <Tooltip {...chartTooltipStyle} labelFormatter={fmtDay} formatter={(v) => [fmtINRc(v), 'Profit']} />
+-                    <Line type="monotone" dataKey="profit" stroke={T.primary} strokeWidth={2} dot={false} />
+-                  </LineChart>
+-                </ResponsiveContainer>
++                <BkLine data={data.revenueByDay} yKey="profit" label="Profit" valueFormat={fmtINRc} axisFormat={fmtCompactINR} height={200} />
+               </Card>
+ 
+               <Card>
+@@ -3914,9 +3864,12 @@
+ /* ════════════════════════════════════════════════════════════
+    ROOT — OwnerApp (mount at /owner/:tenantId/*)
+    ════════════════════════════════════════════════════════════ */
+-const OwnerAppInner = () => (
++const OwnerAppInner = () => {
++  const location = useLocation();
++  return (
+   <OwnerShell>
+-    <Routes>
++    <PageTransition pageKey={location.pathname}>
++    <Routes location={location}>
+       <Route path="dashboard" element={<DashboardPage />} />
+       <Route path="revenue" element={<RevenuePage />} />
+       <Route path="pnl" element={<PnlPage />} />
+@@ -3935,20 +3888,25 @@
+       <Route path="settings" element={<SettingsPage />} />
+       <Route path="*" element={<Navigate to="dashboard" replace />} />
+     </Routes>
++    </PageTransition>
+   </OwnerShell>
+-);
++  );
++};
+ 
+ export default function OwnerApp() {
+   const { tenantId } = useParams();
+   return (
+-    <>
++    <OwnerMotion>
+       <GlobalStyles />
+-      <OwnerProvider key={tenantId} tenantId={tenantId}>
+-        <AuthGate>
+-          <OwnerAppInner />
+-        </AuthGate>
+-      </OwnerProvider>
+-    </>
++      {/* bk-scope carries the Bklit chart tokens; display:contents keeps layout untouched */}
++      <div className="bk-scope" style={{ display: 'contents' }}>
++        <OwnerProvider key={tenantId} tenantId={tenantId}>
++          <AuthGate>
++            <OwnerAppInner />
++          </AuthGate>
++        </OwnerProvider>
++      </div>
++    </OwnerMotion>
+   );
+ }
+ 
+--- a/package.json
++++ b/package.json
+@@ -10,8 +10,14 @@
+     "preview": "vite preview"
+   },
+   "dependencies": {
++    "@base-ui/react": "^1.9.0",
+     "@fontsource/roboto-condensed": "^5.3.0",
++    "@number-flow/react": "^0.6.2",
+     "axios": "^1.6.0",
++    "clsx": "^2.1.1",
++    "d3-array": "^3.2.5",
++    "d3-scale": "^4.0.3",
++    "d3-shape": "^3.2.1",
+     "framer-motion": "^11.0.0",
+     "html2pdf.js": "^0.14.0",
+     "jspdf": "^4.2.1",
+@@ -19,6 +25,7 @@
+     "jsqr": "^1.4.0",
+     "jszip": "^3.10.2",
+     "lucide-react": "^1.47.0",
++    "motion": "^14.12.0",
+     "qrcode": "^1.5.4",
+     "qrcode.react": "^4.2.0",
+     "react": "^18.2.0",
+@@ -26,10 +33,12 @@
+     "react-router-dom": "^6.30.3",
+     "recharts": "^3.10.1",
+     "socket.io-client": "^4.8.3",
++    "tailwind-merge": "^3.7.0",
+     "xlsx": "^0.18.5"
+   },
+   "devDependencies": {
+     "@eslint/js": "^9.22.0",
++    "@tailwindcss/vite": "^4.3.5",
+     "@types/react": "^18.2.0",
+     "@types/react-dom": "^18.2.0",
+     "@vitejs/plugin-react": "^4.2.0",
+@@ -38,6 +47,7 @@
+     "eslint-plugin-react-hooks": "^7.1.1",
+     "eslint-plugin-react-refresh": "^0.4.20",
+     "globals": "^16.0.0",
++    "tailwindcss": "^4.3.5",
+     "vite": "^5.0.0"
+   }
+ }
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -1,5 +1,7 @@
+ import { defineConfig, loadEnv } from 'vite'
+ import react from '@vitejs/plugin-react'
++import tailwindcss from '@tailwindcss/vite'
++import { fileURLToPath } from 'node:url'
+ 
+ // Single source of truth for absolute URLs used by SEO tags, robots.txt and sitemap.xml.
+ // Set VITE_SITE_URL (for example https://www.yourdomain.com) in the production environment.
+@@ -34,5 +36,6 @@
+ // https://vite.dev/config/
+ export default defineConfig(({ mode }) => {
+   const env = loadEnv(mode, process.cwd(), '')
+-  return { plugins: [react(), seo(env.VITE_SITE_URL)] }
++  // `@` → src/ is required by the vendored Bklit chart sources (shadcn-style imports); tailwindcss() only touches CSS that opts in (see src/bklit.css).
++  return { plugins: [react(), tailwindcss(), seo(env.VITE_SITE_URL)], resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } } }
+ })
+\ No newline at end of file
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -15,3 +15,10 @@
+ * Customer Home (`/`): animated live-count, press feedback on filter chips, "Around you right now" card (open-now ring + cafe/dine split, real directory data), 24h opening-hours strip with a now marker in the place sheet.
+ * Menu app (`/:tenant`): order-tracker ring showing live preparation progress next to the ETA.
+ Money amounts, bills and invoices are deliberately NOT animated. No new npm dependencies (framer-motion ^11 already installed).
++
++## Owner app: real Bklit UI + real Motion
++* Recharts is gone from the Owner app. Every chart is now an actual Bklit UI component: the registry sources were resolved offline exactly as `shadcn add` would (area, line, bar, pie, sparkline, grid, axes, tooltip, legend + their internals) and vendored into `src/components/charts/` with `src/lib/utils.ts`. Thin wrappers in `src/ownerCharts.jsx` keep the old helper signatures, so the 14 chart call sites did not change.
++* Charts: revenue trend = AreaChart, daily profit = LineChart, hourly revenue = BarSparkline with hover readout, rankings = horizontal BarChart with value labels, time-of-day/prep time = BarChart (the highlighted bar is a two-series stack, because Bklit's Bar has no per-bar colour), splits = PieChart donut whose centre swaps to the hovered slice.
++* Real Motion (`motion` 14.12, `motion/react`) for the Owner app only: app-wide reduced-motion (`MotionConfig`), page transitions between modules, spring modals, shared-layout pill for the sidebar and tab pills (`layoutId`), spring toggles (`src/ownerMotion.jsx`).
++* Build setup: `@` alias to `src/` and `@tailwindcss/vite` in `vite.config.js`. Tailwind 4 is loaded from `src/bklit.css` with utilities only (no preflight), scanning only the chart files, inside a cascade layer, so the app's own CSS is untouched. Chart colours are Bklit tokens scoped to `.bk-scope` and set to the Owner champagne/bronze palette.
++* New dependencies: motion, d3-shape, d3-scale, d3-array, clsx, tailwind-merge, @number-flow/react, @base-ui/react (runtime); tailwindcss, @tailwindcss/vite (dev). `recharts` stays because the Operator portal still uses it.

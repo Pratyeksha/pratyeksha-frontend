@@ -108,8 +108,18 @@ const GLOBAL_CSS = `
     outline: 2px solid #d3bfa2; outline-offset: 2px;
   }
   input::placeholder, textarea::placeholder { color: #7d7d86; }
-  .p-nav-group { font-size: 10px; color: rgba(211,191,162,0.72); font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; padding: 7px 11px 2px; }
-  .p-nav-item:not([aria-current]):hover { background: rgba(255,255,255,0.045) !important; color: #f1ede4 !important; }
+  .p-nav-group { display:flex; align-items:center; gap:8px; font-size: 9.5px; color: rgba(211,191,162,0.6); font-weight: 800; letter-spacing: 2px; text-transform: uppercase; padding: 10px 10px 4px; }
+  @media (max-height: 780px) { .p-rev-extra { display: none !important; } }
+  .p-nav-group::after { content:''; flex:1; height:1px; background: linear-gradient(90deg, rgba(211,191,162,0.22), transparent); }
+  .p-nav { scrollbar-width: none; -ms-overflow-style: none; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 10px, #000 calc(100% - 14px), transparent 100%); }
+  .p-nav::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  .p-nav-item { position: relative; width: 100%; display: flex; align-items: center; gap: 11px; padding: 5px 10px 5px 6px; border-radius: 12px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 700; text-align: left; border: 1px solid transparent; background: transparent; color: rgba(255,255,255,0.6); transition: background .15s, color .15s, border-color .15s; }
+  .p-nav-ico { width: 28px; height: 28px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.62); transition: all .15s; }
+  .p-nav-item:not([aria-current]):hover { background: rgba(255,255,255,0.045); color: #f1ede4; }
+  .p-nav-item:not([aria-current]):hover .p-nav-ico { border-color: rgba(211,191,162,0.35); color: #d3bfa2; }
+  .p-nav-item[aria-current] { color: #f7f3eb; background: linear-gradient(135deg, rgba(211,191,162,0.2), rgba(211,191,162,0.04)); border-color: rgba(211,191,162,0.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+  .p-nav-item[aria-current]::before { content:''; position:absolute; left:-7px; top:9px; bottom:9px; width:3px; border-radius:0 3px 3px 0; background: linear-gradient(180deg,#e6d6b8,#8a704d); }
+  .p-nav-item[aria-current] .p-nav-ico { background: rgba(211,191,162,0.12); border-color: rgba(211,191,162,0.45); color: #d3bfa2; }
 
   /* Clients table: columns keep their width from row to row (they used to shift with each row's button count) */
   .p-clients-table { min-width: 480px; }
@@ -174,7 +184,6 @@ const GLOBAL_CSS = `
   .p-demo-card:hover { background: rgba(211,191,162,0.06) !important; border-color: rgba(211,191,162,0.3) !important; }
 
   /* Nav hover — subtle light gold tint */
-  .p-nav-item:hover { background: rgba(211,191,162,0.04) !important; color: #d3bfa2 !important; }
 
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @keyframes pulse-slow { 0%,100% { opacity:1; } 50% { opacity:0.45; } }
@@ -1229,25 +1238,13 @@ const NavItem = ({ id, ids, label, icon:Icon, count, urgent, active, onNav }) =>
     if (!target) return null;
     const isActive = members.includes(active);
     return (
-      <button type="button" onClick={()=>onNav(isActive ? active : target)} className="p-nav-item" aria-current={isActive ? 'page' : undefined} style={{
-        width:'100%', display:'flex', alignItems:'center', gap:10,
-        padding:'5px 11px', borderRadius:11, cursor:'pointer', fontFamily:'inherit',
-        /* same pill language as the Tracking tab's section tabs: gold outline + soft gold wash when selected */
-        border:`1px solid ${isActive ? 'rgba(211,191,162,0.5)' : 'transparent'}`,
-        background: isActive ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent',
-        color: isActive ? '#f7f3eb' : 'rgba(255,255,255,0.58)',
-        fontSize:12.5, fontWeight:700,
-        textAlign:'left', transition:'all 0.12s',
-      }}>
-        <Icon size={15} strokeWidth={isActive ? 2 : 1.7} color={isActive ? '#d3bfa2' : undefined} style={{ flexShrink:0 }} />
-        <span style={{ flex:1 }}>{label}</span>
+      <button type="button" onClick={()=>onNav(isActive ? active : target)} className="p-nav-item" aria-current={isActive ? 'page' : undefined}>
+        <span className="p-nav-ico"><Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} /></span>
+        <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{label}</span>
         {count !== undefined && count > 0 && (
-          <span style={{
-            fontSize:10, fontWeight:800, letterSpacing:0.4, padding:'2px 8px', borderRadius:99,
-            background: urgent ? 'rgba(211,191,162,0.14)' : 'rgba(255,255,255,0.05)',
-            color: urgent ? '#d3bfa2' : 'rgba(255,255,255,0.55)',
-            border: `1px solid ${urgent ? 'rgba(211,191,162,0.35)' : LINE}`,
-          }}>{count}</span>
+          <span style={{ fontSize:10, fontWeight:800, fontFamily:MONO, minWidth:20, textAlign:'center', padding:'2px 7px', borderRadius:99,
+            background: urgent ? 'rgba(211,191,162,0.14)' : 'rgba(255,255,255,0.05)', color: urgent ? '#d3bfa2' : 'rgba(255,255,255,0.6)',
+            border: `1px solid ${urgent ? 'rgba(211,191,162,0.4)' : LINE}` }}>{count}</span>
         )}
       </button>
     );
@@ -1732,50 +1729,46 @@ function PratyekshaMasterAdminInner() {
       <aside className={`p-sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="p-sidebar-inner no-sb">
 
-          {/* Brand — icon bg is light gold, text is near-white */}
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, paddingBottom:10, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-            <div style={{ width:58, height:34, borderRadius:9, background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', padding:5, flexShrink:0 }}>
+          {/* Brand */}
+          <div style={{ display:'flex', alignItems:'center', gap:11, marginBottom:14, flexShrink:0 }}>
+            <div style={{ width:54, height:38, borderRadius:11, background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', padding:5, flexShrink:0 }}>
               <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
             </div>
-            <div>
-              <div style={{ fontFamily:SERIF, fontSize:17, fontWeight:700, color:'#f7f3eb', letterSpacing:0.3, lineHeight:1.15 }}>Pratyeksha</div>
-              <div style={{ fontSize:9.5, color:GOLD, marginTop:3, fontWeight:800, letterSpacing:2, textTransform:'uppercase' }}>Control centre</div>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontFamily:SERIF, fontSize:18, fontWeight:700, color:'#f7f3eb', letterSpacing:0.3, lineHeight:1.1 }}>Pratyeksha</div>
+              <div style={{ fontSize:9, color:GOLD, marginTop:4, fontWeight:800, letterSpacing:2.2, textTransform:'uppercase' }}>Control centre</div>
             </div>
           </div>
 
-          {/* Revenue card:
-              label    → dim gray
-              number   → light gold (#d3bfa2)
-              sub-grid → status-colored numbers, dark bg
-          */}
-          <div style={{ ...CARD, borderRadius:16, marginBottom:6, padding:'11px 12px 10px', flexShrink:0 }}>
-            <div style={{ fontSize:10, color:'rgba(255,255,255,0.5)', fontWeight:800, letterSpacing:1.4, textTransform:'uppercase', marginBottom:8, display:'flex', alignItems:'center', gap:7 }}><Wallet size={12} color={GOLD} /> Net platform revenue</div>
-            <div style={{ fontSize:22, fontWeight:700, color:(stats.netRevenue ?? stats.totalRevenue ?? 0) >= 0 ? '#f7f3eb' : COPPER, lineHeight:1, marginBottom:7, fontFamily:MONO, letterSpacing:-0.5 }}>
-              ₹{Math.abs(stats.netRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}{(stats.netRevenue ?? 0) < 0 ? ' (loss)' : ''}
-            </div>
-            <div style={{ fontSize:10.5, color:C.textDim, marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}</span><span>− Costs ₹{(stats.totalExpenses||0).toLocaleString('en-IN')}</span></div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:5 }}>
-              {[
-                { val:stats.activeCount   ||0, lbl:'Active',   c:'#d3bfa2' },   /* light gold */
-                { val:stats.expiredCount  ||0, lbl:'Expired',  c:C.warning },
-                { val:stats.disabledCount ||0, lbl:'Disabled', c:C.danger  },
-                { val:stats.totalClients  ||0, lbl:'Total',    c:C.textMid },
-              ].map(s => (
-                <div key={s.lbl} style={{ background:'rgba(255,255,255,0.03)', padding:'7px 4px', borderRadius:10, border:`1px solid ${LINE}`, textAlign:'center' }}>
-                  <div style={{ fontSize:15, fontWeight:700, color:s.c, lineHeight:1, fontFamily:'JetBrains Mono, monospace' }}>{s.val}</div>
-                  <div style={{ fontSize:9.5, color:C.textDim, marginTop:3 }}>{s.lbl}</div>
+          {/* Revenue hero */}
+          {(() => {
+            const act = stats.activeCount||0, exp = stats.expiredCount||0, dis = stats.disabledCount||0, sum = act+exp+dis;
+            const net = stats.netRevenue ?? stats.totalRevenue ?? 0;
+            return (
+              <div style={{ ...CARD, borderRadius:18, marginBottom:10, padding:'13px 14px 12px', flexShrink:0, background:'linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.016))' }}>
+                <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', fontWeight:800, letterSpacing:1.6, textTransform:'uppercase', display:'flex', alignItems:'center', gap:7 }}><Wallet size={12} color={GOLD} /> Net revenue</div>
+                <div style={{ fontSize:25, fontWeight:700, color: net >= 0 ? '#f7f3eb' : COPPER, lineHeight:1, margin:'9px 0 6px', fontFamily:MONO, letterSpacing:-0.8 }}>
+                  {net < 0 ? '−' : ''}₹{Math.abs(net).toLocaleString('en-IN')}
                 </div>
-              ))}
-            </div>
-          </div>
+                <div style={{ fontSize:10.5, color:C.textDim, display:'flex', gap:8, flexWrap:'wrap' }}><span>Gross ₹{(stats.grossRevenue ?? stats.totalRevenue ?? 0).toLocaleString('en-IN')}</span><span>· Costs ₹{(stats.totalExpenses||0).toLocaleString('en-IN')}</span></div>
+                <div className="p-rev-extra" style={{ display:'flex', height:5, borderRadius:99, overflow:'hidden', background:'rgba(255,255,255,0.07)', margin:'12px 0 9px' }} aria-hidden="true">
+                  {sum > 0 && [[act,GOLD],[exp,C.warning],[dis,C.danger]].map(([n,col],i) => n>0 && <div key={i} style={{ width:`${(n/sum)*100}%`, background:col }} />)}
+                </div>
+                <div className="p-rev-extra" style={{ display:'flex', justifyContent:'space-between', gap:4, fontSize:10, color:C.textDim }}>
+                  {[[act,'Active',GOLD],[exp,'Expired',C.warning],[dis,'Disabled',C.danger],[stats.totalClients||0,'Total','#f1ede4']].map(([n,l,col]) => (
+                    <div key={l} style={{ textAlign:'center', minWidth:0 }}><div style={{ fontSize:14, fontWeight:700, color:col, fontFamily:MONO, lineHeight:1.1 }}>{n}</div><div style={{ marginTop:2, fontSize:9 }}>{l}</div></div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
-          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search everything" style={{ ...ghost, width:'100%', justifyContent:'flex-start', gap:8, padding:'8px 11px', marginBottom:6, flexShrink:0, color:C.textDim }}>
-            <Search size={13} /> <span style={{ flex:1, textAlign:'left' }}>Search</span> <span style={{ fontSize:10, fontFamily:MONO, opacity:0.7 }}>Ctrl K</span>
+          <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search everything" style={{ ...ghost, width:'100%', justifyContent:'flex-start', gap:9, padding:'9px 12px', borderRadius:13, marginBottom:4, flexShrink:0, color:C.textDim }}>
+            <Search size={13} /> <span style={{ flex:1, textAlign:'left' }}>Search anything</span> <span style={{ fontSize:9.5, fontFamily:MONO, padding:'2px 6px', borderRadius:6, border:`1px solid ${LINE}`, color:'rgba(255,255,255,0.5)' }}>Ctrl K</span>
           </button>
-          {access && <div style={{ fontSize:10.5, color:C.textDim, margin:'0 2px 8px', display:'flex', justifyContent:'space-between', gap:6, flexShrink:0 }}><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{access.name}</span><span style={{ textTransform:'capitalize', color:'#d3bfa2' }}>{access.role}</span></div>}
 
           {/* Nav — grouped; it takes the free height and scrolls only if the window is very short */}
-          <nav aria-label="Main" className="no-sb" style={{ display:'flex', flexDirection:'column', gap:1, marginBottom:8, overflowY:'auto', minHeight:0, flex:'1 1 auto', paddingRight:2 }}>
+          <nav aria-label="Main" className="p-nav" style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:6, overflowY:'auto', minHeight:0, flex:'1 1 auto', padding:'2px 7px 6px 7px', marginLeft:-7, marginRight:-7 }}>
             <NavItem active={activeSection} onNav={navTo} id="dashboard" label="Dashboard" icon={BarChart3} />
             <NavGroup label="Growth" ids={['demos','crm','sales','tracking','success','discovery']} />
             <NavItem active={activeSection} onNav={navTo} id="demos" ids={['demos','crm','sales']} label="Leads & Demos" icon={CalendarClock} count={demoCounts.Pending} urgent />
@@ -1815,14 +1808,17 @@ function PratyekshaMasterAdminInner() {
             ))}
             {clients.length === 0 && <div style={{ fontSize:11, color:C.textDim, padding:'12px 4px' }}>No clients yet.</div>}
           </div>}
-          <div style={{ height:1, background:C.border, margin:'6px 0', flexShrink:0 }} />
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ height:1, background:'linear-gradient(90deg, transparent, rgba(211,191,162,0.3), transparent)', margin:'4px 0 10px', flexShrink:0 }} />
+          <div style={{ display:'grid', gap:8, flexShrink:0 }}>
             <InstallButton />
-            <button type="button" onClick={refresh} style={{
-              ...ghost, width:'100%', padding:'9px', justifyContent:'center',
-            }}>
-              <RefreshCcw size={12} /> Refresh
-            </button>
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 8px 8px 9px', borderRadius:14, background:'rgba(255,255,255,0.035)', border:`1px solid ${LINE}` }}>
+              <div style={{ width:32, height:32, borderRadius:10, background:'rgba(211,191,162,0.12)', border:'1px solid rgba(211,191,162,0.4)', color:'#d3bfa2', display:'grid', placeItems:'center', fontWeight:800, fontSize:13, flexShrink:0 }}>{String((access && access.name) || 'M').trim().charAt(0).toUpperCase()}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'#f1ede4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(access && access.name) || 'Master admin'}</div>
+                <div style={{ fontSize:10, color:GOLD, textTransform:'capitalize', fontWeight:700 }}>{(!access || access.role === 'owner') ? 'Platform owner' : access.role}</div>
+              </div>
+              <button type="button" onClick={refresh} aria-label="Refresh" title="Refresh" style={{ ...ghost, padding:8, borderRadius:10 }}><RefreshCcw size={13} /></button>
+            </div>
           </div>
         </div>
       </aside>

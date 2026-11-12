@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath } from 'node:url'
 
 // Single source of truth for absolute URLs used by SEO tags, robots.txt and sitemap.xml.
 // Set VITE_SITE_URL (for example https://www.yourdomain.com) in the production environment.
@@ -34,5 +36,6 @@ function seo(siteUrl) {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  return { plugins: [react(), seo(env.VITE_SITE_URL)] }
+  // `@` → src/ is required by the vendored Bklit chart sources (shadcn-style imports); tailwindcss() only touches CSS that opts in (see src/bklit.css).
+  return { plugins: [react(), tailwindcss(), seo(env.VITE_SITE_URL)], resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } } }
 })

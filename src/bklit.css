@@ -1,0 +1,52 @@
+/* Bklit UI (real chart source in src/components/charts) — Tailwind 4 utilities only.
+ * Deliberately NO preflight/base layer: the app's own CSS stays untouched, and `source(none)` + explicit @source
+ * means utilities are generated only for the chart files (never for words that merely appear in app code).
+ * Layered, so any unlayered app rule wins a collision.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./components/charts";
+@source "./ownerCharts.jsx";
+
+@theme inline {
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-label: var(--chart-label);
+  --color-chart-tooltip-background: var(--chart-tooltip-background);
+  --color-chart-tooltip-foreground: var(--chart-tooltip-foreground);
+  --color-chart-tooltip-muted: var(--chart-tooltip-muted);
+  --color-legend: var(--legend);
+  --color-legend-foreground: var(--legend-foreground);
+  --color-legend-muted: var(--legend-muted);
+  --color-legend-muted-foreground: var(--legend-muted-foreground);
+  --color-legend-track: var(--legend-track);
+}
+
+/* Owner palette → Bklit tokens (champagne gold + bronze; no green/blue/red). Scoped so other surfaces are unaffected. */
+.bk-scope {
+  --background: #101012; --foreground: #f7f3eb;
+  --muted: rgba(255,255,255,.05); --muted-foreground: rgba(255,255,255,.58);
+  --popover: #201e1a; --popover-foreground: #f7f3eb;
+
+  --chart-1: #cdbb98; --chart-2: #e29a58; --chart-3: #ecdcb9; --chart-4: #b8a47f; --chart-5: #8a704d;
+  --chart-positive: #ecdcb9; --chart-negative: #e29a58;
+  --chart-background: #1a1a1d; --chart-foreground: rgba(255,255,255,.62); --chart-foreground-muted: rgba(255,255,255,.4);
+  --chart-line-primary: var(--chart-1); --chart-line-secondary: var(--chart-2);
+  --chart-crosshair: rgba(211,191,162,.5); --chart-grid: rgba(255,255,255,.08); --chart-brush-border: var(--chart-grid);
+  --chart-label: rgba(255,255,255,.62);
+  --chart-tooltip-background: #201e1a; --chart-tooltip-foreground: #f7f3eb; --chart-tooltip-muted: rgba(255,255,255,.55);
+  --chart-indicator-color: #d3bfa2; --chart-indicator-secondary-color: #1a1a1d;
+  --chart-marker-background: #2a2620; --chart-marker-border: rgba(211,191,162,.3); --chart-marker-foreground: #f7f3eb;
+  --chart-marker-badge-background: #d3bfa2; --chart-marker-badge-foreground: #14110b;
+  --chart-segment-background: rgba(211,191,162,.06); --chart-segment-line: rgba(211,191,162,.25);
+  --legend: #1a1a1d; --legend-foreground: #f7f3eb; --legend-muted: rgba(255,255,255,.05);
+  --legend-muted-foreground: rgba(255,255,255,.58); --legend-track: rgba(255,255,255,.08);
+  --chart-scale-01: rgba(255,255,255,.07);
+}
