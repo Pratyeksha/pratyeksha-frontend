@@ -1,6 +1,5 @@
 import React, { useEffect, useId, useState } from 'react';
 import { Eye, EyeOff, Loader2, ArrowRight, Home, AlertTriangle, CheckCircle2, Lock, ShieldCheck, Info } from 'lucide-react';
-import SpoonForkIcon from './SpoonForkIcon.jsx';
 
 /**
  * Pratyeksha sign-in design kit — the cream & gold look shared by the Operator, Owner, Kitchen (KDS) and Master Admin
@@ -62,18 +61,12 @@ const CSS = `
 @media (prefers-reduced-motion:reduce){.pxa-float,.pxa-rise,.pxa-spin{animation:none}}
 `;
 
-function Wordmark({ size = 56, center = false }) {
+/** The real Pratyeksha logo (icon + wordmark + tagline + divider, transparent PNG). */
+function Wordmark({ size = 64, center = false }) {
+  const w = Math.round(size * 6.2);
   return (
-    <div style={{ textAlign: center ? 'center' : 'left' }}>
-      <SpoonForkIcon size={size * 0.9} color={PX.goldSoft} style={{ marginBottom: 6, ...(center ? { margin: '0 auto 6px', display: 'block' } : null) }} />
-      <div style={{ fontFamily: PX.serif, fontWeight: 600, fontSize: size, lineHeight: 1.05, color: PX.goldDeep, letterSpacing: '-0.5px' }}>Pratyeksha</div>
-      <div style={{ marginTop: 10, fontSize: Math.max(10, size * 0.2), letterSpacing: '0.28em', color: PX.mute, fontWeight: 500 }}>VISUALIZE. ORDER. RELISH.</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, justifyContent: center ? 'center' : 'flex-start' }} aria-hidden="true">
-        <span style={{ width: 46, height: 1, background: 'linear-gradient(90deg,transparent,#c9ac7a)' }} />
-        <span style={{ color: PX.goldSoft, fontSize: 11 }}>★</span>
-        <span style={{ width: 46, height: 1, background: 'linear-gradient(270deg,transparent,#c9ac7a)' }} />
-      </div>
-    </div>
+    <img src="/pratyeksha-logo.png" alt="Pratyeksha — Visualize. Order. Relish." width={w} height={Math.round(w * 0.41)}
+      style={{ display: 'block', width: w, maxWidth: '78vw', height: 'auto', margin: center ? '0 auto' : 0, userSelect: 'none' }} draggable={false} />
   );
 }
 
@@ -100,12 +93,12 @@ export function PxAuthShell({ art, headline, sub, children }) {
         <path d="M-50 700 C 320 600, 420 220, 700 110 S 980 20 1100 -10" fill="none" stroke="rgba(184,146,79,.14)" strokeWidth="1.5" />
       </svg>
       <section className="pxa-brand" aria-hidden={false}>
-        <Wordmark size={64} />
+        <Wordmark size={70} />
         <h2 style={{ margin: '40px 0 8px', fontFamily: PX.serif, fontWeight: 500, fontSize: 'clamp(26px,2.6vw,38px)', lineHeight: 1.18, color: PX.ink, maxWidth: 420 }}>{headline}</h2>
         {sub && <p style={{ margin: 0, fontSize: 15, color: PX.mute, maxWidth: 380, lineHeight: 1.6 }}>{sub}</p>}
         <Art Icon={art} />
       </section>
-      <div className="pxa-mobhead"><Wordmark size={40} center /></div>
+      <div className="pxa-mobhead"><Wordmark size={38} center /></div>
       <main className="pxa-main">{children}</main>
     </div>
   );

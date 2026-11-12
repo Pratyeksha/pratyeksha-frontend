@@ -1,0 +1,41 @@
+/* Premium polish layer — shared by Landing, Customer Home and the Menu app.
+ * Additive only: tokens, focus, selection and touch refinements that never change layout.
+ */
+:root{
+  --px-ease-out:cubic-bezier(.22,1,.36,1);
+  --px-ease-inout:cubic-bezier(.85,0,.15,1);
+  --px-gold:#d3bfa2; --px-gold-hi:#f1e3c6; --px-ink:#0e0e0e;
+}
+/* Landing palette → chart tokens (Bklit theming: override tokens on a scoped wrapper, never per chart) */
+.site{
+  --chart-1:#dfc18d; --chart-2:#a98248; --chart-3:#f1dcae; --chart-4:#c7a269; --chart-5:#f4ecdc;
+  --chart-grid:rgba(223,193,141,.12); --chart-base:rgba(223,193,141,.3); --chart-label:#a99d86;
+  --chart-dot-ring:#14110c; --chart-track:rgba(244,236,220,.08);
+  --chart-tooltip-bg:rgba(20,17,12,.94); --chart-tooltip-border:rgba(223,193,141,.34);
+}
+::selection{background:rgba(211,191,162,.32);color:#fff}
+/* Consistent keyboard focus on customer surfaces (landing already has its own) */
+html[data-customer] button:focus-visible,
+html[data-customer] a:focus-visible,
+html[data-customer] [role="button"]:focus-visible,
+html[data-customer] input:focus-visible{outline:2px solid var(--px-gold);outline-offset:2px}
+/* Tap feedback: no grey flash, no 300ms delay, no accidental text selection on controls */
+html[data-customer] button,html[data-customer] [role="button"],.site button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html[data-customer] button{-webkit-user-select:none;user-select:none}
+/* Landing hero: floating sales-pulse card (illustrative sample) */
+.site .nx-pulse{position:absolute;left:0;bottom:11%;z-index:2;width:188px;padding:13px 14px 10px;border-radius:18px;
+  background:rgba(20,17,12,.86);border:1px solid var(--nx-line2);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  box-shadow:0 22px 50px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05);animation:pxPulseFloat 7s ease-in-out infinite}
+.site .nx-pulse-h{display:flex;justify-content:space-between;align-items:center;font:500 .54rem/1 var(--nx-mono);letter-spacing:.14em;color:var(--nx-mute)}
+.site .nx-pulse-h em{font-style:normal;color:var(--chart-positive)}
+.site .nx-pulse-n{display:block;margin:9px 0 6px;font:400 1.55rem/1 var(--nx-serif);color:var(--nx-cream)}
+@keyframes pxPulseFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@media(max-width:1000px){.site .nx-pulse{display:none}}
+/* Landing metric tiles: sparkline sits under the delta */
+.site .nx-metrics .nx-m-spark{margin-top:10px}
+.site .nx-metrics .nx-m-ring{margin-top:8px;display:flex;align-items:center;gap:10px}
+.site .nx-board-low .nx-panel .pxc{margin-top:14px}
+@media(prefers-reduced-motion:reduce){
+  .site .nx-pulse{animation:none}
+  html{scroll-behavior:auto!important}
+}

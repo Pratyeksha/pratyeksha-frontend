@@ -21,7 +21,7 @@ export default function AccessRequest({ kind = 'Operator', onBack }) {
     e.preventDefault();
     const x = {};
     if (f.name.trim().length < 2) x.name = 'Enter your name';
-    if (f.restaurant.trim().length < 2) x.restaurant = 'Enter your restaurant or café name';
+    if (f.restaurant.trim().length < 2) x.restaurant = 'Enter your café or restaurant name';
     if (!/^[6-9]\d{9}$/.test(f.phone.replace(/[\s-]/g, '').replace(/^(\+91|91|0)/, ''))) x.phone = 'Enter a valid 10-digit mobile number';
     if (f.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) x.email = 'Enter a valid email';
     setErrs(x); if (Object.keys(x).length) return;
@@ -43,10 +43,10 @@ export default function AccessRequest({ kind = 'Operator', onBack }) {
   );
 
   return (
-    <PxCard icon={UserPlus} title="Request access" subtitle={`${kind} accounts are created by Pratyeksha for your restaurant. Tell us who you are and we’ll set you up.`}>
+    <PxCard icon={UserPlus} title="Request access" subtitle={`${kind} accounts are created by Pratyeksha for your café or restaurant. Tell us who you are and we’ll set you up.`}>
       <form onSubmit={submit} noValidate>
         <PxField icon={User} label="Your name" placeholder="Your name" value={f.name} onChange={set('name')} error={errs.name} autoComplete="name" autoFocus />
-        <PxField icon={Store} label="Restaurant or café" placeholder="Restaurant or café name" value={f.restaurant} onChange={set('restaurant')} error={errs.restaurant} autoComplete="organization" />
+        <PxField icon={Store} label="Café or restaurant" placeholder="Café or restaurant name" value={f.restaurant} onChange={set('restaurant')} error={errs.restaurant} autoComplete="organization" />
         <PxField icon={Phone} label="Mobile number" placeholder="Mobile number" value={f.phone} onChange={set('phone')} error={errs.phone} inputMode="tel" autoComplete="tel" />
         <PxField icon={Mail} label="Email (optional)" placeholder="Email (optional)" type="email" value={f.email} onChange={set('email')} error={errs.email} autoComplete="email" />
         <PxField icon={MapPin} label="City (optional)" placeholder="City (optional)" value={f.city} onChange={set('city')} autoComplete="address-level2" />

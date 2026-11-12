@@ -1,0 +1,39 @@
+/* Chart tokens (Bklit naming). Gold-on-dark palette; override per surface with a scoped wrapper. */
+:root{
+  --chart-1:#d3bfa2; --chart-2:#8a704d; --chart-3:#e9dcc3; --chart-4:#b99f78; --chart-5:#f7f3eb;
+  --chart-grid:rgba(211,191,162,.11); --chart-base:rgba(211,191,162,.26); --chart-label:rgba(247,243,235,.5);
+  --chart-crosshair:rgba(211,191,162,.45); --chart-dot-ring:#14110b; --chart-track:rgba(247,243,235,.08);
+  --chart-positive:#ece0c8; --chart-negative:rgba(247,243,235,.46);
+  --chart-tooltip-bg:rgba(20,17,12,.94); --chart-tooltip-fg:#f7f3eb; --chart-tooltip-border:rgba(211,191,162,.28);
+}
+.pxc{position:relative;width:100%;touch-action:pan-y;outline:none;-webkit-tap-highlight-color:transparent}
+.pxc svg{display:block;overflow:visible}
+.pxc:focus-visible{border-radius:12px;box-shadow:0 0 0 2px rgba(211,191,162,.55)}
+.pxc-grid{stroke:var(--chart-grid);stroke-width:1;shape-rendering:crispEdges}
+.pxc-base{stroke:var(--chart-base);stroke-width:1;shape-rendering:crispEdges}
+.pxc-cross{stroke:var(--chart-crosshair);stroke-width:1;stroke-dasharray:3 3}
+.pxc-label{fill:var(--chart-label);font-size:10px;font-weight:700;letter-spacing:.04em;font-family:inherit}
+.pxc-label.on{fill:var(--chart-5)}
+.pxc-ghost{stroke:var(--chart-track);stroke-width:2.5;stroke-linecap:round;animation:pxcPulse 1.6s ease-in-out infinite}
+.pxc-ghost-fill{fill:var(--chart-track)!important;animation:pxcPulse 1.6s ease-in-out infinite}
+@keyframes pxcPulse{0%,100%{opacity:.5}50%{opacity:1}}
+.pxc-pill{position:absolute;transform:translateX(-50%);pointer-events:none;z-index:3;display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:5px 10px;border-radius:10px;background:var(--chart-tooltip-bg);color:var(--chart-tooltip-fg);border:1px solid var(--chart-tooltip-border);
+  box-shadow:0 8px 22px rgba(0,0,0,.45);backdrop-filter:blur(6px);white-space:nowrap;font-family:inherit}
+.pxc-pill small{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--chart-label)}
+.pxc-pill b{font-size:13px;font-weight:800;letter-spacing:-.01em}
+.pxc-spark{position:relative;width:100%;min-width:40px;cursor:crosshair}
+.pxc-spark-dot{position:absolute;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 3px var(--chart-dot-ring);pointer-events:none}
+.pxc-ring{position:relative;flex:0 0 auto}
+.pxc-ring .pxc-track{stroke:var(--chart-track)}
+.pxc-ring-c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.1}
+.pxc-legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--chart-label)}
+.pxc-legend li{display:flex;align-items:center;gap:8px}
+.pxc-legend i{width:8px;height:8px;border-radius:3px;flex:0 0 auto}
+.pxc-legend b{margin-left:auto;color:var(--chart-5);font-weight:800}
+.pxc-tl{width:100%}
+.pxc-tl-track{position:relative;height:10px;border-radius:6px;background:var(--chart-track);overflow:hidden}
+.pxc-tl-track i{position:absolute;top:0;bottom:0;border-radius:6px;opacity:.9}
+.pxc-tl-now{position:absolute;top:-2px;bottom:-2px;width:2px;border-radius:2px;background:var(--chart-5);box-shadow:0 0 0 2px var(--chart-dot-ring)}
+.pxc-tl-ticks{display:flex;justify-content:space-between;margin-top:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--chart-label)}
+@media (prefers-reduced-motion:reduce){.pxc-ghost,.pxc-ghost-fill{animation:none}}

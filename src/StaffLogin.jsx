@@ -13,7 +13,7 @@ import AccessRequest from './AccessRequest.jsx';
 const COPY = {
   operator: {
     art: User, icon: User, title: 'Operator Access', subtitle: 'Sign in to manage operations',
-    headline: 'Smart Operations. Seamless Service.', sub: 'for your Restaurant & Café',
+    headline: 'Smart Operations. Seamless Service.', sub: 'for your Café & Restaurant',
     user: 'Username or Staff ID', pass: 'Access PIN', forgot: 'Forgot PIN?', kind: 'Operator',
   },
   kds: {

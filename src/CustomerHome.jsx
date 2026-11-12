@@ -11,6 +11,10 @@ import PwaInstallButton from './PwaInstallButton.jsx';
 import { fx, PrefsMenu, CustomerExtras, TimeGreeting, useBackClose } from './customerFx.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 import OffersExplorer from './OffersExplorer.jsx';
+import { AnimatedNumber, Reveal } from './motionKit.jsx';
+import { SPRING_SNAPPY } from './motionTokens.js';
+import { DonutRing, RingGauge, ChartLegend, TimelineStrip } from './chartKit.jsx';
+import './premium-polish.css';
 
 import API_BASE_URL from './apiBase.js';
 import { ensureModelViewer } from './modelViewer.js';
@@ -357,6 +361,23 @@ const statusLabel = (st, tr) => {
   const when = st.dayOffset === 0 ? '' : st.dayOffset === 1 ? `${tr.tomorrow} ` : `${tr.days[st.opensDay]} `;
   return { tone: 'closed', text: `${tr.closedNow} · ${tr.opensAt} ${when}${fmtClock(st.opensAt)}` };
 };
+/* Today's open windows in IST minutes (overnight windows split across midnight) - feeds the 24h hours strip. */
+const todaySegments = (hours, nowMs = Date.now()) => {
+  const segs = [];
+  if (!hours || typeof hours !== 'object' || hours.temporarilyClosed === true) return { segs, now: null };
+  const ist = new Date(nowMs + 330 * 60000);
+  const day = ist.getUTCDay();
+  const add = (from, to) => { if (to > from) segs.push({ from, to }); };
+  const w = hoursWindow(hours, day);
+  const y = hoursWindow(hours, (day + 6) % 7);
+  if (w) { if (w.o === w.c) add(0, 1440); else if (w.o < w.c) add(w.o, w.c); else add(w.o, 1440); }
+  if (y && y.o > y.c) add(0, y.c);
+  return { segs, now: ist.getUTCHours() * 60 + ist.getUTCMinutes() };
+};
+const PULSE = {
+  en: { title: 'Around you right now', open: (n, k) => `${n} of ${k} open now`, mix: 'Café vs dine-in', openLbl: 'open' },
+  mr: { title: 'सध्याची स्थिती', open: (n, k) => `${k} पैकी ${n} आता सुरू`, mix: 'कॅफे / डाइन-इन', openLbl: 'सुरू' },
+};
 const hoursRange = (blk) => {
   const o = toMin(blk?.open);
   const c = toMin(blk?.close);
@@ -668,6 +689,15 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 }
 .pxh-card:active{transform:scale(.985)}
 @media(max-width:719px){.pxh-card>button.main[style*="padding-top"]{padding-top:40px!important}}
+.pxh-pulse{display:flex;align-items:center;gap:16px;margin-top:14px;padding:13px 15px;border:1px solid rgba(211,191,162,.14);border-radius:20px;background:linear-gradient(150deg,rgba(211,191,162,.08),rgba(255,255,255,.02) 60%)}
+.pxh-pulse-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.pxh-pulse-t small{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(211,191,162,.75)}
+.pxh-pulse-t b{font-size:13px;font-weight:700;color:#f7f3eb;line-height:1.3}
+.pxh-pulse-t span{font-size:10.5px;color:rgba(255,255,255,.5)}
+.pxh-pulse .pxc-ring-c b{font-size:15px;font-weight:800;color:#f7f3eb;letter-spacing:-.02em}
+.pxh-pulse .pxc-ring-c small{font-size:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:rgba(211,191,162,.7);margin-top:2px}
+.pxh-pulse-mix{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+@media(max-width:400px){.pxh-pulse{gap:12px;padding:12px}.pxh-pulse-mix .pxc-legend{display:none}}
 .pxh-hint{margin-top:6px;font-size:11.5px;color:rgba(255,255,255,.42);line-height:1.5}
 .pxh-made{margin:34px 0 8px;text-align:center;font-size:11px;letter-spacing:.04em;color:rgba(211,191,162,.55)}
 .pxh-made i{display:inline-block;font-style:normal;color:#d98a7a;animation:pxhBeat 2.2s ease-in-out infinite}
@@ -868,6 +898,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr }) {
             <div style={{ marginTop: 12, padding: '11px 12px', borderRadius: 14, border: '1px solid rgba(211,191,162,.14)', background: 'rgba(255,255,255,.025)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 900, letterSpacing: 1.4, textTransform: 'uppercase', color: 'rgba(211,191,162,.75)' }}><Clock size={12} /> {tr.hoursTitle || 'Hours'}</div>
               {lab && <div className={`pxh-status ${lab.tone}`} style={{ fontSize: 12, marginTop: 8 }}><i /><span>{lab.text}</span></div>}
+              {(() => { const { segs, now } = todaySegments(t.hours); return segs.length ? <div style={{ marginTop: 11 }}><TimelineStrip segments={segs} nowMin={now} ariaLabel={`${tr.hoursTitle || 'Hours'} - ${lab?.text || ''}`} /></div> : null; })()}
               <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 11.5, color: 'rgba(255,255,255,.6)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>{tr.monFri}</span><span>{hoursRange(t.hours.weekday)}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><span>{tr.satSun}</span><span>{hoursRange(t.hours.weekend)}</span></div>
@@ -1609,7 +1640,7 @@ export default function CustomerHome() {
               {guestName
                 ? <span>{greetingLine}</span>
                 : (!loading && tenants.length > 0)
-                  ? <><i className="pxh-live" /><span>{tenants.length} {tenants.length === 1 && lang !== 'mr' ? 'place live now' : tr.heroLive}</span></>
+                  ? <><i className="pxh-live" /><span><AnimatedNumber value={tenants.length} /> {tenants.length === 1 && lang !== 'mr' ? 'place live now' : tr.heroLive}</span></>
                   : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
@@ -1702,13 +1733,13 @@ export default function CustomerHome() {
 
         {/* ── Filter chips (single scrollable row) ── */}
         <div className="pxh-chips" role="toolbar" aria-label="Filters">
-          <button type="button" className={`pxh-chip${filter === 'all' && !service && !favOnly && !offersOnly && !vegOnly && !openOnly ? ' on' : ''}`} onClick={resetFilters}><LayoutGrid size={13} /> {tr.all}</button>
-          <button type="button" className={`pxh-chip${filter === 'cafe' ? ' on' : ''}`} onClick={() => setFilter(filter === 'cafe' ? 'all' : 'cafe')}><Coffee size={13} /> {tr.cafe}</button>
-          <button type="button" className={`pxh-chip${filter === 'restaurant' ? ' on' : ''}`} onClick={() => setFilter(filter === 'restaurant' ? 'all' : 'restaurant')}><UtensilsCrossed size={13} /> {tr.dine}</button>
-          <button type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> {tr.saved}</button>
-          {anyHours && <button type="button" className={`pxh-chip${openOnly ? ' on' : ''}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}><Clock size={13} /> {tr.openNow}</button>}
-          {totalOffers > 0 && <button type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</button>}
-          {anyVeg && <button type="button" className={`pxh-chip${vegOnly ? ' on' : ''}`} aria-pressed={vegOnly} onClick={() => setVegOnly(!vegOnly)}><Leaf size={13} /> {tr.veg}</button>}
+          <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${filter === 'all' && !service && !favOnly && !offersOnly && !vegOnly && !openOnly ? ' on' : ''}`} onClick={resetFilters}><LayoutGrid size={13} /> {tr.all}</motion.button>
+          <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${filter === 'cafe' ? ' on' : ''}`} onClick={() => setFilter(filter === 'cafe' ? 'all' : 'cafe')}><Coffee size={13} /> {tr.cafe}</motion.button>
+          <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${filter === 'restaurant' ? ' on' : ''}`} onClick={() => setFilter(filter === 'restaurant' ? 'all' : 'restaurant')}><UtensilsCrossed size={13} /> {tr.dine}</motion.button>
+          <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${favOnly ? ' on' : ''}`} onClick={() => setFavOnly(!favOnly)}><Heart size={13} fill={favOnly ? 'currentColor' : 'none'} /> {tr.saved}</motion.button>
+          {anyHours && <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${openOnly ? ' on' : ''}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)}><Clock size={13} /> {tr.openNow}</motion.button>}
+          {totalOffers > 0 && <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</motion.button>}
+          {anyVeg && <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${vegOnly ? ' on' : ''}`} aria-pressed={vegOnly} onClick={() => setVegOnly(!vegOnly)}><Leaf size={13} /> {tr.veg}</motion.button>}
         </div>
 
         {/* ── Area filter + Near me ── */}
@@ -1726,6 +1757,38 @@ export default function CustomerHome() {
             {geoMsg && <div role="status" style={{ marginTop: 6, fontSize: 11, color: 'rgba(211,191,162,.75)' }}>{tr[geoMsg] || ''}</div>}
           </div>
         )}
+
+        {/* ── City pulse: real counts from the live directory (open now · café vs dine-in) ── */}
+        {!loading && tenants.length >= 3 && !query.trim() && (() => {
+          const pl = PULSE[lang === 'mr' ? 'mr' : 'en'];
+          const known = tenants.filter((t) => openStatus(t.hours, minuteKey * 60000)).length;
+          const cafes = tenants.filter(isCafe).length;
+          const dine = tenants.length - cafes;
+          const pct = known ? Math.round((openCount / known) * 100) : 0;
+          return (
+            <Reveal y={10} duration={0.5}>
+              <section className="pxh-pulse" aria-label={pl.title}>
+                {anyHours && known > 0 && (
+                  <RingGauge value={pct} size={64} stroke={7} ariaLabel={pl.openLbl}>
+                    <b>{openCount}</b><small>{pl.openLbl}</small>
+                  </RingGauge>
+                )}
+                <div className="pxh-pulse-t">
+                  <small>{pl.title}</small>
+                  <b>{anyHours && known > 0 ? pl.open(openCount, known) : `${tenants.length} ${tenants.length === 1 && lang !== 'mr' ? 'place' : tr.places}`}</b>
+                  {totalOffers > 0 && <span>{totalOffers} {tr.statOffers}</span>}
+                </div>
+                {cafes > 0 && dine > 0 && (
+                  <div className="pxh-pulse-mix">
+                    <DonutRing size={54} thickness={9} ariaLabel={pl.mix}
+                      segments={[{ label: tr.cafe, value: cafes, color: 'var(--chart-1)' }, { label: tr.dine, value: dine, color: 'var(--chart-2)' }]} />
+                    <ChartLegend items={[{ label: tr.cafe, value: cafes, color: 'var(--chart-1)' }, { label: tr.dine, value: dine, color: 'var(--chart-2)' }]} />
+                  </div>
+                )}
+              </section>
+            </Reveal>
+          );
+        })()}
 
         {/* ── Featured placements ── */}
         {showFeatured && (

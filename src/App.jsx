@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RingGauge } from './chartKit.jsx';
+import './premium-polish.css';
 import { useParams } from 'react-router-dom';
 import PwaInstallButton from './PwaInstallButton.jsx';
 import { AmbientBackdrop, BrandLoader } from './PremiumUI.jsx';
@@ -7178,6 +7180,11 @@ if (qrCheck === 'unverified') {
     </div>
     {orderEta.etaSeconds != null ? (
       <>
+        <div style={{ display:'flex', justifyContent:'center', marginBottom:'10px' }}>
+          <RingGauge value={prepPct} size={88} stroke={7} ariaLabel={language === 'mr' ? 'तयारीची प्रगती' : 'Preparation progress'}>
+            <b style={{ color:'#f7f3eb', fontSize:'1.05rem', fontWeight:'900', letterSpacing:'-0.5px' }}>{prepPct}%</b>
+          </RingGauge>
+        </div>
         <div style={{ color:'#d3bfa2', fontSize:'1.5rem', fontWeight:'900', letterSpacing:'-0.5px' }}>{orderEta.delayed || etaLeftSeconds(orderEta, etaNow) <= 45 ? etaLabel(orderEta, etaNow, language) : orderEta.etaTime}</div>
         <div style={{ color:'rgba(255,255,255,0.45)', fontSize:'0.66rem', marginTop:'3px' }}>
           {etaLabel(orderEta, etaNow, language)}{orderEta.aheadCount > 0 ? ` · ${orderEta.aheadCount} ${language === 'mr' ? 'ऑर्डर पुढे' : (orderEta.aheadCount === 1 ? 'order ahead' : 'orders ahead')}` : ''}

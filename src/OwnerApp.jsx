@@ -1101,10 +1101,10 @@ const AuthErrorScreen = () => {
   // The launcher jumps straight to the remembered outlet, so a mistyped or removed outlet left no way to pick another one.
   const switchOutlet = () => { try { localStorage.removeItem(LAST_TENANT_KEY); } catch (e) {} navigate('/owner'); };
   return (
-    <PxAuthShell art={PxCrown} headline="Grow Your Restaurant Business" sub="Smarter Tools. Greater Insights.">
-      <PxCard icon={WifiOff} title={authBlocked ? 'Account unavailable' : "Couldn't reach the server"} subtitle={<span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}</span>}>
+    <PxAuthShell art={PxCrown} headline="Grow Your Café & Restaurant Business" sub="Smarter Tools. Greater Insights.">
+      <PxCard icon={WifiOff} title={authBlocked ? 'Account unavailable' : "Couldn't reach the server"} subtitle={<span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{authErrorDetail || 'Something went wrong checking your account.'}</span>}>
         <PxButton type="button" icon={RefreshCcw} onClick={retryAuth}>Retry</PxButton>
-        <div style={{ textAlign: 'center', marginTop: 8 }}><PxLink onClick={switchOutlet}>Use a different restaurant</PxLink></div>
+        <div style={{ textAlign: 'center', marginTop: 8 }}><PxLink onClick={switchOutlet}>Switch to a different outlet</PxLink></div>
       </PxCard>
     </PxAuthShell>
   );
@@ -1134,8 +1134,8 @@ const LoginScreen = () => {
   };
 
   return (
-    <PxAuthShell art={PxCrown} headline="Grow Your Restaurant Business" sub="Smarter Tools. Greater Insights.">
-      <PxCard icon={PxCrown} title="Owner Login" subtitle={<>Access your restaurant dashboard<br /><span style={{ fontSize: 12, color: PX.faint }}>Restaurant: <b style={{ color: PX.goldDeep }}>{tenantId}</b></span></>}>
+    <PxAuthShell art={PxCrown} headline="Grow Your Café & Restaurant Business" sub="Smarter Tools. Greater Insights.">
+      <PxCard icon={PxCrown} title="Owner Login" subtitle="Access your business dashboard">
         <form onSubmit={submit} noValidate>
           <PxField icon={PxMail} label="Username or email" placeholder="Username or email" value={username} onChange={e => setUsername(e.target.value)} autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
           <PxField icon={PxLock} type="password" label="Password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
@@ -1168,7 +1168,7 @@ const SetupScreen = ({ onBack }) => {
 
   const next = (e) => {
     e.preventDefault();
-    if (!operatorPassword) { setErrs({ op: 'Enter the restaurant operator password' }); return; }
+    if (!operatorPassword) { setErrs({ op: 'Enter the operator password' }); return; }
     setErrs({}); setError(''); setStep(2);
   };
 
@@ -1188,7 +1188,7 @@ const SetupScreen = ({ onBack }) => {
     } catch (err) {
       const d = err?.response?.data;
       if (d?.code === 'OPERATOR_PASSWORD_REQUIRED') { setStep(1); setErrs({ op: 'That operator password is not correct.' }); setError(''); }
-      else if (err?.response?.status === 409) { if (onBack) onBack('An owner login already exists for this restaurant. Please sign in.'); else setError(d?.error); }
+      else if (err?.response?.status === 409) { if (onBack) onBack('An owner login already exists for this business. Please sign in.'); else setError(d?.error); }
       else setError(d?.error || (err?.response ? 'Could not complete sign-up' : 'Cannot reach the server. Check your internet and try again.'));
     } finally { setLoading(false); }
   };
@@ -1200,12 +1200,12 @@ const SetupScreen = ({ onBack }) => {
   );
 
   return (
-    <PxAuthShell art={PxUserPlus} headline="Create your owner account" sub="One quick setup, then your whole restaurant is at your fingertips.">
-      <PxCard icon={PxUserPlus} title="Create Account" subtitle={step === 1 ? <>Verify you can manage <b style={{ color: PX.goldDeep }}>{tenantId}</b>. Ask your manager or Pratyeksha support for the restaurant operator password.</> : 'Choose how you will sign in. You only do this once.'}>
+    <PxAuthShell art={PxUserPlus} headline="Create your owner account" sub="One quick setup, then your whole business is at your fingertips.">
+      <PxCard icon={PxUserPlus} title="Create Account" subtitle={step === 1 ? 'Verify you can manage this business. Ask your manager or Pratyeksha support for the operator password.' : 'Choose how you will sign in. You only do this once.'}>
         {dots}
         {step === 1 ? (
           <form onSubmit={next} noValidate>
-            <PxField icon={PxKey} type="password" label="Restaurant operator password" placeholder="Restaurant operator password" value={operatorPassword} onChange={e => setOperatorPassword(e.target.value)} error={errs.op} autoComplete="off" autoFocus />
+            <PxField icon={PxKey} type="password" label="Operator password" placeholder="Operator password" value={operatorPassword} onChange={e => setOperatorPassword(e.target.value)} error={errs.op} autoComplete="off" autoFocus />
             <PxAlert>{error}</PxAlert>
             <PxButton type="submit">Continue</PxButton>
           </form>
