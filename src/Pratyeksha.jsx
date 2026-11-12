@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { UtensilsCrossed } from "lucide-react";
-import { AnimatedNumber, ScrollProgress } from "./motionKit.jsx";
-import { BarChart, RingGauge, Sparkline } from "./chartKit.jsx";
-import "./premium-polish.css";
 
 // Shared base: with VITE_API_URL unset this used "" and posted to /demo-request on the Vercel host (404), losing every lead.
 import API_BASE_URL from "./apiBase.js";
@@ -2414,7 +2411,6 @@ function App() {
       </div>
       <main className="nx-main">
         {/* ───────── HERO ───────── */}
-        <ScrollProgress />
         <section id="home" className="nx-hero">
           <div className="nx-hero-bg" aria-hidden="true"><i className="glow" /></div>
           <div className="nx-hero-copy">
@@ -2438,11 +2434,6 @@ function App() {
               <BrandLogo className="nx-phone-logo" alt="Pratyeksha logo" />
               <HeroLiveFeed />
               <div className="nx-phone-card"><span><I name="qr" size={16} /></span><div><strong>Smart Menu Active</strong><small>3D · Voice · Bilingual</small></div><I name="arrow" size={15} /></div>
-            </div>
-            <div className="nx-pulse" role="group" aria-label="Sample sales pulse">
-              <div className="nx-pulse-h"><span>TODAY · SAMPLE</span><em>+12.8%</em></div>
-              <AnimatedNumber className="nx-pulse-n" value={48260} prefix="₹ " />
-              <Sparkline data={[18, 24, 21, 33, 29, 41, 38, 52, 47, 61]} height={34} ariaLabel="Sample sales trend" />
             </div>
           </div>
         </section>
@@ -2896,16 +2887,16 @@ function App() {
                 <div className="nx-board-main">
                   <div className="nx-board-hello"><div><small>GOOD EVENING</small><b>Restaurant overview</b></div><button type="button" tabIndex={-1}>View live floor <I name="arrow" size={12} /></button></div>
                   <div className="nx-metrics">
-                    <div><small>TODAY'S SALES</small><strong><AnimatedNumber value={48260} prefix="₹ " /></strong><em>+12.8%</em><div className="nx-m-spark"><Sparkline data={[30, 36, 33, 45, 41, 58, 52, 66]} height={26} ariaLabel="Sample sales trend" /></div></div>
-                    <div><small>ORDERS</small><strong><AnimatedNumber value={126} /></strong><em>+18</em><div className="nx-m-spark"><Sparkline data={[12, 15, 14, 19, 17, 24, 21, 27]} height={26} color="var(--chart-3)" ariaLabel="Sample orders trend" /></div></div>
-                    <div><small>ACTIVE TABLES</small><strong><AnimatedNumber value={18} /></strong><div className="nx-m-ring"><RingGauge value={75} size={34} stroke={5} ariaLabel="Table occupancy (sample)" /><em style={{ marginTop: 0 }}>06 OPEN</em></div></div>
-                    <div><small>KITCHEN FLOW</small><strong><AnimatedNumber value={94} suffix="%" /></strong><em>STABLE</em></div>
+                    <div><small>TODAY'S SALES</small><strong>₹ 48,260</strong><em>+12.8%</em></div>
+                    <div><small>ORDERS</small><strong>126</strong><em>+18</em></div>
+                    <div><small>ACTIVE TABLES</small><strong>18</strong><em>06 OPEN</em></div>
+                    <div><small>KITCHEN FLOW</small><strong>94%</strong><em>STABLE</em></div>
                   </div>
                   <div className="nx-board-low">
                     <div className="nx-panel">
-                      <header><span>Revenue rhythm</span><small>LAST 7 DAYS · SAMPLE</small></header>
-                      <BarChart height={138} highlight={5} ariaLabel="Revenue rhythm, last 7 days (sample data)" format={(v) => `₹ ${v}k`}
-                        data={[["Mon", 42], ["Tue", 55], ["Wed", 48], ["Thu", 72], ["Fri", 61], ["Sat", 88], ["Sun", 76]].map(([label, value]) => ({ label, value }))} />
+                      <header><span>Revenue rhythm</span><small>LAST 7 DAYS</small></header>
+                      <div className="nx-spark" aria-hidden="true">{[42, 55, 48, 72, 61, 88, 76].map((h, i) => <i key={i} style={{ "--h": `${h}%`, "--i": i }} />)}</div>
+                      <footer>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <span key={d}>{d}</span>)}</footer>
                     </div>
                     <div className="nx-panel nx-activity">
                       <header><span>Live activity</span><small>NOW</small></header>

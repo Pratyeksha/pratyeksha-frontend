@@ -1188,17 +1188,48 @@ const AdminSkeleton = () => (
    sidebar remounted on every state change (each keystroke in any form). */
 /* Role-based menu: the signed-in person's modules (from /team/me). null = not loaded yet or owner, so everything shows. */
 const NavAccess = createContext(null);
+/* Related tabs live under ONE sidebar entry: [hub id, sidebar label, icon, [[section id, tab label], …]] */
+const HUBS = [
+  ['leads',    'Leads & Demos', CalendarClock, [['demos','Demo requests'],['crm','Lead CRM'],['sales','Sales tools']]],
+  ['tracking', 'Tracking',      Radar,         [['tracking','Platform tracking'],['success','Client success'],['discovery','Discovery']]],
+  ['clients',  'Clients',       Building2,     [['clients','Client partners'],['onboard','Onboard client'],['plans','Plans & trials'],['control','Client control'],['documents','Documents']]],
+  ['qr',       'QR',            QrCode,        [['qrstudio','QR Studio'],['qrstock','QR stands']]],
+  ['support',  'Support',       LifeBuoy,      [['support','Tickets & help'],['platform','Platform health']]],
+  ['money',    'Finance',       Wallet,        [['finance','Finance'],['expenses','Operating costs'],['influencers','Influencers']]],
+  ['comms',    'Communications',MessageSquare, [['comms','Messages'],['notifications','Notifications']]],
+  ['reports',  'Reports',       FileBarChart,  [['reports','Reports']]],
+  ['settings', 'Settings',      Settings2,     [['settings','Settings'],['compliance','Compliance'],['team','Team & security']]],
+];
+const HubBar = ({ active, onNav }) => {
+  const mods = useContext(NavAccess);
+  const hub = HUBS.find((h) => h[3].some((m) => m[0] === active));
+  if (!hub) return null;
+  const tabs = hub[3].filter((m) => !mods || mods.includes(m[0]));
+  if (tabs.length < 2) return null;
+  const Icon = hub[2];
+  return (
+    <nav aria-label={`${hub[1]} sections`} className="no-sb p-hubbar" style={{ display:'flex', alignItems:'center', gap:6, overflowX:'auto', padding:'14px clamp(14px,2.4vw,34px) 0', flexShrink:0 }}>
+      <span style={{ display:'inline-flex', alignItems:'center', gap:7, marginRight:6, fontSize:10, letterSpacing:2.2, color:GOLD, fontWeight:800, textTransform:'uppercase', whiteSpace:'nowrap' }}><Icon size={13} /> {hub[1]}</span>
+      {tabs.map(([id, text]) => { const on = id === active; return (
+        <button key={id} type="button" onClick={() => onNav(id)} aria-current={on ? 'page' : undefined} style={{ flex:'0 0 auto', padding:'7px 13px', borderRadius:12, cursor:'pointer', fontFamily:'inherit', fontSize:11.5, fontWeight:700, whiteSpace:'nowrap', border:`1px solid ${on ? 'rgba(211,191,162,0.5)' : LINE}`, background: on ? 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))' : 'transparent', color: on ? '#f7f3eb' : 'rgba(255,255,255,0.55)' }}>{text}</button>
+      ); })}
+    </nav>
+  );
+};
 const NavGroup = ({ label, ids }) => {
   const mods = useContext(NavAccess);
   if (mods && !ids.some((i) => mods.includes(i))) return null;
   return <div className="p-nav-group">{label}</div>;
 };
-const NavItem = ({ id, label, icon:Icon, count, urgent, active, onNav }) => {
+/* One sidebar entry can stand for a whole hub of related tabs (`ids`); it opens the first one the person may see. */
+const NavItem = ({ id, ids, label, icon:Icon, count, urgent, active, onNav }) => {
     const mods = useContext(NavAccess);
-    if (mods && !mods.includes(id)) return null;
-    const isActive = active===id;
+    const members = ids || [id];
+    const target = members.find((m) => !mods || mods.includes(m));
+    if (!target) return null;
+    const isActive = members.includes(active);
     return (
-      <button type="button" onClick={()=>onNav(id)} className="p-nav-item" aria-current={isActive ? 'page' : undefined} style={{
+      <button type="button" onClick={()=>onNav(isActive ? active : target)} className="p-nav-item" aria-current={isActive ? 'page' : undefined} style={{
         width:'100%', display:'flex', alignItems:'center', gap:10,
         padding:'5px 11px', borderRadius:11, cursor:'pointer', fontFamily:'inherit',
         /* same pill language as the Tracking tab's section tabs: gold outline + soft gold wash when selected */
@@ -1746,34 +1777,19 @@ function PratyekshaMasterAdminInner() {
           {/* Nav — grouped; it takes the free height and scrolls only if the window is very short */}
           <nav aria-label="Main" className="no-sb" style={{ display:'flex', flexDirection:'column', gap:1, marginBottom:8, overflowY:'auto', minHeight:0, flex:'1 1 auto', paddingRight:2 }}>
             <NavItem active={activeSection} onNav={navTo} id="dashboard" label="Dashboard" icon={BarChart3} />
-            <NavGroup label="Sales pipeline" ids={['demos','crm','tracking','sales']} />
-            <NavItem active={activeSection} onNav={navTo} id="demos" label="Demo Requests" icon={CalendarClock} count={demoCounts.Pending} urgent />
-            <NavItem active={activeSection} onNav={navTo} id="crm" label="Lead CRM" icon={Users} />
-            <NavItem active={activeSection} onNav={navTo} id="tracking" label="Tracking" icon={Radar} />
-            <NavItem active={activeSection} onNav={navTo} id="sales" label="Sales" icon={TrendingUp} />
-            <NavGroup label="Clients" ids={['clients','onboard','success','plans','control','documents','qrstudio','qrstock','discovery','support','platform']} />
-            <NavItem active={activeSection} onNav={navTo} id="clients" label="Client Partners" icon={Building2} count={clients.length} />
-            <NavItem active={activeSection} onNav={navTo} id="onboard" label="Onboard Client" icon={UserPlus} />
-            <NavItem active={activeSection} onNav={navTo} id="success" label="Client Success" icon={HeartPulse} />
-            <NavItem active={activeSection} onNav={navTo} id="plans" label="Plans & Trials" icon={Layers} />
-            <NavItem active={activeSection} onNav={navTo} id="control" label="Client Control" icon={ShieldCheck} />
-            <NavItem active={activeSection} onNav={navTo} id="documents" label="Documents" icon={FileText} />
-            <NavItem active={activeSection} onNav={navTo} id="qrstudio" label="QR Studio" icon={QrCode} />
-            <NavItem active={activeSection} onNav={navTo} id="qrstock" label="QR Stands" icon={Boxes} />
-            <NavItem active={activeSection} onNav={navTo} id="discovery" label="Discovery" icon={Compass} />
-            <NavItem active={activeSection} onNav={navTo} id="support" label="Support" icon={LifeBuoy} />
-            <NavItem active={activeSection} onNav={navTo} id="platform" label="Platform" icon={Activity} />
+            <NavGroup label="Growth" ids={['demos','crm','sales','tracking','success','discovery']} />
+            <NavItem active={activeSection} onNav={navTo} id="demos" ids={['demos','crm','sales']} label="Leads & Demos" icon={CalendarClock} count={demoCounts.Pending} urgent />
+            <NavItem active={activeSection} onNav={navTo} id="tracking" ids={['tracking','success','discovery']} label="Tracking" icon={Radar} />
+            <NavGroup label="Clients" ids={['clients','onboard','plans','control','documents','qrstudio','qrstock','support','platform']} />
+            <NavItem active={activeSection} onNav={navTo} id="clients" ids={['clients','onboard','plans','control','documents']} label="Clients" icon={Building2} count={clients.length} />
+            <NavItem active={activeSection} onNav={navTo} id="qrstudio" ids={['qrstudio','qrstock']} label="QR" icon={QrCode} />
+            <NavItem active={activeSection} onNav={navTo} id="support" ids={['support','platform']} label="Support" icon={LifeBuoy} />
             <NavGroup label="Money" ids={['finance','expenses','influencers']} />
-            <NavItem active={activeSection} onNav={navTo} id="finance" label="Finance" icon={Wallet} />
-            <NavItem active={activeSection} onNav={navTo} id="expenses" label="Operating Costs" icon={Receipt} />
-            <NavItem active={activeSection} onNav={navTo} id="influencers" label="Influencers" icon={Megaphone} />
-            <NavGroup label="Platform" ids={['comms','reports','notifications','settings','compliance','team']} />
-            <NavItem active={activeSection} onNav={navTo} id="comms" label="Messages" icon={MessageSquare} />
+            <NavItem active={activeSection} onNav={navTo} id="finance" ids={['finance','expenses','influencers']} label="Finance" icon={Wallet} />
+            <NavGroup label="Platform" ids={['comms','notifications','reports','settings','compliance','team']} />
+            <NavItem active={activeSection} onNav={navTo} id="comms" ids={['comms','notifications']} label="Communications" icon={MessageSquare} />
             <NavItem active={activeSection} onNav={navTo} id="reports" label="Reports" icon={FileBarChart} />
-            <NavItem active={activeSection} onNav={navTo} id="notifications" label="Notifications" icon={Bell} />
-            <NavItem active={activeSection} onNav={navTo} id="settings" label="Settings" icon={Settings2} />
-            <NavItem active={activeSection} onNav={navTo} id="compliance" label="Compliance" icon={Scale} />
-            <NavItem active={activeSection} onNav={navTo} id="team" label="Team & security" icon={KeyRound} />
+            <NavItem active={activeSection} onNav={navTo} id="settings" ids={['settings','compliance','team']} label="Settings" icon={Settings2} />
           </nav>
 
           <div style={{ height:1, background:C.border, margin:'6px 0', flexShrink:0 }} />
@@ -1813,6 +1829,8 @@ function PratyekshaMasterAdminInner() {
 
       {/* ════════ MAIN ════════ */}
       <main className="p-main" style={{ flex:1, display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', minWidth:0 }}>
+        <HubBar active={activeSection} onNav={navTo} />
+        <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
 
         {/* ══ DEMO REQUESTS ══ */}
         {activeSection==='demos' && (
@@ -2877,6 +2895,7 @@ function PratyekshaMasterAdminInner() {
           </div>
         )}
 
+        </div>
       </main>
 
       <AnimatePresence>

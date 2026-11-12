@@ -1,0 +1,54 @@
+/* ───────────────────────────────────────────────
+   Pratyeksha premium layer — shared by every guest screen,
+   the loading screen and the installable apps.
+   Palette: ink #0b0b0c · champagne #d3bfa2 · bronze #8a704d · cream #f7f3eb
+   (no green / red in guest-facing UI)
+─────────────────────────────────────────────── */
+
+@keyframes pxOrbit { to { transform: rotate(360deg); } }
+@keyframes pxBreath { 0%,100% { transform: scale(1); opacity: .55; } 50% { transform: scale(1.12); opacity: .95; } }
+@keyframes pxSweep { 0% { transform: translateX(-130%) skewX(-18deg); } 55%,100% { transform: translateX(260%) skewX(-18deg); } }
+@keyframes pxRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pxFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes pxLoad { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+@keyframes pxTwinkle { 0%,100% { opacity: .15; transform: scale(.7) rotate(0deg); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
+@keyframes pxDrift { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(18px,-26px,0); } }
+
+/* Ambient backdrop used behind every guest screen */
+.px-ambient { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; background: radial-gradient(120% 80% at 50% -10%, #17140f 0%, #0b0b0c 55%, #070708 100%); }
+.px-ambient::before, .px-ambient::after { content: ''; position: absolute; border-radius: 50%; filter: blur(70px); }
+.px-ambient::before { width: 340px; height: 340px; top: -90px; right: -110px; background: rgba(211,191,162,.16); animation: pxDrift 14s ease-in-out infinite; }
+.px-ambient::after { width: 300px; height: 300px; bottom: -120px; left: -120px; background: rgba(138,112,77,.17); animation: pxDrift 18s ease-in-out infinite reverse; }
+.px-grain { position: absolute; inset: 0; opacity: .045; mix-blend-mode: overlay; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+
+/* Glass surface */
+.px-glass { background: linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.018)); border: 1px solid rgba(211,191,162,.15); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px rgba(0,0,0,.38); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+
+/* Gold button with a slow light sweep */
+.px-gold { position: relative; overflow: hidden; background: linear-gradient(135deg, #e6d6b8 0%, #d3bfa2 45%, #b99f78 100%); color: #14110c; border: 0; box-shadow: 0 12px 30px rgba(211,191,162,.22), inset 0 1px 0 rgba(255,255,255,.5); }
+.px-gold::after { content: ''; position: absolute; top: 0; bottom: 0; width: 38%; left: 0; background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent); animation: pxSweep 3.6s ease-in-out infinite; }
+.px-gold:disabled { opacity: .5; box-shadow: none; }
+.px-gold:disabled::after { animation: none; }
+
+/* Entrance helper */
+.px-rise { animation: pxRise .55s cubic-bezier(.2,.8,.2,1) backwards; }
+
+/* ── Brand loader ── */
+.px-loader { position: fixed; inset: 0; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; background: radial-gradient(120% 80% at 50% 0%, #1a160f 0%, #0b0b0c 58%, #070708 100%); color: #d3bfa2; font-family: Poppins, system-ui, sans-serif; overflow: hidden; }
+.px-loader.inline { position: relative; inset: auto; min-height: 100vh; min-height: 100dvh; z-index: 1; }
+.px-loader .halo { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(211,191,162,.22), transparent 62%); animation: pxBreath 3.4s ease-in-out infinite; }
+.px-loader .stage { position: relative; width: min(78vw, 300px); display: flex; align-items: center; justify-content: center; padding: 14px; }
+.px-loader .ring { position: absolute; inset: -4px; border-radius: 34px; padding: 2px; background: conic-gradient(from 0deg, transparent 0 55%, rgba(211,191,162,.95) 78%, transparent 100%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: pxOrbit 2.6s linear infinite; }
+.px-loader .ring.slow { inset: -14px; border-radius: 42px; opacity: .45; animation-duration: 5.2s; animation-direction: reverse; }
+.px-loader .card { position: relative; overflow: hidden; width: 100%; border-radius: 28px; background: #f7f3eb; padding: 24px 22px; box-shadow: 0 30px 70px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.4) inset; animation: pxFloat 4.6s ease-in-out infinite; }
+.px-loader .card img { display: block; width: 100%; height: auto; }
+.px-loader .card::after { content: ''; position: absolute; top: 0; bottom: 0; width: 32%; left: 0; background: linear-gradient(100deg, transparent, rgba(255,255,255,.85), transparent); animation: pxSweep 2.8s ease-in-out infinite; }
+.px-loader .spark { position: absolute; width: 9px; height: 9px; background: #d3bfa2; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); animation: pxTwinkle 2.6s ease-in-out infinite; }
+.px-loader .bar { position: relative; width: 120px; height: 3px; border-radius: 3px; background: rgba(211,191,162,.14); overflow: hidden; }
+.px-loader .bar i { position: absolute; inset: 0; width: 38%; border-radius: 3px; background: linear-gradient(90deg, transparent, #d3bfa2, transparent); animation: pxLoad 1.5s ease-in-out infinite; }
+.px-loader .msg { font-size: 10px; font-weight: 700; letter-spacing: .32em; text-transform: uppercase; color: rgba(211,191,162,.55); text-align: center; padding: 0 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .px-ambient::before, .px-ambient::after, .px-loader .halo, .px-loader .ring, .px-loader .card, .px-loader .card::after, .px-loader .bar i, .px-loader .spark, .px-gold::after { animation: none !important; }
+  .px-rise { animation: none; }
+}
