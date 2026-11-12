@@ -7,7 +7,7 @@ import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cart
 import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
 import { OPERATOR_AUTH_EVENT, getOperatorToken } from './operatorAuth.js';
 import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
-import { ForgotLink } from './ForgotPassword.jsx';
+import StaffLogin from './StaffLogin.jsx';
 import SpoonForkIcon from './SpoonForkIcon.jsx';
 const BellRing = SpoonForkIcon; // the crossed spoon & fork replaces the bell everywhere
 const Bell = SpoonForkIcon;
@@ -2507,10 +2507,10 @@ const removeDiscountPreset = (idx) => {
     setViewDate(prev => { const d=new Date(prev); d.setMonth(d.getMonth()+offset); return d; });
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  // Called by the new sign-in page: resolve = signed in (page reloads); throw Error(message) = shown inline under the form.
+  const handleLogin = async (creds) => {
     try {
-      const res = await axios.post(`${BASE_URL}/admin/login`, loginData);
+      const res = await axios.post(`${BASE_URL}/admin/login`, creds || loginData);
       localStorage.setItem('pratyeksha_token', res.data.token);
       localStorage.setItem('active_tenant', res.data.tenantId);
       localStorage.setItem('table_count', res.data.tableCount);
@@ -2518,11 +2518,12 @@ const removeDiscountPreset = (idx) => {
       window.location.reload();
     } catch (err) {
       const d = err?.response?.data;
-      if (err?.response?.status === 402 && d?.code === 'SUBSCRIPTION_EXPIRED') setExpiredInfo(d);
-      // Every failure (server asleep, no network, 500) was reported as "Invalid Credentials", so operators kept retyping a correct password.
-      else if (!err?.response) showNotif("Cannot reach the server — check your internet connection and try again", "error");
-      else if (err.response.status === 401 || err.response.status === 403 || err.response.status === 404) showNotif("Invalid Credentials", "error");
-      else showNotif(d?.error || "Login failed — please try again in a moment", "error");
+      if (err?.response?.status === 402 && d?.code === 'SUBSCRIPTION_EXPIRED') { setExpiredInfo(d); return; }
+      // Every failure (server asleep, no network, 500) was once reported as "Invalid Credentials", so operators kept retyping a correct password.
+      if (!err?.response) throw new Error('Cannot reach the server. Check your internet connection and try again.');
+      if (err.response.status === 429) throw new Error(d?.error || 'Too many attempts. Please wait a few minutes and try again.');
+      if (err.response.status === 401 || err.response.status === 403 || err.response.status === 404) throw new Error('Incorrect username or PIN.');
+      throw new Error(d?.error || 'Sign-in failed. Please try again in a moment.');
     }
   };
 
@@ -4945,21 +4946,7 @@ const renderMonthHeatmap = () => {
   if (!isAuthenticated && expiredInfo) return (
     <ExpiredPage name={expiredInfo.name} planExpiry={expiredInfo.planExpiry} reason={expiredInfo.reason} onSignOut={() => setExpiredInfo(null)} />
   );
-  if (!isAuthenticated) return (
-    <div style={{ ...styles.loginOverlay, position:'fixed', top:0, left:0, zIndex:50 }}>
-      <motion.div initial={false} animate={{opacity:1}} style={styles.loginBox}>
-        <img src={logoPath} alt="Logo" style={{...styles.sidebarLogo,filter:'none',background:'#f7f3eb',borderRadius:14,padding:'8px 12px',width:170}}/>
-        <h2 style={{fontSize:'1.35rem',margin:'18px 0 6px',fontWeight:'600',fontFamily:"'Playfair Display', Georgia, serif",letterSpacing:'0.04em',color:'#f7f3eb',textAlign:'center'}}>Admin Command Center</h2>
-        <div style={{fontSize:'0.62rem',letterSpacing:'0.22em',color:'#a6a6a6',fontWeight:'800',marginBottom:'30px'}}>SIGN IN TO CONTINUE</div>
-        <form onSubmit={handleLogin}>
-          <input type="text" placeholder="Username" style={styles.input} onChange={e=>setLoginData(p => ({...p, username:e.target.value}))}/>
-          <input type="password" placeholder="Access PIN" style={styles.input} onChange={e=>setLoginData(p => ({...p, password:e.target.value}))}/>
-          <button type="submit" style={styles.mainBtn}>INITIALIZE</button>
-          <div style={{ textAlign: 'center', marginTop: 12 }}><ForgotLink scope="operator" label="Forgot PIN?" defaultUsername={loginData.username} /></div>
-        </form>
-      </motion.div>
-    </div>
-  );
+  if (!isAuthenticated) return <StaffLogin variant="operator" onLogin={handleLogin} />;
 
   // ─────────────────────────────────────────────────────
   // MAIN RENDER — NOTE: ALL tab panels are siblings under <section>,

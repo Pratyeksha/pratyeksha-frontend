@@ -24,6 +24,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, RefreshCcw, Search, Users, Trophy, ShieldCheck, AlertCircle, Utensils, Coffee, CalendarClock, Phone, Mail, MapPin, ChevronRight, CheckCircle2, Clock, X, Menu, Plus, Power, RotateCcw, UserPlus, IndianRupee, AlertTriangle, Calendar, Store, BarChart3, Eye, EyeOff, Copy, Check, Wallet, Download, Smartphone, Upload, FileJson, Loader2, FileDown, Trash2,  Send, Receipt, Megaphone as MegaphoneIcon, TrendingDown, PlusCircle, Edit3, FileText, Radar, QrCode } from 'lucide-react';
 import { Megaphone, TrendingUp, HeartPulse, Layers, Settings2, Compass, LifeBuoy, Activity, Scale, KeyRound, MessageSquare, FileBarChart, Boxes } from 'lucide-react';   // (the main lucide import above only has Megaphone under an alias)
 import SpoonForkIcon from './SpoonForkIcon.jsx';
+import { PxAuthShell, PxCard, PxField, PxButton, PxLink, PxAlert, PxHomeLink, PxSecure } from './AuthKit.jsx';
+import { ShieldCheck as PxShieldCheck, Hash as PxHash, User as PxUser, Lock as PxLock } from 'lucide-react';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 
 const BASE_URL = API_BASE_URL;
@@ -2938,31 +2940,31 @@ function MasterLoginGate({ children }) {
       if (ticket && /expired|Too many|Start again/i.test(String(ex?.response?.data?.error || ''))) { setTicket(''); setCode(''); }
     } finally { setBusy(false); }
   };
-  const inp = { background: C.bgInput, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px', color: C.text, fontSize: 15, outline: 'none' };
   const disabled = busy || (ticket ? code.length !== 6 : (!pw || (team && !username.trim())));
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'grid', placeItems: 'center', padding: 24 }}>
-      <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <img src={BRAND_LOGO} alt="" style={{ height: 36, alignSelf: 'flex-start', objectFit: 'contain' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-        <div style={{ fontSize: 20, fontWeight: 600, color: C.goldPrimary }}>Platform admin</div>
-        {ticket ? (<>
-          <div style={{ fontSize: 13, color: C.textMid }}>Enter the 6-digit code from your authenticator app.</div>
-          <input inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="123456" aria-label="Authenticator code" style={{ ...inp, letterSpacing: 6, textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }} />
-        </>) : (<>
-          <div style={{ fontSize: 13, color: C.textMid }}>{team ? 'Sign in with your team username and password.' : 'Enter the platform admin password to continue.'}</div>
-          {team && <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" aria-label="Username" style={inp} />}
-          <input type="password" autoFocus={!team} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Password" aria-label="Password" style={inp} />
-        </>)}
-        {err && <div role="alert" style={{ fontSize: 13, color: '#e5736b' }}>{err}</div>}
-        <button type="submit" disabled={disabled}
-          style={{ background: C.goldPrimary, color: '#1a1a1a', border: 'none', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
-          {busy ? 'Signing in...' : ticket ? 'Verify' : 'Sign in'}
-        </button>
-        {ticket
-          ? <button type="button" onClick={() => { setTicket(''); setCode(''); setErr(''); }} style={{ background: 'none', border: 'none', color: C.textDim, fontSize: 12.5, cursor: 'pointer' }}>Start again</button>
-          : <button type="button" onClick={() => { setTeam((v) => !v); setErr(''); }} style={{ background: 'none', border: 'none', color: C.textDim, fontSize: 12.5, cursor: 'pointer' }}>{team ? 'Sign in as owner instead' : 'Team member? Sign in with your username'}</button>}
-      </form>
-    </div>
+    <PxAuthShell art={PxShieldCheck} headline="Platform Administration" sub="Control. Configure. Scale.">
+      <PxCard icon={PxShieldCheck} title="Master Admin Login"
+        subtitle={ticket ? 'Enter the 6-digit code from your authenticator app.' : team ? 'Sign in with your team username and password.' : 'Enter your credentials'}>
+        <form onSubmit={submit} noValidate>
+          {ticket ? (
+            <PxField icon={PxHash} label="Authentication code" placeholder="6-digit code" inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+          ) : (<>
+            {team && <PxField icon={PxUser} label="Username" placeholder="Team username" autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" value={username} onChange={(e) => setUsername(e.target.value)} />}
+            <PxField icon={PxLock} type="password" label="Password" placeholder={team ? 'Password' : 'Administrator Password'} autoFocus={!team} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+          </>)}
+          <PxAlert>{err}</PxAlert>
+          <PxButton type="submit" loading={busy} disabled={disabled}>{busy ? 'Signing in…' : ticket ? 'Verify' : 'Sign In'}</PxButton>
+        </form>
+        <div style={{ textAlign: 'center', marginTop: 8 }}>
+          {ticket
+            ? <PxLink onClick={() => { setTicket(''); setCode(''); setErr(''); }}>Start again</PxLink>
+            : <PxLink onClick={() => { setTeam((v) => !v); setErr(''); }}>{team ? 'Sign in as owner instead' : 'Team member? Sign in with username'}</PxLink>}
+        </div>
+        {!ticket && <PxAlert kind="info">Platform accounts are not self-service. The platform owner creates team members under Team &amp; security.</PxAlert>}
+        <PxHomeLink />
+        <PxSecure text="Protected sign-in · sessions can be revoked at any time" />
+      </PxCard>
+    </PxAuthShell>
   );
 }
 

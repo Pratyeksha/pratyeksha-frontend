@@ -13,6 +13,7 @@
    • Business logic (kds-item timing, dispatch, recall, 86, wastage, auth) is unchanged from the previous screen. */
 import React, { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback, useSyncExternalStore } from 'react';
 import SupportContact from './SupportContact.jsx';
+import StaffLogin from './StaffLogin.jsx';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
@@ -2844,48 +2845,28 @@ const KdsLoadError = ({ onRetry, detail }) => (
 const KitchenView = () => {
   const { tenantId } = useParams();
   const [needLogin, setNeedLogin] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '' });
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const onAuth = () => { setNeedLogin(true); setErr(''); };
+    const onAuth = () => setNeedLogin(true);
     window.addEventListener(OPERATOR_AUTH_EVENT, onAuth);
     return () => window.removeEventListener(OPERATOR_AUTH_EVENT, onAuth);
   }, []);
   if (!needLogin) return <KitchenViewInner />;
-  const submit = async (e) => {
-    e.preventDefault();
-    if (busy || !form.username || !form.password) return;
-    setBusy(true); setErr('');
+  // Resolve = signed in; throw Error(message) = shown inline by the sign-in page.
+  const login = async ({ username, password }) => {
     try {
-      const { data } = await axios.post(`${BASE_URL}/admin/login`, { username: form.username.trim(), password: form.password });
-      if (tenantId && data.tenantId !== tenantId) { setErr('These credentials belong to a different restaurant.'); return; }
+      const { data } = await axios.post(`${BASE_URL}/admin/login`, { username, password });
+      if (tenantId && data.tenantId !== tenantId) throw new Error('These credentials belong to a different restaurant.');
       setKitchenToken(data.token);
-      setForm({ username: '', password: '' });
       setNeedLogin(false); // remounts the kitchen screen, which now sends the new session
     } catch (ex) {
-      const st = ex?.response?.status, d = ex?.response?.data;
-      setErr(!st ? 'Cannot reach the server. Check the internet connection.'
-        : st === 402 ? (d?.error || 'This subscription has expired.')
-          : st === 429 ? (d?.error || 'Too many attempts. Try again in a few minutes.')
-            : st === 401 ? 'Incorrect username or password.' : (d?.error || 'Sign-in failed. Please try again.'));
-    } finally { setBusy(false); }
+      if (!ex?.response) throw ex.message && ex.message.startsWith('These') ? ex : new Error('Cannot reach the server. Check the internet connection.');
+      const st = ex.response.status, d = ex.response.data;
+      throw new Error(st === 402 ? (d?.error || 'This subscription has expired.')
+        : st === 429 ? (d?.error || 'Too many attempts. Try again in a few minutes.')
+          : st === 401 ? 'Incorrect username or password.' : (d?.error || 'Sign-in failed. Please try again.'));
+    }
   };
-  return (
-    <div className="kx" style={{ display: 'grid', placeItems: 'center', padding: 24 }}>
-      <style>{KX_CSS}</style>
-      <form onSubmit={submit} className="kx-modal" style={{ width: '100%', maxWidth: 400, padding: 28, gap: 14 }}>
-        <div style={{ alignSelf: 'flex-start' }}><BrandLogo /></div>
-        <div className="kx-kds" style={{ marginTop: 6 }}><ChefHat size={13} /> Kitchen display</div>
-        <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '1.6rem', fontWeight: 700 }}>Kitchen sign-in</div>
-        <div style={{ fontSize: '.8rem', color: '#9b978d', lineHeight: 1.5 }}>Sign in with the restaurant account to open the kitchen screen on this device.</div>
-        <input className="kx-in" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Username" autoCapitalize="none" autoCorrect="off" autoComplete="username" style={{ padding: '14px 16px', fontSize: '1rem' }} />
-        <input className="kx-in" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" autoComplete="current-password" style={{ padding: '14px 16px', fontSize: '1rem' }} />
-        {err && <div role="alert" className="kx-err">{err}</div>}
-        <button type="submit" className="kx-btn solid block" disabled={busy || !form.username || !form.password} style={{ minHeight: 52 }}>{busy ? 'Signing in…' : 'Sign in'}</button>
-      </form>
-    </div>
-  );
+  return <StaffLogin variant="kds" onLogin={login} />;
 };
 
 export default KitchenView;

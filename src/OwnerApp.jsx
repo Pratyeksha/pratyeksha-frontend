@@ -23,6 +23,8 @@ import autoTable from 'jspdf-autotable';
 import { RenewalReminder } from './SubscriptionGate.jsx';
 import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
 import { ForgotLink } from './ForgotPassword.jsx';
+import { PxAuthShell, PxCard, PxField, PxButton, PxLink, PxDivider, PxAlert, PxSecure, PxStrength, passwordIssues, PX } from './AuthKit.jsx';
+import { Crown as PxCrown, Mail as PxMail, Lock as PxLock, User as PxUser, KeyRound as PxKey, UserPlus as PxUserPlus } from 'lucide-react';
 import {
   LayoutDashboard, TrendingUp, PieChart as PieIcon, UtensilsCrossed, Package, ChefHat,
   Users, UserCircle2,  ShieldCheck, ClipboardList, Settings as SettingsIcon, LogOut,
@@ -1085,12 +1087,11 @@ const AuthShell = ({ children }) => (
 );
 
 const AuthSplash = () => (
-  <div className="pown" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg,#f7eee2,#efe1cf 50%,#f9f1e7)' }}>
     <GlobalStyles />
-    <div className="pown-pulse" style={{
-      width: 150, height: 62, borderRadius: 18, background: '#f7f3eb',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 12px'
-    }}><img src={BRAND_LOGO} alt="Pratyeksha" style={{ width:'100%', height:'100%', objectFit:'contain' }} /></div>
+    <div className="pown-pulse" style={{ width: 150, height: 62, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <img src={BRAND_LOGO} alt="Pratyeksha" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+    </div>
   </div>
 );
 
@@ -1100,119 +1101,132 @@ const AuthErrorScreen = () => {
   // The launcher jumps straight to the remembered outlet, so a mistyped or removed outlet left no way to pick another one.
   const switchOutlet = () => { try { localStorage.removeItem(LAST_TENANT_KEY); } catch (e) {} navigate('/owner'); };
   return (
-    <AuthShell>
-      <Card style={{ borderColor: T.dangerSoft.replace('0.14', '0.4') }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: T.dangerSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <WifiOff size={16} color={T.danger} />
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{authBlocked ? 'Account unavailable' : "Couldn't reach the server"}</div>
-        </div>
-        <div style={{ fontSize: 12, color: T.textMed, marginBottom: 18, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}
-        </div>
-        <PrimaryBtn icon={RefreshCcw} onClick={retryAuth} style={{ width: '100%', justifyContent: 'center' }}>Retry</PrimaryBtn>
-        <button type="button" onClick={switchOutlet} className="pown-btn" style={{ width: '100%', marginTop: 10, background: 'transparent', color: T.textLow, fontSize: 12, fontWeight: 700, padding: '8px 0' }}>Use a different outlet</button>
-      </Card>
-    </AuthShell>
+    <PxAuthShell art={PxCrown} headline="Grow Your Restaurant Business" sub="Smarter Tools. Greater Insights.">
+      <PxCard icon={WifiOff} title={authBlocked ? 'Account unavailable' : "Couldn't reach the server"} subtitle={<span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{authErrorDetail || `Something went wrong checking the account for ${tenantId}.`}</span>}>
+        <PxButton type="button" icon={RefreshCcw} onClick={retryAuth}>Retry</PxButton>
+        <div style={{ textAlign: 'center', marginTop: 8 }}><PxLink onClick={switchOutlet}>Use a different restaurant</PxLink></div>
+      </PxCard>
+    </PxAuthShell>
   );
 };
 
 const LoginScreen = () => {
   const { tenantId, completeAuth } = useOwner();
+  const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  if (mode === 'signup') return <SetupScreen onBack={(msg) => { setNotice(msg || ''); setMode('login'); }} />;
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!username || !password) return;
-    setLoading(true); setError(null);
+    if (!username.trim() || !password) { setError('Enter your username or email and password'); return; }
+    setLoading(true); setError(''); setNotice('');
     try {
-      const res = await axios.post(`${API_BASE}/api/owner/auth/login/${tenantId}`, { username, password });
+      const res = await axios.post(`${API_BASE}/api/owner/auth/login/${tenantId}`, { username: username.trim(), password });
       completeAuth(res.data.token, res.data.ownerName);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Could not sign in');
+      setError(err?.response?.data?.error || (err?.response ? 'Could not sign in' : 'Cannot reach the server. Check your internet and try again.'));
     } finally { setLoading(false); }
   };
 
   return (
-    <AuthShell>
-      <Card>
-        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 3 }}>Welcome back</div>
-        <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>Signing in to <b style={{ color: T.primary }}>{tenantId}</b></div>
-        <form onSubmit={submit}>
-          <Field label="USERNAME">
-            <input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
-          </Field>
-          <Field label="PASSWORD">
-            <div style={{ position: 'relative' }}>
-              <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: 38 }} autoComplete="current-password" />
-              <button type="button" onClick={() => setShowPw(v => !v)} className="pown-btn" style={{ position: 'absolute', right: 8, top: 8, background: 'transparent', color: T.textLow }}>
-                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </Field>
-          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}><AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /><span style={{ wordBreak: 'break-word' }}>{error}</span></div>}
-          <PrimaryBtn type="submit" icon={loading ? Loader2 : ChevronRight} disabled={loading || !username || !password} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-            {loading ? 'Signing in…' : 'Sign In'}
-          </PrimaryBtn>
-          <div style={{ textAlign: 'center', marginTop: 10 }}><ForgotLink scope="owner" tenantId={tenantId} defaultUsername={username} /></div>
+    <PxAuthShell art={PxCrown} headline="Grow Your Restaurant Business" sub="Smarter Tools. Greater Insights.">
+      <PxCard icon={PxCrown} title="Owner Login" subtitle={<>Access your restaurant dashboard<br /><span style={{ fontSize: 12, color: PX.faint }}>Restaurant: <b style={{ color: PX.goldDeep }}>{tenantId}</b></span></>}>
+        <form onSubmit={submit} noValidate>
+          <PxField icon={PxMail} label="Username or email" placeholder="Username or email" value={username} onChange={e => setUsername(e.target.value)} autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
+          <PxField icon={PxLock} type="password" label="Password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+          <PxAlert kind="ok">{notice}</PxAlert>
+          <PxAlert>{error}</PxAlert>
+          <PxButton type="submit" loading={loading}>{loading ? 'Signing in…' : 'Sign In'}</PxButton>
         </form>
-      </Card>
-      <div style={{ textAlign: 'center', fontSize: 11, color: T.textLow, marginTop: 16 }}>Wrong outlet? Close the app and open it again from a fresh link.</div>
-    </AuthShell>
+        <div style={{ textAlign: 'center', marginTop: 10 }}><ForgotLink scope="owner" tenantId={tenantId} defaultUsername={username} /></div>
+        <PxDivider />
+        <PxButton type="button" ghost icon={PxUserPlus} onClick={() => { setError(''); setMode('signup'); }}>Create Account</PxButton>
+        <PxSecure />
+      </PxCard>
+    </PxAuthShell>
   );
 };
 
-const SetupScreen = () => {
+/** First-time owner sign-up for a restaurant: step 1 proves you may (restaurant's operator password), step 2 creates the login. */
+const SetupScreen = ({ onBack }) => {
   const { tenantId, completeAuth } = useOwner();
+  const [step, setStep] = useState(1);
   const [ownerName, setOwnerNameField] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
-  const [operatorPassword, setOperatorPassword] = useState(''); // proof that this person is allowed to create the owner login
+  const [operatorPassword, setOperatorPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
+  const [errs, setErrs] = useState({});
 
-  const canSubmit = operatorPassword && username.trim() && password.length >= 6 && password === confirm;
+  const next = (e) => {
+    e.preventDefault();
+    if (!operatorPassword) { setErrs({ op: 'Enter the restaurant operator password' }); return; }
+    setErrs({}); setError(''); setStep(2);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!canSubmit) return;
-    setLoading(true); setError(null);
+    const x = {};
+    if (username.trim().length < 3) x.username = 'Choose a username of at least 3 characters';
+    if (/\s/.test(username.trim())) x.username = 'Username cannot contain spaces';
+    if (recoveryEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail.trim())) x.email = 'Enter a valid email';
+    const why = passwordIssues(password); if (why) x.password = why;
+    if (!x.password && password !== confirm) x.confirm = 'Passwords do not match';
+    setErrs(x); if (Object.keys(x).length) return;
+    setLoading(true); setError('');
     try {
-      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username, password, ownerName, operatorPassword, email: recoveryEmail.trim() || undefined });
+      const res = await axios.post(`${API_BASE}/api/owner/auth/setup/${tenantId}`, { username: username.trim(), password, ownerName: ownerName.trim(), operatorPassword, email: recoveryEmail.trim() || undefined });
       completeAuth(res.data.token, res.data.ownerName);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Could not complete setup');
+      const d = err?.response?.data;
+      if (d?.code === 'OPERATOR_PASSWORD_REQUIRED') { setStep(1); setErrs({ op: 'That operator password is not correct.' }); setError(''); }
+      else if (err?.response?.status === 409) { if (onBack) onBack('An owner login already exists for this restaurant. Please sign in.'); else setError(d?.error); }
+      else setError(d?.error || (err?.response ? 'Could not complete sign-up' : 'Cannot reach the server. Check your internet and try again.'));
     } finally { setLoading(false); }
   };
 
+  const dots = (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '-8px 0 16px' }} aria-label={`Step ${step} of 2`}>
+      {[1, 2].map(n => <span key={n} style={{ width: n === step ? 26 : 8, height: 8, borderRadius: 5, background: n <= step ? PX.goldSoft : PX.line, transition: 'width .2s' }} />)}
+    </div>
+  );
+
   return (
-    <AuthShell>
-      <Card>
-        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 3 }}>Set up your owner login</div>
-        <div style={{ fontSize: 12, color: T.textLow, marginBottom: 22 }}>First time here for <b style={{ color: T.primary }}>{tenantId}</b> — create your credentials. You'll only do this once.</div>
-        <form onSubmit={submit}>
-          <Field label="RESTAURANT OPERATOR PASSWORD (ASK YOUR MANAGER)"><input type="password" value={operatorPassword} onChange={e => setOperatorPassword(e.target.value)} style={inputStyle} autoComplete="off" autoFocus /></Field>
-          <Field label="YOUR NAME"><input value={ownerName} onChange={e => setOwnerNameField(e.target.value)} style={inputStyle} placeholder="e.g. Rohan Patil" /></Field>
-          <Field label="CHOOSE A USERNAME"><input value={username} onChange={e => setUsername(e.target.value)} style={inputStyle} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" /></Field>
-          <Field label="RECOVERY EMAIL (FOR FORGOT PASSWORD)"><input type="email" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} style={inputStyle} placeholder="you@example.com" autoComplete="email" autoCapitalize="none" /></Field>
-          <Field label="CHOOSE A PASSWORD"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
-          <Field label="CONFIRM PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} autoComplete="new-password" /></Field>
-          {password && password.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Password needs at least 6 characters.</div>}
-          {confirm && password !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
-          {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}><AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} /><span style={{ wordBreak: 'break-word' }}>{error}</span></div>}
-          <PrimaryBtn type="submit" icon={loading ? Loader2 : CheckCircle2} disabled={loading || !canSubmit} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-            {loading ? 'Setting up…' : 'Create Login & Continue'}
-          </PrimaryBtn>
-        </form>
-      </Card>
-    </AuthShell>
+    <PxAuthShell art={PxUserPlus} headline="Create your owner account" sub="One quick setup, then your whole restaurant is at your fingertips.">
+      <PxCard icon={PxUserPlus} title="Create Account" subtitle={step === 1 ? <>Verify you can manage <b style={{ color: PX.goldDeep }}>{tenantId}</b>. Ask your manager or Pratyeksha support for the restaurant operator password.</> : 'Choose how you will sign in. You only do this once.'}>
+        {dots}
+        {step === 1 ? (
+          <form onSubmit={next} noValidate>
+            <PxField icon={PxKey} type="password" label="Restaurant operator password" placeholder="Restaurant operator password" value={operatorPassword} onChange={e => setOperatorPassword(e.target.value)} error={errs.op} autoComplete="off" autoFocus />
+            <PxAlert>{error}</PxAlert>
+            <PxButton type="submit">Continue</PxButton>
+          </form>
+        ) : (
+          <form onSubmit={submit} noValidate>
+            <PxField icon={PxUser} label="Your name" placeholder="Your name (e.g. Rohan Patil)" value={ownerName} onChange={e => setOwnerNameField(e.target.value)} autoComplete="name" autoFocus />
+            <PxField icon={PxUser} label="Choose a username" placeholder="Choose a username" value={username} onChange={e => setUsername(e.target.value)} error={errs.username} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" />
+            <PxField icon={PxMail} type="email" label="Recovery email" placeholder="Recovery email (for password reset)" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} error={errs.email} autoComplete="email" hint="Also works to sign in. Strongly recommended." />
+            <PxField icon={PxLock} type="password" label="Choose a password" placeholder="Choose a password" value={password} onChange={e => setPassword(e.target.value)} error={errs.password} autoComplete="new-password" />
+            <PxStrength value={password} />
+            <PxField icon={PxLock} type="password" label="Confirm password" placeholder="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} error={errs.confirm} autoComplete="new-password" />
+            <PxAlert>{error}</PxAlert>
+            <PxButton type="submit" loading={loading} icon={CheckCircle2}>{loading ? 'Creating…' : 'Create Account & Continue'}</PxButton>
+            <div style={{ textAlign: 'center', marginTop: 4 }}><PxLink onClick={() => { setStep(1); setError(''); }}>← Back</PxLink></div>
+          </form>
+        )}
+        <PxDivider />
+        <PxButton type="button" ghost noIcon onClick={() => onBack && onBack('')}>I already have an account</PxButton>
+        <PxSecure />
+      </PxCard>
+    </PxAuthShell>
   );
 };
 
@@ -3668,19 +3682,22 @@ const EightySixForm = ({ tenantId, onDone }) => {
 };
 
 const ChangePasswordForm = ({ tenantId, onDone }) => {
+  const { completeAuth, ownerName } = useOwner();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const canSubmit = current && next.length >= 6 && next === confirm && next !== current;
+  const canSubmit = current && next.length >= 8 && /[a-z]/i.test(next) && /\d/.test(next) && next === confirm && next !== current;
 
   const submit = async () => {
     if (!canSubmit || saving) return;
     setSaving(true); setError(null);
     try {
-      await api.put(`/api/owner/auth/change-password/${tenantId}`, { currentPassword: current, newPassword: next });
-      onDone('Password updated');
+      const r = await api.put(`/api/owner/auth/change-password/${tenantId}`, { currentPassword: current, newPassword: next });
+      // Other devices are signed out by the server; this one continues with the fresh token it returns.
+      if (r.data?.token) completeAuth(r.data.token, ownerName);
+      onDone('Password updated — other devices were signed out');
     } catch (e) {
       setError(e?.response?.data?.error || 'Could not update password');
     } finally { setSaving(false); }
@@ -3691,7 +3708,7 @@ const ChangePasswordForm = ({ tenantId, onDone }) => {
       <Field label="CURRENT PASSWORD"><input type="password" value={current} onChange={e => setCurrent(e.target.value)} style={inputStyle} autoFocus /></Field>
       <Field label="NEW PASSWORD"><input type="password" value={next} onChange={e => setNext(e.target.value)} style={inputStyle} /></Field>
       <Field label="CONFIRM NEW PASSWORD"><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} style={inputStyle} /></Field>
-      {next && next.length < 6 && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Needs at least 6 characters.</div>}
+      {next && (next.length < 8 || !/[a-z]/i.test(next) || !/\d/.test(next)) && <div style={{ fontSize: 11, color: T.textLow, marginBottom: 10 }}>Needs 8 or more characters, with letters and numbers.</div>}
       {confirm && next !== confirm && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>Passwords don't match.</div>}
       {next && current && next === current && <div style={{ fontSize: 11, color: T.danger, marginBottom: 10 }}>The new password must be different from the current one.</div>}
       {error && <div style={{ fontSize: 11.5, color: T.danger, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</div>}
