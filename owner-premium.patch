@@ -9,7 +9,7 @@
  import SupportContact from './SupportContact.jsx';
  import { Routes, Route, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
  import axios from 'axios';
-@@ -41,10 +41,10 @@
+@@ -41,10 +41,12 @@
  } from 'lucide-react';
  import SpoonForkIcon from './SpoonForkIcon.jsx';
  const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
@@ -18,13 +18,35 @@
 -  XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell
 -} from 'recharts';
 +import './bklit.css';
-+import { BkArea, BkLine, BkColumns, BkHBars, BkDonut, BkMiniBars } from './ownerCharts.jsx';
++import { BkArea, BkLine, BkColumns, BkHBars, BkDonut, BkMiniBars, BkGauge, BkRings } from './ownerCharts.jsx';
 +import { OwnerMotion, PageTransition } from './ownerMotion.jsx';
++import AlertsView from './OwnerAlerts.jsx';
++import KitchenView from './OwnerKitchen.jsx';
 +import { motion as Motion, AnimatePresence } from 'motion/react'; // alias keeps this project's lint (which misses <Motion.x> JSX uses) clean
  
  /* ════════════════════════════════════════════════════════════
     THEME — identical to Pratyeksha's design system
-@@ -950,30 +950,38 @@
+@@ -169,7 +171,18 @@
+     .pown input[type="date"], .pown input[type="month"], .pown input[type="time"] { color-scheme: dark; }
+ 
+     /* ── Readable line length on very wide screens: content is centred instead of stretching edge to edge ── */
+-    .pown-content { width: 100%; max-width: 1320px; margin: 0 auto; }
++    .pown-content { width: 100%; max-width: 1320px; margin: 0 auto; overflow-x: clip; }
++    /* Mobile hardening: grid/flex children may shrink below their content, and media never exceeds its card */
++    .pown-content > *, .pown-card { min-width: 0; }
++    .pown svg, .pown img, .pown canvas { max-width: 100%; }
++    .pown-card h2, .pown-card h3 { overflow-wrap: anywhere; }
++    /* Phones: modals become bottom sheets (thumb reach, no clipped corners, respects the home indicator) */
++    @media (max-width: 520px) {
++      .pown-modal-bg { align-items: flex-end !important; padding: 0 !important; }
++      .pown-modal { width: 100% !important; max-width: 100% !important; max-height: 92vh !important; border-radius: 22px 22px 0 0 !important; padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px)) !important; }
++      .pown-card { border-radius: 16px !important; }
++      .pown-split-main, .pown-grid-2 { gap: 12px !important; }
++    }
+ 
+ 
+     /* ── Tables: quiet header, roomy rows, sticky header inside scroll panes ── */
+@@ -950,30 +963,38 @@
    }}><Icon size={15} /></button>
  );
  
@@ -82,7 +104,7 @@
      }} />
    </button>
  );
-@@ -986,24 +994,32 @@
+@@ -986,24 +1007,32 @@
      document.addEventListener('keydown', onKey);
      return () => document.removeEventListener('keydown', onKey);
    }, [open, onClose]);
@@ -106,14 +128,14 @@
 -    </div>
 +    <AnimatePresence>
 +      {open && (
-+        <Motion.div key="modal" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
++        <Motion.div key="modal" className="pown-modal-bg" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
 +          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
 +          style={{
 +            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
 +            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16
 +          }} onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget; }}
 +          onClick={e => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose?.(); downOnBackdrop.current = false; }}>
-+          <Motion.div onClick={e => e.stopPropagation()}
++          <Motion.div className="pown-modal" onClick={e => e.stopPropagation()}
 +            initial={{ opacity: 0, y: 18, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}
 +            transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
 +            style={{
@@ -132,7 +154,7 @@
    );
  };
  
-@@ -1359,13 +1375,21 @@
+@@ -1359,13 +1388,21 @@
            <NavLink key={item.key} to={`/owner/${tenantId}/${item.key}`} className="pown-nav-link" style={({ isActive }) => ({
              display: 'flex', alignItems: 'center', gap: 11, padding: compact ? '9px 12px' : '9px 12px', borderRadius: 12,
              marginBottom: 3, fontSize: compact ? 13.5 : 12.5, fontWeight: 700,
@@ -159,7 +181,7 @@
            </NavLink>
          ))}
        </div>
-@@ -1706,24 +1730,11 @@
+@@ -1706,24 +1743,11 @@
    );
  };
  
@@ -189,7 +211,7 @@
  const fmtCompactINR = (v) => {
    const n = Number(v) || 0, a = Math.abs(n);
    if (a >= 10000000) return `₹${+(n / 10000000).toFixed(1)}Cr`;
-@@ -1731,10 +1742,6 @@
+@@ -1731,10 +1755,6 @@
    if (a >= 1000) return `₹${+(n / 1000).toFixed(a >= 10000 ? 0 : 1)}k`;
    return `₹${Math.round(n)}`;
  };
@@ -200,7 +222,7 @@
  
  /* ════════════════════════════════════════════════════════════
     CHART KIT — shared visuals for every owner module
-@@ -1766,20 +1773,7 @@
+@@ -1766,20 +1786,7 @@
    if (!rows.length) return <EmptyState icon={BarChart3} title="No data yet" />;
    return (
      <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
@@ -222,7 +244,7 @@
        <div style={{ flex: '1 1 160px', minWidth: 150, display: 'grid', gap: 9 }}>
          {rows.map((r, i) => (
            <div key={`${r.label}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12 }}>
-@@ -1794,38 +1788,16 @@
+@@ -1794,39 +1801,52 @@
    );
  };
  
@@ -262,13 +284,84 @@
 -        </Bar>
 -      </BarChart>
 -    </ResponsiveContainer>
--  );
 +  return <BkColumns rows={rows} valueFormat={valueFormat} height={height} color={color} highlightLabel={highlightLabel != null ? clipLabel(highlightLabel, 11) : undefined} />;
++};
++
++/** Responsive row of visual cards: 3-up on desktop, stacks to one column on phones (min(100%, …) prevents overflow on 320px screens). */
++const VisualGrid = ({ children }) => (
++  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 14 }}>{children}</div>
++);
++/** Bklit gauge (0–100) in a card. `centerValue` lets the dial show a raw figure while the arc is clamped. */
++const GaugeCard = ({ icon, title, value, centerValue, suffix = '%', label, hint, maxWidth = 220 }) => (
++  <Card style={{ minWidth: 0 }}>
++    <SectionHeading icon={icon} title={title} />
++    <BkGauge value={value} centerValue={centerValue} suffix={suffix} label={label} maxWidth={maxWidth} />
++    {hint && <div style={{ fontSize: 11.5, color: T.textMed, textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>{hint}</div>}
++  </Card>
++);
++/** Bklit concentric rings + a value list. items: [{label, value, max}] — every ring is a share of its own max. */
++const RingCard = ({ icon, title, items, centerLabel, formatCenter, valueFormat = (v) => v }) => {
++  const rows = (items || []).map((r, i) => ({ ...r, color: VIZ_VARS[i % VIZ_VARS.length] }));
++  return (
++    <Card style={{ minWidth: 0 }}>
++      <SectionHeading icon={icon} title={title} />
++      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
++        <BkRings items={rows} size={150} centerLabel={centerLabel} formatCenter={formatCenter} />
++        <div style={{ flex: '1 1 130px', minWidth: 120, display: 'grid', gap: 9 }}>
++          {rows.map((r) => (
++            <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
++              <span style={{ width: 9, height: 9, borderRadius: 3, background: r.color, flex: '0 0 auto' }} />
++              <span style={{ flex: 1, minWidth: 0, color: T.textMed, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
++              <span className="pown-mono" style={{ color: T.textHigh, fontWeight: 700 }}>{valueFormat(r.value)}</span>
++            </div>
++          ))}
++        </div>
++      </div>
++    </Card>
+   );
  };
++const VIZ_VARS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-4)', 'var(--chart-5)'];
  
  /* ════════════════════════════════════════════════════════════
-@@ -1989,21 +1961,7 @@
+    MODULE 1 — LIVE DASHBOARD
+@@ -1914,6 +1934,21 @@
+         </div>
+       </div>
  
++      {data.tables && data.breakEven && (
++        <VisualGrid>
++          <GaugeCard icon={Target} title="Break-even today" value={data.breakEven.pct} centerValue={Math.round(Number(data.breakEven.pct) || 0)} label="ACHIEVED"
++            hint={`\u20B9${Number(data.breakEven.remaining || 0).toLocaleString('en-IN')} more to cover today's costs`} />
++          {Number(data.tables.total) > 0 && (
++            <RingCard icon={LayoutGrid} title="Table status" centerLabel="TABLES" formatCenter={(v) => Math.round(v)}
++              items={[{ label: 'Occupied', value: data.tables.occupied, max: data.tables.total }, { label: 'Bill pending', value: data.tables.billPending, max: data.tables.total }, { label: 'Free', value: data.tables.free, max: data.tables.total }]} />
++          )}
++          {data.liveProfit && (
++            <GaugeCard icon={Percent} title="Food cost" value={data.liveProfit.foodCostPct} centerValue={Math.round(Number(data.liveProfit.foodCostPct) || 0)} label="OF REVENUE"
++              hint="Share of today's sales spent on ingredients" />
++          )}
++        </VisualGrid>
++      )}
++
+       {/* Quick actions */}
+       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+         <GhostBtn icon={ChefHat} onClick={() => navigate(`/owner/${tenantId}/kitchen`)}>View Live Orders</GhostBtn>
+@@ -1987,26 +2022,24 @@
+               <KpiCard icon={LayoutGrid} label="TABLES TURNED" value={data.metrics.tablesTurned} sub={`\u20B9${data.metrics.revenuePerCover} / cover`} />
+             </div>
+ 
++            {data.forecast && (
++              <VisualGrid>
++                <GaugeCard icon={Target} title="Month target" value={data.forecast.pctAchieved} centerValue={Math.round(Number(data.forecast.pctAchieved) || 0)} label="ACHIEVED"
++                  hint={`Target ${fmtINRc(data.forecast.monthTarget)}`} />
++                <Card style={{ minWidth: 0 }}>
++                  <SectionHeading icon={TrendingUp} title="Month outlook" />
++                  <HBarChart valueFormat={fmtCompactINR} nameWidth={104}
++                    data={[{ label: 'Target', value: data.forecast.monthTarget }, { label: 'At current pace', value: data.forecast.atCurrentPace }, { label: 'Best case', value: data.forecast.bestCase }]} />
++                </Card>
++              </VisualGrid>
++            )}
++
              <Card>
                <SectionHeading icon={BarChart3} title="Revenue Trend" />
 -              <ResponsiveContainer width="100%" height={220}>
@@ -289,9 +382,25 @@
 +              <BkArea data={data.dailyBreakdown} yKey="revenue" label="Revenue" valueFormat={fmtINRc} axisFormat={fmtCompactINR} height={220} />
              </Card>
  
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-@@ -2120,15 +2078,7 @@
+-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
++            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 14 }}>
+               <ChartCard title="Revenue by Source">
+                 <DonutChart items={foldOther(data.bySource.map(s => ({ label: s.source, value: s.revenue })))} valueFormat={fmtINRc} centerLabel="REVENUE" />
+               </ChartCard>
+@@ -2118,17 +2151,19 @@
+                 <KpiCard icon={Target} label="MONTH PROJECTION" value={`\u20B9${data.projection.atCurrentMargin.toLocaleString('en-IN')}`} sub="net profit, if margin holds" />
+               </div>
  
++              <VisualGrid>
++                <Card style={{ minWidth: 0 }}>
++                  <SectionHeading icon={Percent} title="Where each rupee goes" />
++                  <DonutChart valueFormat={fmtINRc} centerValue={fmtCompactINR(data.revenue)} centerLabel="REVENUE" size={150}
++                    items={[{ label: 'Food cost', value: data.foodCost }, { label: 'Staff cost', value: data.staffCost }, { label: 'GST', value: data.gstPaid }, { label: 'Net profit', value: data.netProfit }]} />
++                </Card>
++                <GaugeCard icon={Percent} title="Gross margin" value={data.grossMarginPct} centerValue={Math.round(Number(data.grossMarginPct) || 0)} label="GROSS" hint="Revenue left after food cost" />
++                <GaugeCard icon={Percent} title="Net margin" value={Math.max(0, Number(data.netMarginPct) || 0)} centerValue={Math.round(Number(data.netMarginPct) || 0)} label="NET" hint="Revenue kept after all costs" />
++              </VisualGrid>
++
                <Card>
                  <SectionHeading icon={TrendingUp} title="Daily Net Profit Trend" />
 -                <ResponsiveContainer width="100%" height={200}>
@@ -307,7 +416,300 @@
                </Card>
  
                <Card>
-@@ -3914,9 +3864,12 @@
+@@ -2202,7 +2237,7 @@
+               ))}
+             </div>
+ 
+-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
++            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14 }}>
+               <ChartCard icon={TrendingUp} title="Top Dishes by Revenue" hint="Best earners this month">
+                 <HBarChart data={[...data.dishTable].sort((a, b) => b.revenue - a.revenue).slice(0, 8).map(d => ({ label: d.name, value: d.revenue }))} valueFormat={fmtINRc} nameWidth={118} />
+               </ChartCard>
+@@ -2310,7 +2345,7 @@
+               </div>
+             </Card>
+ 
+-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
++            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14 }}>
+               <ChartCard icon={Gauge} title="Stock Status" hint="Ingredients by health">
+                 <DonutChart centerValue={data.counts.healthy + data.counts.low + data.counts.critical + data.counts.depleted} centerLabel="ITEMS" items={[
+                   { label: 'Healthy', value: data.counts.healthy, color: VIZ[2] },
+@@ -2391,101 +2426,9 @@
+   }, [liveOrderEvent]); // eslint-disable-line
+ 
+   return (
+-    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
++    <div className="pown-fade-in">
+       <DataBoundary skeleton={<SkKitchen />} loading={loading} error={error} onRetry={refetch}>
+-        {data && (
+-          <>
+-            <Card>
+-              <SectionHeading icon={Gauge} title="Today's Kitchen Score" />
+-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+-                <span className="pown-mono" style={{ fontSize: 30, fontWeight: 800 }}>{data.score}</span>
+-                <span style={{ color: T.textLow, fontSize: 13 }}>/ 100</span>
+-                <Badge tone={data.score >= 80 ? 'gold' : data.score >= 60 ? 'warning' : 'danger'}>
+-                  {data.score >= 80 ? 'Excellent' : data.score >= 60 ? 'Good' : 'Needs attention'}
+-                </Badge>
+-              </div>
+-              <ProgressBar pct={data.score} height={9} />
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 16 }}>
+-                <ScoreLine label="Avg prep time" value={`${data.avgPrepTime} min`} pass={data.avgPrepTime < 15} target="< 15 min" />
+-                <ScoreLine label="Delayed tickets" value={data.delayedTickets} pass={data.delayedTickets < 5} target="< 5" />
+-                <ScoreLine label="Rejection rate" value={`${data.rejectionRate}%`} pass={data.rejectionRate === 0} target="0%" />
+-                <ScoreLine label="Wastage cost" value={`\u20B9${data.wastageCost}`} pass={data.wastageCost < 1000} target="< ₹1000" />
+-              </div>
+-            </Card>
+-
+-            <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+-              <KpiCard icon={Timer} label="TODAY AVG" value={`${data.trends.todayAvg}m`} />
+-              <KpiCard icon={Timer} label="YESTERDAY" value={`${data.trends.yesterdayAvg}m`} />
+-              <KpiCard icon={Timer} label="WEEK AVG" value={`${data.trends.weekAvg}m`} />
+-              <KpiCard icon={Zap} label="BEST / WORST" value={`${data.trends.best}m / ${data.trends.worst}m`} />
+-            </div>
+-
+-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+-              <ChartCard icon={Timer} title="Prep Time Trend" hint="Average minutes per ticket">
+-                <ColumnChart height={190} valueFormat={(v) => `${v}m`} highlightLabel="Today" data={[
+-                  { label: 'Yesterday', value: data.trends.yesterdayAvg }, { label: 'Today', value: data.trends.todayAvg },
+-                  { label: 'Week avg', value: data.trends.weekAvg }, { label: 'Best', value: data.trends.best }, { label: 'Worst', value: data.trends.worst }
+-                ]} />
+-              </ChartCard>
+-              <ChartCard icon={ChefHat} title="Slowest Dishes (min)" hint="Average prep time today">
+-                <HBarChart data={data.slowestDishes.slice(0, 7).map(d => ({ label: d.name, value: d.avgTime }))} valueFormat={(v) => `${v}m`} color={VIZ[1]} nameWidth={118} />
+-              </ChartCard>
+-            </div>
+-
+-            <Card>
+-              <SectionHeading title="Slowest Dishes Today" />
+-              {data.slowestDishes.length === 0 ? <EmptyState icon={ChefHat} title="No prep-time data yet today" /> : (
+-                <div style={{ display: 'grid', gap: 8 }}>
+-                  {data.slowestDishes.map((d, i) => (
+-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderTop: i > 0 ? `1px solid ${T.border}` : 'none' }}>
+-                      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{d.name}</span>
+-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+-                        <span className="pown-mono" style={{ fontSize: 12 }}>avg {d.avgTime}m</span>
+-                        <Badge tone={d.flag === 'Flag' ? 'danger' : d.flag === 'Watch' ? 'warning' : 'gold'}>{d.flag}</Badge>
+-                      </span>
+-                    </div>
+-                  ))}
+-                </div>
+-              )}
+-            </Card>
+-
+-            <Card>
+-              <SectionHeading icon={Eye} title="Live Tickets" action={<span style={{ fontSize: 11, color: T.textLow }}>View only</span>} />
+-              {data.liveTickets.length === 0 ? <EmptyState icon={CheckCircle2} title="No open tickets" /> : (
+-                <div style={{ display: 'grid', gap: 8 }}>
+-                  {data.liveTickets.map((t, i) => (
+-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 10 }}>
+-                      <div>
+-                        <div style={{ fontSize: 12.5, fontWeight: 700 }}>Table {t.tableNumber}</div>
+-                        <div style={{ fontSize: 11, color: T.textLow }}>{t.items.slice(0, 3).join(', ')}</div>
+-                        {t.itemsTotal > 0 && (
+-                          <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 2 }}>
+-                            {t.status === 'ready' ? `Ready \u00B7 waiting ${t.waitingMinutes || 0}m` : `${t.itemsDone || 0}/${t.itemsTotal} dishes done${t.itemsStarted ? ` \u00B7 ${t.itemsStarted} cooking` : ''}`}
+-                          </div>
+-                        )}
+-                      </div>
+-                      <Badge tone={t.ageMinutes >= 15 ? 'danger' : t.ageMinutes > 10 ? 'warning' : 'gold'}>{t.ageMinutes}m</Badge>
+-                    </div>
+-                  ))}
+-                </div>
+-              )}
+-            </Card>
+-
+-            {data.eightySixedToday.length > 0 && (
+-              <Card>
+-                <SectionHeading icon={PackageX} title="86'd Items Today" />
+-                <div style={{ display: 'grid', gap: 8 }}>
+-                  {data.eightySixedToday.map((e, i) => (
+-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+-                      <span>{e.name} — <span style={{ color: T.textLow }}>{e.reason}</span></span>
+-                      <span className="pown-mono" style={{ color: T.textLow }}>{e.time}</span>
+-                    </div>
+-                  ))}
+-                </div>
+-              </Card>
+-            )}
+-          </>
+-        )}
++        {data && <KitchenView data={data} />}
+       </DataBoundary>
+     </div>
+   );
+@@ -2561,7 +2504,7 @@
+               <ProgressBar pct={data.payroll.total ? (data.payroll.paid / data.payroll.total) * 100 : 0} />
+             </Card>
+ 
+-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
++            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14 }}>
+               <ChartCard icon={UserCheck} title="Today's Attendance">
+                 <DonutChart centerValue={data.attendanceToday.list.length} centerLabel="STAFF" items={[
+                   { label: 'Present', value: data.attendanceToday.present, color: VIZ[2] },
+@@ -2683,6 +2626,11 @@
+               <KpiCard icon={Star} label="AVG VISITS" value={data.overview.avgVisits} />
+             </div>
+ 
++            <VisualGrid>
++              <GaugeCard icon={ThumbsUp} title="Returning customers" value={data.overview.returningPct} centerValue={Math.round(Number(data.overview.returningPct) || 0)} label="RETURNING" hint={`${data.overview.total} customers in total`} />
++              <GaugeCard icon={AlertTriangle} title="At-risk share" value={data.overview.total ? (data.overview.atRisk / data.overview.total) * 100 : 0} centerValue={Math.round(data.overview.total ? (data.overview.atRisk / data.overview.total) * 100 : 0)} label="AT RISK" hint={`${data.overview.atRisk} haven't visited in a while`} />
++            </VisualGrid>
++
+             <div className="pown-grid-4">
+               <StatBlock label="VIP" value={data.segments.vip} tone="gold" />
+               <StatBlock label="Regular" value={data.segments.regular} />
+@@ -2743,89 +2691,26 @@
+ /* ════════════════════════════════════════════════════════════
+    MODULE 9 — ALERTS & NOTIFICATIONS
+    ════════════════════════════════════════════════════════════ */
+-const SEVERITY_META = {
+-  urgent: { label: 'Urgent', tone: 'danger', icon: AlertTriangle },
+-  attention: { label: 'Attention', tone: 'warning', icon: Bell },
+-  info: { label: 'Info', tone: 'gold', icon: CheckCircle2 },
+-};
+ 
+ const AlertsPage = () => {
+   const { data, loading, error, refetch } = useOwnerData('/api/owner/alerts/:tenantId', { refreshMs: 30000 });
+-  const { data: notifData, loading: notifLoading, refetch: refetchNotifs } = useOwnerData('/api/owner/notifications/:tenantId', { refreshMs: 30000 });
++  const { data: notifData, refetch: refetchNotifs } = useOwnerData('/api/owner/notifications/:tenantId', { refreshMs: 30000 });
+   const { liveAlert, liveAdminNotification } = useOwner();
+ 
+   useEffect(() => { if (liveAlert) refetch(); }, [liveAlert]); // eslint-disable-line
+   useEffect(() => { if (liveAdminNotification) refetchNotifs(); }, [liveAdminNotification]); // eslint-disable-line
+ 
+-  const markRead = async (id) => { try { await api.post(`/api/owner/alerts/read/${id}`); } catch (_) { /* ignore; refetch shows truth */ } refetch(); };
+-  const markNotifRead = async (id) => { try { await api.post(`/api/owner/notifications/${id}/read`); } catch (_) { /* ignore */ } refetchNotifs(); };
+-
+-  const NOTIF_SEVERITY = {
+-    urgent: { tone: 'danger' }, important: { tone: 'warning' }, info: { tone: 'gold' }
+-  };
++  // "Mark all read" fires one request per item; refetch once after the burst instead of once per item.
++  const refetchTimer = useRef(null);
++  const refetchSoon = () => { clearTimeout(refetchTimer.current); refetchTimer.current = setTimeout(() => { refetch(); refetchNotifs(); }, 450); };
++  useEffect(() => () => clearTimeout(refetchTimer.current), []);
++  const markRead = async (id) => { try { await api.post(`/api/owner/alerts/read/${id}`); } catch (_) { /* ignore; refetch shows truth */ } refetchSoon(); };
++  const markNotifRead = async (id) => { try { await api.post(`/api/owner/notifications/${id}/read`); } catch (_) { /* ignore */ } refetchSoon(); };
+ 
+   return (
+-    <div className="pown-fade-in" style={{ display: 'grid', gap: 16 }}>
+-      {!notifLoading && notifData && notifData.length > 0 && (
+-        <Card padded={false}>
+-          <div style={{ padding: '18px 20px 4px' }}>
+-            <SectionHeading icon={Megaphone} title="From Pratyeksha" />
+-          </div>
+-          {notifData.map((n, i) => {
+-            const meta = NOTIF_SEVERITY[n.severity] || NOTIF_SEVERITY.info;
+-            return (
+-              <div key={n._id} className="pown-row-hover" style={{
+-                display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 20px',
+-                borderTop: i > 0 ? `1px solid ${T.border}` : 'none', opacity: n.isRead ? 0.55 : 1
+-              }}>
+-                <Megaphone size={16} color={n.severity === 'urgent' ? T.danger : n.severity === 'important' ? T.warning : T.primary} style={{ marginTop: 2, flexShrink: 0 }} />
+-                <div style={{ flex: 1, minWidth: 0 }}>
+-                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{n.title}</div>
+-                  <div style={{ fontSize: 12, color: T.textMed, marginTop: 3, lineHeight: 1.5 }}>{n.message}</div>
+-                  <div className="pown-mono" style={{ fontSize: 10.5, color: T.textLow, marginTop: 5 }}>
+-                    {new Date(n.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
+-                  </div>
+-                </div>
+-                {!n.isRead && <button type="button" onClick={() => markNotifRead(n._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11, flexShrink: 0 }}>Mark read</button>}
+-              </div>
+-            );
+-          })}
+-        </Card>
+-      )}
+-
+-      <DataBoundary skeleton={<SkAlerts />} loading={loading} error={error} onRetry={refetch} empty={data && data.alerts.length === 0 && (!notifData || notifData.length === 0)}
+-        emptyProps={{ icon: Bell, title: 'No alerts yet', subtitle: 'You\u2019ll see stock, revenue and kitchen alerts here in real time' }}>
+-        {data && (
+-          <>
+-            <div className="pown-grid-3">
+-              <StatBlock label="Urgent" value={data.counts.urgent} tone="danger" />
+-              <StatBlock label="Attention" value={data.counts.attention} tone="warning" />
+-              <StatBlock label="Info" value={data.counts.info} tone="gold" />
+-            </div>
+-            {data.alerts.length > 0 && (
+-            <Card padded={false}>
+-              {data.alerts.map((a, i) => {
+-                const meta = SEVERITY_META[a.severity] || SEVERITY_META.info;
+-                return (
+-                  <div key={a._id} className="pown-row-hover" style={{
+-                    display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 20px',
+-                    borderTop: i > 0 ? `1px solid ${T.border}` : 'none', opacity: a.isRead ? 0.55 : 1
+-                  }}>
+-                    <meta.icon size={16} color={a.severity === 'urgent' ? T.danger : a.severity === 'attention' ? T.warning : T.primary} style={{ marginTop: 2 }} />
+-                    <div style={{ flex: 1 }}>
+-                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{a.message}</div>
+-                      <div className="pown-mono" style={{ fontSize: 10.5, color: T.textLow, marginTop: 3 }}>
+-                        {new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} · {a.category}
+-                      </div>
+-                    </div>
+-                    {!a.isRead && <button type="button" onClick={() => markRead(a._id)} className="pown-btn" style={{ background: 'transparent', color: T.textLow, fontSize: 11 }}>Mark read</button>}
+-                  </div>
+-                );
+-              })}
+-            </Card>
+-            )}
+-          </>
+-        )}
++    <div className="pown-fade-in">
++      <DataBoundary skeleton={<SkAlerts />} loading={loading} error={error} onRetry={refetch}>
++        {data && <AlertsView alerts={data.alerts || []} notifs={notifData || []} onReadAlert={markRead} onReadNotif={markNotifRead} live={!!liveAlert} />}
+       </DataBoundary>
+     </div>
+   );
+@@ -2910,6 +2795,19 @@
+               <Badge tone={data.regime.includes('REGULAR') ? 'gold' : 'warning'}>{data.regime}</Badge>
+             </Card>
+ 
++            <VisualGrid>
++              <Card style={{ minWidth: 0 }}>
++                <SectionHeading icon={Receipt} title="GST split" />
++                <DonutChart valueFormat={fmtINRc} centerValue={fmtINRc(data.totalGST)} centerLabel="TOTAL GST" size={150}
++                  items={[{ label: `CGST @ ${data.cgstPct}%`, value: data.cgst }, { label: `SGST @ ${data.sgstPct}%`, value: data.sgst }]} />
++              </Card>
++              {Number(data.compositionLimit) > 0 && (
++                <GaugeCard icon={ShieldCheck} title="Composition limit used" value={(Number(data.fyTurnoverSoFar) / Number(data.compositionLimit)) * 100}
++                  centerValue={Math.round((Number(data.fyTurnoverSoFar) / Number(data.compositionLimit)) * 100)} label="OF LIMIT"
++                  hint={`Projected annual ${fmtCompactINR(data.projectedAnnual)} vs limit ${fmtCompactINR(data.compositionLimit)}`} />
++              )}
++            </VisualGrid>
++
+             <Card>
+               <SectionHeading icon={FileSpreadsheet} title="Downloads" />
+               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+@@ -3104,11 +3002,19 @@
+             <KpiCard icon={Receipt} label="GST" value={`₹${Number(data.month.gst||0).toLocaleString('en-IN')}`} sub="stored invoice tax" />
+             <KpiCard icon={Package} label="LOW STOCK" value={data.inventory.lowStock} sub={`${data.inventory.total} inventory items`} tone={data.inventory.lowStock ? 'danger' : 'default'} />
+           </div>
+-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:14 }}>
++          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%, 240px), 1fr))', gap:14 }}>
+             <Card><SectionHeading icon={Wallet} title="Financial pulse" /><div style={{ display:'grid', gap:10 }}><InsightRow label="Average order value" value={`₹${Number(data.month.avgOrderValue||0).toLocaleString('en-IN')}`} /><InsightRow label="Month GST" value={`₹${Number(data.month.gst||0).toLocaleString('en-IN')}`} /><InsightRow label="Settled orders" value={data.month.orders} /></div></Card>
+             <Card><SectionHeading icon={Package} title="Stock pulse" /><div style={{ display:'grid', gap:10 }}><InsightRow label="Inventory value" value={`₹${Number(data.inventory.stockValue||0).toLocaleString('en-IN')}`} /><InsightRow label="Low-stock items" value={data.inventory.lowStock} /><InsightRow label="Total items" value={data.inventory.total} /></div></Card>
+             <Card><SectionHeading icon={Users} title="Customer pulse" /><div style={{ display:'grid', gap:10 }}><InsightRow label="Customers" value={data.customers.total} /><InsightRow label="Loyal customers" value={data.customers.loyal} /><InsightRow label="Loyalty rate" value={`${data.customers.loyaltyRate}%`} /></div></Card>
+           </div>
++          <VisualGrid>
++            <GaugeCard icon={Package} title="Stock health" value={data.inventory.total ? ((data.inventory.total - data.inventory.lowStock) / data.inventory.total) * 100 : 0}
++              centerValue={Math.round(data.inventory.total ? ((data.inventory.total - data.inventory.lowStock) / data.inventory.total) * 100 : 0)} label="WELL STOCKED" hint={`${data.inventory.lowStock} of ${data.inventory.total} items running low`} />
++            {Number(data.customers.total) > 0 && (
++              <GaugeCard icon={Users} title="Loyal customers" value={(Number(data.customers.loyal) / Number(data.customers.total)) * 100}
++                centerValue={Math.round((Number(data.customers.loyal) / Number(data.customers.total)) * 100)} label="OF CUSTOMERS" hint={`${data.customers.loyal} of ${data.customers.total} are loyal`} />
++            )}
++          </VisualGrid>
+           <Card><SectionHeading icon={Zap} title="Suggested actions" /><div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:10 }}>
+             {data.inventory.lowStock > 0 && <InsightAction label="Review low stock" onClick={() => navigate(`/owner/${tenantId}/inventory`)} />}
+             <InsightAction label="Review revenue & sales" onClick={() => navigate(`/owner/${tenantId}/revenue`)} />
+@@ -3176,7 +3082,7 @@
+       </Card>
+ 
+       {/* Pillars */}
+-      <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
++      <div className="pown-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 14 }}>
+         {GROWTH_PILLARS.map((p, i) => (
+           <Card key={i} interactive>
+             <div style={{
+@@ -3914,9 +3820,12 @@
  /* ════════════════════════════════════════════════════════════
     ROOT — OwnerApp (mount at /owner/:tenantId/*)
     ════════════════════════════════════════════════════════════ */
@@ -322,7 +724,7 @@
        <Route path="dashboard" element={<DashboardPage />} />
        <Route path="revenue" element={<RevenuePage />} />
        <Route path="pnl" element={<PnlPage />} />
-@@ -3935,20 +3888,25 @@
+@@ -3935,20 +3844,25 @@
        <Route path="settings" element={<SettingsPage />} />
        <Route path="*" element={<Navigate to="dashboard" replace />} />
      </Routes>
@@ -423,7 +825,7 @@
 \ No newline at end of file
 --- a/CHANGES.md
 +++ b/CHANGES.md
-@@ -15,3 +15,10 @@
+@@ -15,3 +15,20 @@
  * Customer Home (`/`): animated live-count, press feedback on filter chips, "Around you right now" card (open-now ring + cafe/dine split, real directory data), 24h opening-hours strip with a now marker in the place sheet.
  * Menu app (`/:tenant`): order-tracker ring showing live preparation progress next to the ETA.
  Money amounts, bills and invoices are deliberately NOT animated. No new npm dependencies (framer-motion ^11 already installed).
@@ -434,3 +836,13 @@
 +* Real Motion (`motion` 14.12, `motion/react`) for the Owner app only: app-wide reduced-motion (`MotionConfig`), page transitions between modules, spring modals, shared-layout pill for the sidebar and tab pills (`layoutId`), spring toggles (`src/ownerMotion.jsx`).
 +* Build setup: `@` alias to `src/` and `@tailwindcss/vite` in `vite.config.js`. Tailwind 4 is loaded from `src/bklit.css` with utilities only (no preflight), scanning only the chart files, inside a cascade layer, so the app's own CSS is untouched. Chart colours are Bklit tokens scoped to `.bk-scope` and set to the Owner champagne/bronze palette.
 +* New dependencies: motion, d3-shape, d3-scale, d3-array, clsx, tailwind-merge, @number-flow/react, @base-ui/react (runtime); tailwindcss, @tailwindcss/vite (dev). `recharts` stays because the Operator portal still uses it.
++
++## Owner app: Alerts redesign, more graphics, mobile pass
++* Alerts tab rebuilt (`src/OwnerAlerts.jsx`): one inbox for stock/revenue/kitchen alerts and platform notices; severity summary tiles that double as filters; source tabs, category chips and an unread-only toggle in a sticky, horizontally scrollable rail; collapsible insights (severity donut, last-7-days bars, top-category bars - all derived from the real alerts); day-grouped feed with NEW badges; optimistic mark-read, "Mark all read", and swipe-right-to-mark-read on touch. Mark-all now refetches once instead of once per item.
++* New visuals from existing data, using real Bklit components (Gauge, RingChart, AreaSparkline, Pie): Dashboard (break-even gauge, table-status rings, food-cost gauge), Revenue (month-target gauge, outlook bars), P&L (where each rupee goes donut, gross and net margin gauges), Customers (returning and at-risk gauges), Compliance (GST split donut, composition-limit gauge), Insights (stock-health and loyalty gauges).
++* Mobile: grids can no longer overflow 320px screens (`minmax(min(100%, Npx), 1fr)`), cards and grid children may shrink, media never exceeds its card, horizontal overflow is clipped, modals become bottom sheets on phones, 44px touch targets in Alerts.
++
++## Owner app: Kitchen redesign, chart overlap fixes, editor path config
++* Kitchen performance rebuilt (`src/OwnerKitchen.jsx`): one command card (Bklit gauge + four target-checked metrics + trend chips, replacing the score card and four KPI tiles); Live tickets as compact tiles (SLA ring per ticket, dish-progress segments, oldest first, on-time/watch/late split bar, All/Late/Ready filters, "Show all N" beyond 8); prep-time trend next to slowest dishes as inline bars (replacing the chart plus duplicate table); 86'd items as chips. Two-up tiles at phone width.
++* Overlap fixes: Bklit's Gauge sizes itself from its width (21:16, 300px default minimum), so the fixed-height box I wrapped it in let it spill over card headings and hint text - the wrapper now caps width only and the dial may shrink. Ring and donut centre text now shrinks/ellipsises to fit the hole; horizontal bars measure their card and the longest value so the name column and value gutter never collide.
++* `jsconfig.json` maps `@/*` to `src/*` so editors resolve `import { cn } from "@/lib/utils"` (Vite already resolved it through the alias in `vite.config.js`); three vendored files carry `// @ts-nocheck` to keep editor type noise at zero.

@@ -30,7 +30,7 @@
 }
 
 /* Owner palette → Bklit tokens (champagne gold + bronze; no green/blue/red). Scoped so other surfaces are unaffected. */
-.bk-scope {
+.bk-scope, .bk-scope-op {
   --background: #101012; --foreground: #f7f3eb;
   --muted: rgba(255,255,255,.05); --muted-foreground: rgba(255,255,255,.58);
   --popover: #201e1a; --popover-foreground: #f7f3eb;
@@ -49,4 +49,12 @@
   --legend: #1a1a1d; --legend-foreground: #f7f3eb; --legend-muted: rgba(255,255,255,.05);
   --legend-muted-foreground: rgba(255,255,255,.58); --legend-track: rgba(255,255,255,.08);
   --chart-scale-01: rgba(255,255,255,.07);
+}
+
+/* Operator portal: obsidian / brass / ivory only (the portal's own rule: no red, green, blue or orange) */
+.bk-scope-op {
+  --chart-1: #d3bfa2; --chart-2: #8a704d; --chart-3: #ecdcb9; --chart-4: #b8923a; --chart-5: #969696;
+  --chart-positive: #ecdcb9; --chart-negative: #8a704d;
+  --chart-background: #090909; --chart-tooltip-background: #090909;
+  --chart-indicator-color: #d3bfa2; --legend: #090909;
 }

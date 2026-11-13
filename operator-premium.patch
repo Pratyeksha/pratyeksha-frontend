@@ -1,0 +1,453 @@
+--- a/src/OperatorPortal.jsx
++++ b/src/OperatorPortal.jsx
+@@ -3,7 +3,8 @@
+ import axios from 'axios';
+ import { io } from "socket.io-client";
+ import PwaInstallButton from './PwaInstallButton.jsx';
+-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip } from 'recharts';
++import './bklit.css';
++import { BkArea, BkColumns, BkDonut, BkGauge } from './ownerCharts.jsx';
+ import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
+ import { OPERATOR_AUTH_EVENT, getOperatorToken } from './operatorAuth.js';
+ import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
+@@ -18,7 +19,7 @@
+ import { SkelTable, SkelRows, SkelCards, SkelAnalytics, SkelKpis } from './OperatorSkeleton.jsx';
+ import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
+  
+-import { motion, AnimatePresence } from 'framer-motion';
++import { motion, AnimatePresence, MotionConfig } from 'motion/react'; // the real Motion package (same API as framer-motion)
+ 
+ // HTML-escape for the document builders below (purchase order, salary slip, invoice). Anything typed by a person must go through this
+ // before it is placed in a string that is later assigned to innerHTML, or `<img onerror=...>` in a vendor / staff / address field would run.
+@@ -76,6 +77,49 @@
+ );
+ 
+ 
++/* ── Operator visual cards: real Bklit charts in the portal's brass palette (tokens live on .bk-scope-op in bklit.css) ── */
++const opPanel = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.14)', borderRadius: 16, padding: 18, minWidth: 0 };
++const opTitle = { fontSize: '0.6rem', fontWeight: 900, color: '#d3bfa2', letterSpacing: 2, marginBottom: 4, textTransform: 'uppercase' };
++const opSub = { fontSize: '0.58rem', color: 'rgba(255,255,255,0.38)', marginBottom: 10, lineHeight: 1.5 };
++/** min(100%, N) keeps every card inside a 320px screen; the grid collapses to one column on phones. */
++const OpVisualGrid = ({ children, min = 240, mb = 24 }) => (
++  <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))`, gap: 14, marginBottom: mb }}>{children}</div>
++);
++const OpGauge = ({ title, sub, value, centerValue, suffix = '%', label, hint }) => (
++  <div style={opPanel}>
++    <div style={opTitle}>{title}</div>
++    {sub && <div style={opSub}>{sub}</div>}
++    <BkGauge value={value} centerValue={centerValue} suffix={suffix} label={label} maxWidth={210} />
++    {hint && <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>{hint}</div>}
++  </div>
++);
++/** Donut + value list. rows: [{label, value}] (zero/negative rows are dropped). */
++const OpDonut = ({ title, sub, rows, centerValue, centerLabel, valueFormat = (v) => v, size = 150 }) => {
++  const data = (rows || []).filter((r) => Number(r.value) > 0);
++  const total = data.reduce((a, r) => a + Number(r.value), 0);
++  return (
++    <div style={opPanel}>
++      <div style={opTitle}>{title}</div>
++      {sub && <div style={opSub}>{sub}</div>}
++      {total <= 0 ? <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>No data yet</div> : (
++        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
++          <BkDonut rows={data} valueFormat={valueFormat} centerValue={centerValue} centerLabel={centerLabel} size={size} />
++          <div style={{ flex: '1 1 140px', minWidth: 130, display: 'grid', gap: 8 }}>
++            {data.map((r, i) => (
++              <div key={`${r.label}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.7rem' }}>
++                <span style={{ width: 9, height: 9, borderRadius: 3, flex: '0 0 auto', background: `var(--chart-${(i % 5) + 1})` }} />
++                <span style={{ flex: 1, minWidth: 0, color: 'rgba(255,255,255,0.65)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
++                <span style={{ fontFamily: 'monospace', color: '#ECDCB9', fontWeight: 700 }}>{valueFormat(r.value)}</span>
++                <span style={{ fontFamily: 'monospace', color: 'rgba(255,255,255,0.4)', width: 34, textAlign: 'right' }}>{Math.round((Number(r.value) / total) * 100)}%</span>
++              </div>
++            ))}
++          </div>
++        </div>
++      )}
++    </div>
++  );
++};
++
+ const OperatorLiveTimer = ({ createdAt }) => {
+   const [elapsed, setElapsed] = useState(0);
+   useEffect(() => {
+@@ -6225,7 +6269,7 @@
+             </div>
+           </div>
+         ) : (
+-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }} className="p-queue-grid">
++          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '14px' }} className="p-queue-grid">
+             {filtered.map(entry => {
+               const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
+               const urgency = waitMins > 60 ? 'critical' : waitMins > 30 ? 'high' : waitMins > 15 ? 'medium' : 'low';
+@@ -6892,6 +6936,12 @@
+             {/* Payment mix */}
+             <div style={panel}>
+               <div style={label}>Payment mix</div>
++              {(cash + upi + card) > 0 && (
++                <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'center' }}>
++                  <BkDonut size={150} centerValue={money(cash + upi + card)} centerLabel="RECORDED" valueFormat={money}
++                    rows={[{ label: 'Cash', value: cash }, { label: 'UPI', value: upi }, { label: 'Card', value: card }]} />
++                </div>
++              )}
+               <div style={{ marginTop: '16px' }}>
+                 {bar('Cash', cash, '#d3bfa2')}
+                 {bar('UPI', upi, '#B8923A')}
+@@ -8028,6 +8078,18 @@
+         })}
+       </div>
+ 
++      {/* ── SEGMENT VISUALS (Bklit) ── */}
++      {Number(sum.total) > 0 && (
++        <OpVisualGrid mb={0}>
++          <OpDonut title="Guest segments" sub="How your guests split" size={140} centerValue={sum.total} centerLabel="GUESTS"
++            rows={[{ label: 'New', value: sum.new }, { label: 'Regular', value: sum.regular }, { label: 'Loyal', value: sum.loyal }, { label: 'Champion', value: sum.champion }, { label: 'At risk', value: sum.atRisk }]} />
++          <OpGauge title="Loyal & champions" sub="Your strongest guests" value={((Number(sum.loyal) || 0) + (Number(sum.champion) || 0)) / sum.total * 100}
++            centerValue={Math.round(((Number(sum.loyal) || 0) + (Number(sum.champion) || 0)) / sum.total * 100)} label="OF GUESTS" hint={`${(Number(sum.loyal) || 0) + (Number(sum.champion) || 0)} of ${sum.total} guests`} />
++          <OpGauge title="At risk" sub="Haven't visited in a while" value={(Number(sum.atRisk) || 0) / sum.total * 100}
++            centerValue={Math.round((Number(sum.atRisk) || 0) / sum.total * 100)} label="OF GUESTS" hint={`${Number(sum.atRisk) || 0} guests to win back`} />
++        </OpVisualGrid>
++      )}
++
+       {/* ── TOOLBAR ── */}
+       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+@@ -8859,7 +8921,7 @@
+         <div style={{color:'#8a8a8a',fontSize:'0.78rem',fontWeight:'700'}}>No offers yet — create one above</div>
+       </div>
+     ):(
+-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'13px'}}>
++      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(min(100%, 280px), 1fr))',gap:'13px'}}>
+         {(Array.isArray(offers)?offers:[]).map(offer=>(
+           <div key={offer._id} style={{
+             background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+@@ -10972,7 +11034,7 @@
+           {recs.filter(r => r.priority === 1).length > 0 && (
+             <>
+               <SectionHeader icon={<AlertOctagon size={16} />} title="Needs Action Today" subtitle="These directly affect revenue or compliance — address first" />
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px', marginBottom: '28px' }}>
+                 {recs.filter(r => r.priority === 1).map(rec => (
+                   <RecommendationCard key={rec.id} rec={rec} urgent />
+                 ))}
+@@ -10984,7 +11046,7 @@
+           {recs.filter(r => r.priority === 2).length > 0 && (
+             <>
+               <SectionHeader icon={<TrendingUp size={16} />} title="High-Impact Opportunities" subtitle="Meaningful revenue or efficiency gains, act within the week" />
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px', marginBottom: '28px' }}>
+                 {recs.filter(r => r.priority === 2).map(rec => (
+                   <RecommendationCard key={rec.id} rec={rec} />
+                 ))}
+@@ -10996,7 +11058,7 @@
+           {recs.filter(r => r.priority === 3).length > 0 && (
+             <>
+               <SectionHeader icon={<Lightbulb size={16} />} title="Optimization Suggestions" subtitle="Worth scheduling into your monthly review" />
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px', marginBottom: '28px' }}>
+                 {recs.filter(r => r.priority === 3).map(rec => (
+                   <RecommendationCard key={rec.id} rec={rec} />
+                 ))}
+@@ -11008,7 +11070,7 @@
+           {recs.filter(r => r.priority === 4).length > 0 && (
+             <>
+               <SectionHeader icon={<Globe size={16} />} title="Strategic Considerations" subtitle="Bigger initiatives — plan over weeks, not days" />
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px', marginBottom: '28px' }}>
+                 {recs.filter(r => r.priority === 4).map(rec => (
+                   <RecommendationCard key={rec.id} rec={rec} />
+                 ))}
+@@ -11020,7 +11082,7 @@
+           {recs.filter(r => r.priority === 5).length > 0 && (
+             <>
+               <SectionHeader icon={<Award size={16} />} title="What's Working Well" subtitle="Protect and double down on these strengths" />
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '28px' }}>
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px', marginBottom: '28px' }}>
+                 {recs.filter(r => r.priority === 5).map(rec => (
+                   <RecommendationCard key={rec.id} rec={rec} positive />
+                 ))}
+@@ -11238,12 +11300,24 @@
+       <SC label="Loyalty Rate"     value={`${stats.loyaltyRate}%`}                 sub={`${trendsData?.customers?.repeat||0} of ${trendsData?.customers?.total||0} repeat`} />
+     </div>
+ 
++    {/* ════ AT A GLANCE (Bklit gauge + donut) ════ */}
++    {stats.revenue > 0 && (() => {
++      const pm = currentMonthAnalytics.reduce((a, b) => ({ cash: a.cash + (Number(b.cash) || 0), upi: a.upi + (Number(b.upi) || 0), card: a.card + (Number(b.card) || 0) }), { cash: 0, upi: 0, card: 0 });
++      const repeat = Number(trendsData?.customers?.repeat) || 0; const total = Number(trendsData?.customers?.total) || 0;
++      return (
++        <OpVisualGrid>
++          <OpGauge title="Loyalty rate" sub="Guests who came back" value={stats.loyaltyRate} centerValue={Math.round(Number(stats.loyaltyRate) || 0)} label="REPEAT" hint={`${repeat} of ${total} guests are repeat visitors`} />
++          <OpDonut title="Payment mix" sub={viewDate.toLocaleString('en-IN', { month: 'long', year: 'numeric' })} rows={[{ label: 'Cash', value: pm.cash }, { label: 'UPI', value: pm.upi }, { label: 'Card', value: pm.card }]}
++            valueFormat={(v) => `\u20B9${Math.round(v).toLocaleString('en-IN')}`} centerValue={`\u20B9${Math.round((pm.cash + pm.upi + pm.card) / 1000).toLocaleString('en-IN')}k`} centerLabel="COLLECTED" />
++        </OpVisualGrid>
++      );
++    })()}
++
+     {/* ════ VISUAL CHARTS ════ */}
+     {(() => {
+-      const GOLD = '#d3bfa2', BLUE = '#cdbb98', AX = 'rgba(255,255,255,0.35)', GRID = 'rgba(255,255,255,0.06)';
++      const GOLD = '#d3bfa2';
+       const money = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : v >= 1000 ? `₹${(v/1000).toFixed(1)}k` : `₹${Math.round(v)}`;
+-      const tip = { background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.25)', borderRadius: 10, fontSize: 12, color: '#fff' };
+-      const daily = dailyRows.map(d => ({ day: d._id.slice(8), revenue: d.revenue || 0, orders: d.count || 0 }));
++      const daily = dailyRows.map(d => ({ date: d._id, revenue: d.revenue || 0 }));
+       const hourly = (hourlyAnalytics.hourly || []).filter(h => h.orderCount > 0 || (h.hour >= 8 && h.hour <= 23)).map(h => ({ hour: `${h.hour}h`, orders: h.orderCount, revenue: h.revenue }));
+       const dow = hourlyAnalytics.dayOfWeek || [];
+       const hasHourly = hourly.some(h => h.orders > 0);
+@@ -11254,57 +11328,26 @@
+       const empty = <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: '0.7rem' }}>No data yet</div>;
+       const top = hasDow ? [...dow].sort((a, b) => b.revenue - a.revenue)[0] : null;
+       return (
+-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 24 }}>
++        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14, marginBottom: 24 }}>
+           <div style={{ ...card, gridColumn: '1 / -1' }}>
+             <div style={ttl}>DAILY REVENUE</div>
+             <div style={sub}>{viewDate.toLocaleString('en-IN', { month: 'long', year: 'numeric' })} · settled bills</div>
+             {daily.length === 0 ? empty : (
+-              <div style={{ height: 220 }}>
+-                <ResponsiveContainer width="100%" height="100%">
+-                  <AreaChart data={daily} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
+-                    <defs><linearGradient id="opRevFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GOLD} stopOpacity={0.35} /><stop offset="100%" stopColor={GOLD} stopOpacity={0} /></linearGradient></defs>
+-                    <CartesianGrid stroke={GRID} vertical={false} />
+-                    <XAxis dataKey="day" tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} />
+-                    <YAxis tickFormatter={money} tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} width={52} />
+-                    <RcTooltip contentStyle={tip} cursor={{ stroke: GOLD, strokeOpacity: 0.3 }} formatter={(v, n) => n === 'revenue' ? [`₹${Math.round(v).toLocaleString('en-IN')}`, 'Revenue'] : [v, 'Orders']} labelFormatter={l => `Day ${l}`} />
+-                    <Area type="monotone" dataKey="revenue" stroke={GOLD} strokeWidth={2} fill="url(#opRevFill)" />
+-                  </AreaChart>
+-                </ResponsiveContainer>
+-              </div>
++              <BkArea data={daily} yKey="revenue" label="Revenue" valueFormat={(v) => `\u20B9${Math.round(v).toLocaleString('en-IN')}`} axisFormat={money} height={220} />
+             )}
+           </div>
+           <div style={card}>
+             <div style={ttl}>ORDERS BY HOUR</div>
+             <div style={sub}>Selected day · settlement time (IST)</div>
+             {!hasHourly ? empty : (
+-              <div style={{ height: 200 }}>
+-                <ResponsiveContainer width="100%" height="100%">
+-                  <BarChart data={hourly} margin={{ top: 6, right: 8, left: -20, bottom: 0 }}>
+-                    <CartesianGrid stroke={GRID} vertical={false} />
+-                    <XAxis dataKey="hour" tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+-                    <YAxis allowDecimals={false} tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} />
+-                    <RcTooltip contentStyle={tip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v, n) => n === 'orders' ? [v, 'Orders'] : [`₹${Math.round(v).toLocaleString('en-IN')}`, 'Revenue']} />
+-                    <Bar dataKey="orders" fill={BLUE} radius={[4, 4, 0, 0]} />
+-                  </BarChart>
+-                </ResponsiveContainer>
+-              </div>
++              <BkColumns height={200} label="Orders" rows={hourly.map(h => ({ label: h.hour, value: h.orders }))} valueFormat={(v) => `${v} ${v === 1 ? 'order' : 'orders'}`} />
+             )}
+           </div>
+           <div style={card}>
+             <div style={ttl}>REVENUE BY WEEKDAY</div>
+             <div style={sub}>{top ? `Strongest: ${top.day} · ${money(top.revenue)}` : 'All-time settled bills'}</div>
+             {!hasDow ? empty : (
+-              <div style={{ height: 200 }}>
+-                <ResponsiveContainer width="100%" height="100%">
+-                  <BarChart data={dow} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
+-                    <CartesianGrid stroke={GRID} vertical={false} />
+-                    <XAxis dataKey="day" tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} />
+-                    <YAxis tickFormatter={money} tick={{ fill: AX, fontSize: 10 }} axisLine={false} tickLine={false} width={52} />
+-                    <RcTooltip contentStyle={tip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v) => [`₹${Math.round(v).toLocaleString('en-IN')}`, 'Revenue']} />
+-                    <Bar dataKey="revenue" fill={GOLD} radius={[4, 4, 0, 0]} />
+-                  </BarChart>
+-                </ResponsiveContainer>
+-              </div>
++              <BkColumns height={200} label="Revenue" rows={dow.map(d => ({ label: d.day, value: d.revenue }))} valueFormat={(v) => `\u20B9${Math.round(v).toLocaleString('en-IN')}`} />
+             )}
+           </div>
+         </div>
+@@ -11353,7 +11396,7 @@
+       const daysToGstr3B = Math.round((nextGstr3B - _todayMid)/86400000);
+ 
+       return (
+-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '24px' }}>
++        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '14px', marginBottom: '24px' }}>
+ 
+           {/* GST Card */}
+           <BC>
+@@ -11426,6 +11469,11 @@
+           {/* P&L Card */}
+           <BC>
+             <BT icon={<TrendingUp size={14} strokeWidth={1.5}/>}>P&L SUMMARY</BT>
++            <div style={{ marginBottom: 16 }}>
++              <OpDonut title="Where each rupee goes" size={132} centerValue={`\u20B9${Math.round(monthlyRevenue / 1000).toLocaleString('en-IN')}k`} centerLabel="REVENUE"
++                valueFormat={(v) => `\u20B9${Math.round(v).toLocaleString('en-IN')}`}
++                rows={[{ label: 'GST', value: totalGst5 }, { label: 'Ingredients', value: ingredientCost }, ...(payrollCost > 0 ? [{ label: 'Payroll', value: payrollCost }] : []), { label: 'Profit', value: Math.max(0, payrollCost > 0 ? netAfterAll : grossAfterGst) }]} />
++            </div>
+             {[
+               { l:'TOTAL REVENUE',            v:monthlyRevenue,           sign:'',  bold:false },
+               { l:`— GST PAID (${(_totalGstPct*100).toFixed(2).replace(/\.00$/, '')}%)`,           v:-totalGst5,               sign:'-', bold:false },
+@@ -11852,7 +11900,7 @@
+                 </div>
+               ))}
+             </div>
+-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))', gap:'0 32px' }}>
++            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%, 380px), 1fr))', gap:'0 32px' }}>
+               {profitabilityData.slice(0,8).map((d,idx)=>(
+                 <div key={d._id} style={{ padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px', alignItems:'center' }}>
+@@ -11955,7 +12003,7 @@
+     {Object.keys(categoryRankings).length > 0 && (
+       <BC style={{ marginBottom:'14px' }}>
+         <BT icon={<Layers size={14} strokeWidth={1.5}/>}>CATEGORY PERFORMANCE</BT>
+-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'12px' }}>
++        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%, 280px), 1fr))', gap:'12px' }}>
+           {Object.entries(categoryRankings).map(([cat,m])=>(
+             <div key={cat} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'12px', padding:'15px' }}>
+               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', paddingBottom:'10px', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+@@ -13663,7 +13711,7 @@
+               <span style={{width:'3px',height:'14px',background:'#8a704d',borderRadius:'2px'}}/>
+               <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#b4b4b4',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({roleStaff.length})</span>
+             </div>
+-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'12px'}}>
++            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(min(100%, 280px), 1fr))',gap:'12px'}}>
+               {roleStaff.map(m=>{
+                 const dayLogs=attendanceLogs.filter(l=>l.date===attendanceDate&&(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())).sort((a,b)=>new Date(a.clockIn)-new Date(b.clockIn));
+                 const activeLogs=dayLogs.filter(l=>l.clockIn&&!l.clockOut);
+@@ -13866,6 +13914,16 @@
+         ))}
+       </div>
+ 
++      {/* ── STOCK HEALTH (Bklit) ── */}
++      {totalItems > 0 && (
++        <OpVisualGrid mb={0}>
++          <OpGauge title="Stock health" sub="Ingredients above their minimum" value={((totalItems - lowCount) / totalItems) * 100} centerValue={Math.round(((totalItems - lowCount) / totalItems) * 100)} label="WELL STOCKED"
++            hint={`${lowCount} of ${totalItems} ingredients running low`} />
++          <OpDonut title="Stock status" sub="Where your ingredients stand" size={140} centerValue={totalItems} centerLabel="ITEMS"
++            rows={[{ label: 'Healthy', value: Math.max(0, totalItems - lowCount) }, { label: 'Low', value: Math.max(0, lowCount - depletedCount) }, { label: 'Depleted', value: depletedCount }]} />
++        </OpVisualGrid>
++      )}
++
+       {/* ── SMART PURCHASE ASSISTANT ── */}
+       {purchaseRecommendations.length > 0 && (
+         <div style={{ ...panelStyle, padding: '18px 20px' }}>
+@@ -13967,7 +14025,7 @@
+             )}
+           </div>
+ 
+-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(260px,1fr)', gap: '26px', alignItems: 'start' }}>
++          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(min(100%, 260px), 1fr)', gap: '26px', alignItems: 'start' }}>
+           <div style={{ minWidth: 0 }}>
+           {/* NAME with autocomplete */}
+           <div style={{ position: 'relative', marginBottom: '12px' }}>
+@@ -14394,7 +14452,7 @@
+             {vendors.length === 0 ? (
+               <div style={{ textAlign: 'center', padding: '26px', color: P.muted, fontSize: '12px' }}>No vendors yet. Add one above to start linking ingredients.</div>
+             ) : (
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '10px' }}>
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '10px' }}>
+                 {vendors.map(v => {
+                   const linkedCount = inventory.filter(i => i.vendorId === v._id).length;
+                   const dueCount = (procurementData || []).filter(p => p.vendorId === v._id && p.suggestedReorderQty > 0).length;
+@@ -14440,7 +14498,7 @@
+             </div>
+             <span style={pill(true)}>{procurementData.filter(i => i.isLow || (i.daysRemaining !== null && i.daysRemaining <= 7)).length} need reorder</span>
+           </div>
+-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
++          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: '12px' }}>
+             {procurementData.slice(0, 12).map(item => {
+               const urgent = item.daysRemaining !== null && item.daysRemaining <= 3;
+               const soon = item.daysRemaining !== null && item.daysRemaining <= 7;
+@@ -14957,7 +15015,7 @@
+       </div>
+ 
+       {/* Cards grid */}
+-      <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', textAlign: 'left' }}>
++      <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '12px', textAlign: 'left' }}>
+         {menuItems
+           .filter(m => m.name.toLowerCase().includes((recipeSearchQuery || '').toLowerCase()))
+           .map(dish => {
+@@ -15681,7 +15739,7 @@
+         </div>
+  
+         {/* Items grid */}
+-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'14px'}}>
++        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(min(100%, 260px), 1fr))',gap:'14px'}}>
+           {items.map(item=>{
+             const isLow=item.currentStock<=(item.lowStockThreshold||5)&&item.currentStock>0;
+             const isOut=item.currentStock<=0;
+@@ -17469,7 +17527,7 @@
+   .p-service-divider{display:none!important;}
+  
+   /* Queue grid */
+-  .p-queue-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))!important;}
++  .p-queue-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%, 280px), 1fr))!important;}
+  
+   /* 2-col grids */
+   div[style*="gridTemplateColumns:'1fr 1fr'"],
+@@ -17679,7 +17737,7 @@
+   div[style*="repeat(auto-fit,minmax(200px,1fr))"]{
+     grid-template-columns:1fr 1fr!important;
+   }
+-  div[style*="repeat(auto-fill,minmax(280px,1fr))"]{
++  div[style*="repeat(auto-fill,minmax(min(100%, 280px), 1fr))"]{
+     grid-template-columns:1fr!important;
+   }
+   div[style*="overflowX:'auto'"],
+@@ -17689,7 +17747,7 @@
+   table{min-width:560px!important;}
+  
+   /* Attendance grid */
+-  div[style*="repeat(auto-fill,minmax(280px,1fr))"]{
++  div[style*="repeat(auto-fill,minmax(min(100%, 280px), 1fr))"]{
+     grid-template-columns:1fr!important;
+   }
+  
+@@ -17700,7 +17758,7 @@
+   }
+  
+   /* ── EXTRAS ── */
+-  div[style*="repeat(auto-fill,minmax(260px,1fr))"]{
++  div[style*="repeat(auto-fill,minmax(min(100%, 260px), 1fr))"]{
+     grid-template-columns:1fr!important;
+   }
+  
+@@ -17760,7 +17818,7 @@
+   }
+  
+   /* Category rankings */
+-  div[style*="repeat(auto-fit, minmax(300px, 1fr))"]{
++  div[style*="repeat(auto-fit, minmax(min(100%, 300px), 1fr))"]{
+     grid-template-columns:1fr!important;
+   }
+  
+@@ -17786,6 +17844,14 @@
+   }
+ }
+  
++/* ── Premium pass: robust phone layout. React serialises inline grids with a space after commas, so these match what is really in the DOM. ── */
++@media (max-width:639px){
++  main div[style*="grid-template-columns: repeat(6,"],
++  main div[style*="grid-template-columns: repeat(5,"],
++  main div[style*="grid-template-columns: repeat(4,"],
++  main div[style*="grid-template-columns: repeat(3,"]{grid-template-columns:repeat(auto-fit,minmax(min(100%,128px),1fr))!important;gap:8px!important;}
++  main svg,main img,main canvas{max-width:100%;}
++}
+ /* ══════════════════════════════════════════════
+    EXTRA SMALL  ≤ 380px
+ ══════════════════════════════════════════════ */
+@@ -17861,7 +17927,7 @@
+   ghostBtn:{flex:1,padding:'12px',background:'transparent',border:'1px solid rgba(211,191,162,0.16)',color:'#a6a6a6',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
+   toggleShowBtn:{flex:1,padding:'12px',background:'#d3bfa2',color:'#0c0c0c',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
+   toggleHideBtn:{flex:1,padding:'12px',background:'#171717',color:'#969696',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
+-  fullWidthGrid:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'25px'},
++  fullWidthGrid:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(min(100%, 280px), 1fr))',gap:'25px'},
+   gridLabel:{color:'#8a8a8a',fontSize:'0.7rem',fontWeight:'900',marginBottom:'20px',letterSpacing:'1.5px'},
+   specialModeRow:{display:'flex',gap:'15px',marginBottom:'30px'},
+   specBtn:{flex:1,padding:'18px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#969696',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
+@@ -17901,9 +17967,14 @@
+   let tid = '';
+   try { tid = localStorage.getItem('pratyeksha_token') ? (localStorage.getItem('active_tenant') || '') : ''; } catch { /* storage unavailable */ }
+   return (
+-    <SubscriptionGate tenantId={tid} onSignOut={() => { try { localStorage.clear(); } catch { /* ignore */ } window.location.reload(); }}>
+-      <OperatorPortalInner />
+-    </SubscriptionGate>
++    <MotionConfig reducedMotion="user">
++      {/* bk-scope-op carries the Bklit chart tokens (brass palette); display:contents keeps layout untouched */}
++      <div className="bk-scope-op" style={{ display: 'contents' }}>
++        <SubscriptionGate tenantId={tid} onSignOut={() => { try { localStorage.clear(); } catch { /* ignore */ } window.location.reload(); }}>
++          <OperatorPortalInner />
++        </SubscriptionGate>
++      </div>
++    </MotionConfig>
+   );
+ };
+ 

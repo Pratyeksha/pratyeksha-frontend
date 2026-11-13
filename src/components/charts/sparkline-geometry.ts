@@ -1,3 +1,4 @@
+// @ts-nocheck -- vendored Bklit source; editor-only type noise (Vite does not type-check)
 import {
   type CurveFactory,
   curveLinear,
