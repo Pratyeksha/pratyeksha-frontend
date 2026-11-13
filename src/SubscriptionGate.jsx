@@ -15,7 +15,7 @@ import SupportContact, { SUPPORT } from './SupportContact.jsx';
 
 const GOLD = '#d3bfa2';
 const IVORY = '#f7f3eb';
-const COPPER = '#e29a58';
+const COPPER = '#c9aa88';
 const EVENT = 'px-subscription-expired';
 
 export function installSubscriptionInterceptor() {
@@ -57,7 +57,7 @@ export function useSubscription(tenantId) {
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } };
 
-const shell = { minHeight: '100vh', width: '100%', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box', background: 'radial-gradient(900px 520px at 50% -10%, rgba(211,191,162,0.12), transparent 60%), radial-gradient(700px 500px at 90% 110%, rgba(226,154,88,0.07), transparent 60%), #060606', color: IVORY, fontFamily: 'Poppins, Inter, system-ui, sans-serif', textAlign: 'center' };
+const shell = { minHeight: '100vh', width: '100%', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box', background: 'radial-gradient(900px 520px at 50% -10%, rgba(211,191,162,0.12), transparent 60%), radial-gradient(700px 500px at 90% 110%, rgba(201,170,136,0.07), transparent 60%), #060606', color: IVORY, fontFamily: 'Poppins, Inter, system-ui, sans-serif', textAlign: 'center' };
 const linkRow = { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, border: '1px solid rgba(211,191,162,0.16)', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))', color: IVORY, textDecoration: 'none', fontSize: 13.5, fontWeight: 600, textAlign: 'left' };
 const ico = { width: 36, height: 36, borderRadius: 11, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.22)', color: GOLD };
 
@@ -68,7 +68,7 @@ export function ExpiredPage({ name, planExpiry, logoUrl, reason, onRetry, onSign
   return (
     <div style={shell}>
       <div style={{ width: 460, maxWidth: '100%', borderRadius: 28, border: '1px solid rgba(211,191,162,0.2)', background: 'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.018)), #0a0a0a', boxShadow: '0 40px 100px -30px rgba(0,0,0,0.9)', padding: '34px 26px 26px' }}>
-        <div style={{ width: 64, height: 64, margin: '0 auto 18px', borderRadius: 20, display: 'grid', placeItems: 'center', background: 'rgba(226,154,88,0.1)', border: '1px solid rgba(226,154,88,0.35)', color: COPPER }}>
+        <div style={{ width: 64, height: 64, margin: '0 auto 18px', borderRadius: 20, display: 'grid', placeItems: 'center', background: 'rgba(201,170,136,0.1)', border: '1px solid rgba(201,170,136,0.35)', color: COPPER }}>
           <CalendarClock size={28} />
         </div>
         <div style={{ fontSize: 10, letterSpacing: 2.8, fontWeight: 800, color: GOLD, textTransform: 'uppercase' }}>{paused ? 'Account paused' : 'Subscription ended'}</div>
@@ -117,8 +117,8 @@ export function SubscriptionGate({ tenantId, children, onSignOut }) {
 const LEVELS = {
   notice:   { label: 'Renewal reminder', tone: GOLD,   bg: 'rgba(211,191,162,0.07)', border: 'rgba(211,191,162,0.22)', every: 3 * 24 * 3600e3 },
   warning:  { label: 'Plan ending soon', tone: '#e6d6b8', bg: 'rgba(211,191,162,0.11)', border: 'rgba(211,191,162,0.4)',  every: 24 * 3600e3 },
-  urgent:   { label: 'Renew now',        tone: COPPER, bg: 'rgba(226,154,88,0.1)',   border: 'rgba(226,154,88,0.42)',  every: 6 * 3600e3 },
-  critical: { label: 'Final days',       tone: COPPER, bg: 'rgba(226,154,88,0.16)',  border: 'rgba(226,154,88,0.7)',   every: 3600e3 },
+  urgent:   { label: 'Renew now',        tone: COPPER, bg: 'rgba(201,170,136,0.1)',   border: 'rgba(201,170,136,0.42)',  every: 6 * 3600e3 },
+  critical: { label: 'Final days',       tone: COPPER, bg: 'rgba(201,170,136,0.16)',  border: 'rgba(201,170,136,0.7)',   every: 3600e3 },
 };
 
 const keyFor = (t) => `px_sub_remind_${t}`;
@@ -162,7 +162,7 @@ export function RenewalReminder({ tenantId, style }) {
 
   return (
     <>
-      <div role="status" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '0 0 12px', borderRadius: 14, border: `1px solid ${lvl.border}`, background: lvl.bg, color: IVORY, fontSize: 12.5, textAlign: 'left', boxShadow: crit ? '0 0 0 1px rgba(226,154,88,0.25), 0 8px 28px -12px rgba(226,154,88,0.45)' : 'none', ...style }}>
+      <div role="status" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '0 0 12px', borderRadius: 14, border: `1px solid ${lvl.border}`, background: lvl.bg, color: IVORY, fontSize: 12.5, textAlign: 'left', boxShadow: crit ? '0 0 0 1px rgba(201,170,136,0.25), 0 8px 28px -12px rgba(201,170,136,0.45)' : 'none', ...style }}>
         <CalendarClock size={17} color={lvl.tone} style={{ flexShrink: 0 }} />
         <div style={{ flex: '1 1 220px', minWidth: 0, lineHeight: 1.45 }}>
           <b style={{ color: lvl.tone, letterSpacing: 0.4 }}>{lvl.label} · {status.daysLeft} day{status.daysLeft === 1 ? '' : 's'} left</b>

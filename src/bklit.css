@@ -53,7 +53,7 @@
 
 /* Operator portal: obsidian / brass / ivory only (the portal's own rule: no red, green, blue or orange) */
 .bk-scope-op {
-  --chart-1: #d3bfa2; --chart-2: #8a704d; --chart-3: #ecdcb9; --chart-4: #b8923a; --chart-5: #969696;
+  --chart-1: #d3bfa2; --chart-2: #8a704d; --chart-3: #ecdcb9; --chart-4: #b8a283; --chart-5: #969696;
   --chart-positive: #ecdcb9; --chart-negative: #8a704d;
   --chart-background: #090909; --chart-tooltip-background: #090909;
   --chart-indicator-color: #d3bfa2; --legend: #090909;

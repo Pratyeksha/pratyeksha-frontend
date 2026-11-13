@@ -91,7 +91,7 @@ function ReviewModal({ tenantId, request, onClose, onDone, notify }) {
         {err && <div role="alert" style={{ margin: '10px 0', color: '#e0907a', fontSize: 12.5, display: 'flex', gap: 8 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {err}</div>}
         {draft && b && (
           <>
-            {preview.pendingOrders > 0 && <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(224,180,80,0.1)', border: '1px solid rgba(224,180,80,0.4)', color: '#e0c48f', fontSize: 12 }}>⚠ {preview.pendingOrders} order(s) are still being prepared and are NOT on this bill. Wait until they are served, or send now and revise later.</div>}
+            {preview.pendingOrders > 0 && <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(217,200,166,0.1)', border: '1px solid rgba(217,200,166,0.4)', color: '#d9c8a6', fontSize: 12 }}>⚠ {preview.pendingOrders} order(s) are still being prepared and are NOT on this bill. Wait until they are served, or send now and revise later.</div>}
             <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '8px 12px', margin: '12px 0' }}>
               {b.lines.length === 0 && <div style={{ padding: 10, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>No Ready or Served orders on this table yet.</div>}
               {b.lines.map((l, i) => <div key={i} style={row}><span><b>{l.quantity}×</b> {l.name}{l.portion && l.portion !== 'Single' ? ` (${l.portion})` : ''}{l.comboName ? <i style={{ color: GOLD2 }}> · combo</i> : null}</span><span>{money(l.subtotal)}</span></div>)}
@@ -172,7 +172,7 @@ export default function BillRequestsPanel({ tenantId, socket, notify }) {
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderBottom: `1px solid rgba(211,191,162,0.12)` }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: '#f7f3eb' }}>Table {r.tableNumber}{r.guestName ? <span style={{ fontWeight: 500, color: 'rgba(255,255,255,0.6)' }}> · {r.guestName}</span> : null}</div>
-                    <div style={{ fontSize: 11, color: r.status === 'requested' ? '#e0c48f' : '#7fc79a', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ fontSize: 11, color: r.status === 'requested' ? '#d9c8a6' : '#7fc79a', display: 'flex', alignItems: 'center', gap: 5 }}>
                       {r.status === 'requested' ? `Waiting ${ago(r.requestedAt)}` : <><CheckCircle2 size={12} /> Sent ₹{money(r.bill?.total)} · awaiting payment</>}
                     </div>
                   </div>

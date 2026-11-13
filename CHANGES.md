@@ -38,3 +38,20 @@ Money amounts, bills and invoices are deliberately NOT animated. No new npm depe
 * New visuals from data the tabs already load, in the portal's brass palette (`.bk-scope-op`, no red/green/blue/orange): Insights (loyalty gauge, payment-mix donut, "where each rupee goes" donut in P&L), Customers (guest-segment donut, loyal and at-risk gauges), Day close (payment-mix donut above the bars), Inventory (stock-health gauge and stock-status donut).
 * Motion: the portal now imports the real `motion` package (`motion/react`, same API as framer-motion, so its 110 existing animations are unchanged) and is wrapped in `MotionConfig reducedMotion="user"`.
 * Phones: every `minmax(NNNpx, 1fr)` grid of 240px or more is now `minmax(min(100%, NNNpx), 1fr)` so nothing overflows a 320px screen; the GST/P&L pair stacks; fixed 3/4/5/6-column inline grids (floor-plan tables, KPI rows) reflow to fit using selectors that match how React actually serialises inline styles (the old attribute selectors expected no space after commas and never matched).
+
+## Operator portal: every tab, second pass
+Real Bklit charts (brass palette) added to every data tab, built only from data each tab already loads:
+* Live orders: floor rings (occupied / bill pending / held / free), open-order pipeline donut, queue bars.
+* Billing: floor rings above the table grid; the two-column layout now wraps and the receipt shrinks to fit a phone.
+* Day close, Insights, Customers, Inventory: (first pass) payment-mix, P&L, segment and stock visuals.
+* Menu: availability gauge, veg/non-veg donut, dishes by category, price-band bars.
+* Marketing: offers (live gauge, offer-type donut, discount-given bars), campaigns (reach bars), announcements (status donut, most-viewed bars).
+* Intelligence: menu-engineering donut (stars / plowhorses / puzzles / dogs), average-margin gauge, highest-margin dishes.
+* Management: team-by-role donut and hours-this-month bars. Recipes: coverage gauge and costing donut. Reservations: booking-status donut, party-size bars, confirmed gauge. Extras: stock-status donut, stock-value bars, availability gauge.
+* Payables (what you owe, top vendors, settled gauge), Compliance (licence status, health gauge, next to renew), Equipment (service status, maintenance health, next service), Shift log (handover status, closed-out gauge), Audit (records by area, last-7-days bars).
+Portal-wide: tabs rise in on open (respects reduced motion); keyboard focus rings and tap highlights; table-style rows (5+ columns, generated from the source) scroll sideways on phones instead of being squashed; the live service strip reflows to two columns on phones.
+
+## Operator portal: Marketing redesign, yellow removed, Billing reverted
+* Marketing: new hub header (title, live-banner and scheduled chips, quick-create buttons, four count-up metrics), a segmented sub-tab switcher with a sliding indicator that scrolls sideways on phones and sticks while you scroll, upgraded stat tiles (accent edge, icon chip, count-up) on Banners, Offers and Campaigns, animated offer and campaign cards, a reach bar on every campaign in the send history, and the compose panel + list that were a fixed 390px column now stack on screens under 980px. Fixed the "No campaigns sent yet" text, which was near-black on a dark background.
+* Yellow removed across the whole Operator module (OperatorPortal, BillRequestsPanel, ComboBuilder, SubscriptionGate and the Operator chart tokens): mustard, gold and amber values became beige tones (#b8a283, #d9c8a6, #a8957a, #8f7a5c, #c9aa88). SubscriptionGate is shared with the Owner app, so its amber renewal accents are beige there too.
+* Billing tab: my earlier changes (floor rings, wrapping layout, receipt sizing) are reverted; the Billing block is identical to your original apart from the colour swap, and the portal-wide phone CSS now excludes it.

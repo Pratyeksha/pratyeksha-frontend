@@ -6,7 +6,7 @@
  import PwaInstallButton from './PwaInstallButton.jsx';
 -import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip } from 'recharts';
 +import './bklit.css';
-+import { BkArea, BkColumns, BkDonut, BkGauge } from './ownerCharts.jsx';
++import { BkArea, BkColumns, BkDonut, BkGauge, BkHBars, BkRings } from './ownerCharts.jsx';
  import API_BASE_URL, { SOCKET_BASE_URL } from './apiBase.js';
  import { OPERATOR_AUTH_EVENT, getOperatorToken } from './operatorAuth.js';
  import { SubscriptionGate, RenewalReminder, ExpiredPage } from './SubscriptionGate.jsx';
@@ -15,11 +15,11 @@
  import DiscoveryAnalytics from './DiscoveryAnalytics.jsx';
   
 -import { motion, AnimatePresence } from 'framer-motion';
-+import { motion, AnimatePresence, MotionConfig } from 'motion/react'; // the real Motion package (same API as framer-motion)
++import { motion, AnimatePresence, MotionConfig, animate, useInView, useReducedMotion } from 'motion/react'; // the real Motion package (same API as framer-motion)
  
  // HTML-escape for the document builders below (purchase order, salary slip, invoice). Anything typed by a person must go through this
  // before it is placed in a string that is later assigned to innerHTML, or `<img onerror=...>` in a vendor / staff / address field would run.
-@@ -76,6 +77,49 @@
+@@ -76,6 +77,111 @@
  );
  
  
@@ -66,10 +66,289 @@
 +  );
 +};
 +
++/** Count-up number: eases from 0 when it scrolls into view; instant under reduced motion. */
++const OpCount = ({ value }) => {
++  const ref = useRef(null);
++  const reduce = useReducedMotion();
++  const inView = useInView(ref, { once: true, amount: 0.5 });
++  const n = Number(value) || 0;
++  useEffect(() => {
++    const el = ref.current;
++    if (!el || reduce || !inView) return undefined;
++    const c = animate(0, n, { duration: 0.9, ease: [0.22, 1, 0.36, 1], onUpdate: (v) => { el.textContent = Math.round(v).toLocaleString('en-IN'); } });
++    return () => c.stop();
++  }, [n, inView, reduce]);
++  return <span ref={ref}>{n.toLocaleString('en-IN')}</span>;
++};
++/** Marketing stat tile: accent edge, icon chip, count-up figure, spring hover. `v` may be a number (counts up) or a ready string. */
++const MktStat = ({ l, v, c = '#d3bfa2', icon }) => (
++  <motion.div whileHover={{ y: -2 }} transition={{ type: 'spring', stiffness: 400, damping: 28 }}
++    style={{ position: 'relative', overflow: 'hidden', minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 16,
++      background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(211,191,162,0.14)' }}>
++    <span aria-hidden="true" style={{ position: 'absolute', inset: '0 auto 0 0', width: 3, background: c, opacity: 0.7 }} />
++    <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c, background: `${c}14`, border: `1px solid ${c}33` }}>{icon}</div>
++    <div style={{ minWidth: 0 }}>
++      <div style={{ fontSize: '1.4rem', fontWeight: 900, color: c, fontFamily: 'monospace', lineHeight: 1, whiteSpace: 'nowrap' }}>{typeof v === 'number' ? <OpCount value={v} /> : v}</div>
++      <div style={{ fontSize: '0.5rem', color: '#969696', fontWeight: 900, letterSpacing: 1, marginTop: 5, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l}</div>
++    </div>
++  </motion.div>
++);
++
++/** Ranked bars card (Bklit horizontal bars). rows: [{label, value}] */
++const OpBars = ({ title, sub, rows, valueFormat = (v) => v, nameWidth = 104 }) => {
++  const data = (rows || []).filter((r) => Number(r.value) > 0).slice(0, 6);
++  return (
++    <div style={opPanel}>
++      <div style={opTitle}>{title}</div>
++      {sub && <div style={opSub}>{sub}</div>}
++      {data.length === 0 ? <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>No data yet</div> : <BkHBars rows={data} valueFormat={valueFormat} nameWidth={nameWidth} rowHeight={30} />}
++    </div>
++  );
++};
++/** Concentric rings card: each ring is a share of `max`. items: [{label, value, max}] */
++const OpRings = ({ title, sub, items, centerLabel, valueFormat = (v) => v }) => {
++  const rows = (items || []).map((r, i) => ({ ...r, color: `var(--chart-${(i % 5) + 1})` }));
++  return (
++    <div style={opPanel}>
++      <div style={opTitle}>{title}</div>
++      {sub && <div style={opSub}>{sub}</div>}
++      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
++        <BkRings items={rows} size={146} centerLabel={centerLabel} formatCenter={(v) => Math.round(v)} />
++        <div style={{ flex: '1 1 130px', minWidth: 120, display: 'grid', gap: 8 }}>
++          {rows.map((r) => (
++            <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.7rem' }}>
++              <span style={{ width: 9, height: 9, borderRadius: 3, flex: '0 0 auto', background: r.color }} />
++              <span style={{ flex: 1, minWidth: 0, color: 'rgba(255,255,255,0.65)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
++              <span style={{ fontFamily: 'monospace', color: '#ECDCB9', fontWeight: 700 }}>{valueFormat(r.value)}</span>
++            </div>
++          ))}
++        </div>
++      </div>
++    </div>
++  );
++};
++
  const OperatorLiveTimer = ({ createdAt }) => {
    const [elapsed, setElapsed] = useState(0);
    useEffect(() => {
-@@ -6225,7 +6269,7 @@
+@@ -84,7 +190,7 @@
+     const interval = setInterval(calc, 30000);
+     return () => clearInterval(interval);
+   }, [createdAt]);
+-  const getUrgencyColor = () => elapsed >= 15 ? '#d4af37' : '#a6a6a6';
++  const getUrgencyColor = () => elapsed >= 15 ? '#d9c8a6' : '#a6a6a6';
+   return (
+     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: getUrgencyColor() }}>
+       <Timer size={14} />
+@@ -159,9 +265,9 @@
+ 
+ const AnnouncementPreviewCard = ({ data }) => {
+   const colorMap = {
+-    gold:  { bg: 'linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.04))', border: 'rgba(201,168,76,0.35)', text: '#e8c96a' },
++    gold:  { bg: 'linear-gradient(135deg, rgba(217,200,166,0.15), rgba(217,200,166,0.04))', border: 'rgba(217,200,166,0.35)', text: '#d9c8a6' },
+     green: { bg: 'linear-gradient(135deg, rgba(138,154,126,0.15), rgba(138,154,126,0.04))', border: 'rgba(138,154,126,0.35)', text: '#ecdcb9' },
+-    rose:  { bg: 'linear-gradient(135deg, rgba(226,154,88,0.15), rgba(226,154,88,0.04))', border: 'rgba(226,154,88,0.35)', text: '#e29a58' },
++    rose:  { bg: 'linear-gradient(135deg, rgba(201,170,136,0.15), rgba(201,170,136,0.04))', border: 'rgba(201,170,136,0.35)', text: '#c9aa88' },
+     blue:  { bg: 'linear-gradient(135deg, rgba(179,160,126,0.15), rgba(179,160,126,0.04))', border: 'rgba(179,160,126,0.35)', text: '#d9ccb4' },
+   };
+   const c = colorMap[data.accentColor] || colorMap.gold;
+@@ -671,7 +777,7 @@
+ // No red, green, blue anywhere.
+ const getTimerStyle = (mins) => {
+   if (mins >= 30) return { color: '#d3bfa2', fontWeight: '900' };  // gold primary — critical age
+-  if (mins >= 15) return { color: '#b8923a', fontWeight: '800' };  // amber warning
++  if (mins >= 15) return { color: '#b8a283', fontWeight: '800' };  // amber warning
+   if (mins >= 5)  return { color: '#8a704d', fontWeight: '700' };  // gold-deep — warming up
+   return { color: '#a6a6a6',    fontWeight: '600' };                  // muted — fresh
+ };
+@@ -2264,7 +2370,7 @@
+ };
+ 
+ const ORDER_STATUS_RING = {
+-  pending: '#b8923a',  // amber — in the kitchen
++  pending: '#b8a283',  // amber — in the kitchen
+   ready:   '#ecdcb9',  // green — ready to serve
+   served:  '#b8a47f',  // blue — being enjoyed
+ };
+@@ -2409,7 +2515,7 @@
+           ${tenantConfig?.gstin ? `<div style="font-size:11px;color:#666;">GSTIN: ${escHtml(tenantConfig.gstin)}</div>` : ''}
+         </div>
+         <div style="text-align:right;">
+-          <div style="font-size:16px;font-weight:900;color:#BA7517;">PURCHASE ORDER</div>
++          <div style="font-size:16px;font-weight:900;color:#a8957a;">PURCHASE ORDER</div>
+           <div style="font-size:12px;color:#666;margin-top:4px;">${poNumber}</div>
+           <div style="font-size:12px;color:#666;">${today.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day:'numeric', month:'short', year:'numeric' })}</div>
+         </div>
+@@ -3036,8 +3142,8 @@
+   const oldest = Math.min(...tableOrders.map(o => new Date(o.createdAt).getTime()));
+   const mins = (Date.now() - oldest) / 60000;
+   if (mins < 10) return { level: 'fresh',   color: 'rgba(211,191,162,0.12)', pulse: false };
+-  if (mins < 20) return { level: 'warm',    color: 'rgba(184,146,58,0.25)',  pulse: false };
+-  if (mins < 30) return { level: 'hot',     color: 'rgba(184,146,58,0.45)',  pulse: true  };
++  if (mins < 20) return { level: 'warm',    color: 'rgba(184,162,131,0.25)',  pulse: false };
++  if (mins < 30) return { level: 'hot',     color: 'rgba(184,162,131,0.45)',  pulse: true  };
+   return           { level: 'critical', color: 'rgba(154,90,42,0.35)',  pulse: true  };
+ }, [orders]);
+ 
+@@ -3119,8 +3225,8 @@
+   all:       { label:'All',      color:'#d3bfa2', bg:'rgba(211,191,162,0.1)'  },
+   new:       { label:'New',      color:'#ecdcb9', bg:'rgba(138,154,126,0.12)' },
+   regular:   { label:'Regular',  color:'#8a704d', bg:'rgba(138,112,77,0.12)'  },
+-  loyal:     { label:'Loyal',    color:'#C9A84C', bg:'rgba(201,168,76,0.12)'  },
+-  'at-risk': { label:'At-Risk',  color:'#b8923a', bg:'rgba(184,146,58,0.12)'  },
++  loyal:     { label:'Loyal',    color:'#d9c8a6', bg:'rgba(217,200,166,0.12)'  },
++  'at-risk': { label:'At-Risk',  color:'#b8a283', bg:'rgba(184,162,131,0.12)'  },
+   champion:  { label:'Champion', color:'#d3bfa2', bg:'rgba(211,191,162,0.15)' },
+ };
+ 
+@@ -5004,7 +5110,7 @@
+     const bgMap = {
+       waitlist:    'rgba(211,191,162,0.06)',
+       pickup:      'rgba(138,112,77,0.08)',
+-      reservation: 'rgba(201,168,76,0.07)',
++      reservation: 'rgba(217,200,166,0.07)',
+     };
+     const accentColor = colorMap[notif.type] || '#d3bfa2';
+     const icon = iconMap[notif.subtype] || <Zap size={15} />;
+@@ -5392,7 +5498,7 @@
+             background:menuVegFilter===f.val?'#d3bfa2':'transparent',
+             color:menuVegFilter===f.val?'#0c0c0c':'#a6a6a6'
+           }}>
+-            {f.val==='veg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'7px',height:'7px',borderRadius:'50%',background:menuVegFilter==='veg'?'#a88b4f':'#555',display:'inline-block'}}/>VEG</span>}
++            {f.val==='veg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'7px',height:'7px',borderRadius:'50%',background:menuVegFilter==='veg'?'#a8957a':'#555',display:'inline-block'}}/>VEG</span>}
+             {f.val==='nonveg'&&<span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:0,height:0,borderLeft:'3px solid transparent',borderRight:'3px solid transparent',borderBottom:`6px solid ${menuVegFilter==='nonveg'?'#9a5a2a':'#555'}`,display:'inline-block'}}/>NON-VEG</span>}
+             {f.val==='all'&&'ALL'}
+           </button>
+@@ -5422,23 +5528,23 @@
+                 transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+                 style={{
+                     background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+-                    border: '1px solid rgba(184,146,58,0.5)',
+-                    borderLeft: '4px solid #b8923a',
++                    border: '1px solid rgba(184,162,131,0.5)',
++                    borderLeft: '4px solid #b8a283',
+                     borderRadius: '12px',
+                     padding: '14px 18px',
+                     display: 'flex',
+                     alignItems: 'flex-start',
+                     gap: '14px',
+-                    boxShadow: '0 4px 24px rgba(184,146,58,0.12)',
++                    boxShadow: '0 4px 24px rgba(184,162,131,0.12)',
+                 }}
+             >
+                 {/* Icon */}
+                 <div style={{
+                     width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+-                    background: 'rgba(184,146,58,0.15)', border: '1px solid rgba(184,146,58,0.35)',
++                    background: 'rgba(184,162,131,0.15)', border: '1px solid rgba(184,162,131,0.35)',
+                     display: 'flex', alignItems: 'center', justifyContent: 'center'
+                 }}>
+-                    <AlertTriangle size={17} color="#b8923a"/>
++                    <AlertTriangle size={17} color="#b8a283"/>
+                 </div>
+  
+                 {/* Content */}
+@@ -5450,8 +5556,8 @@
+                         </span>
+                         <span style={{
+                             fontSize: '0.52rem', fontWeight: '900', padding: '2px 8px', borderRadius: '20px',
+-                            background: 'rgba(184,146,58,0.15)', color: '#b8923a',
+-                            border: '1px solid rgba(184,146,58,0.3)', letterSpacing: '0.8px'
++                            background: 'rgba(184,162,131,0.15)', color: '#b8a283',
++                            border: '1px solid rgba(184,162,131,0.3)', letterSpacing: '0.8px'
+                         }}>
+                             {alert.dishCount} {alert.dishCount === 1 ? 'DISH' : 'DISHES'} {alert.autoHidden ? 'AUTO-HIDDEN' : 'AFFECTED'}
+                         </span>
+@@ -5479,8 +5585,8 @@
+                             <span key={i} style={{
+                                 fontSize: '0.62rem', fontWeight: '700',
+                                 padding: '3px 9px', borderRadius: '5px',
+-                                background: 'rgba(184,146,58,0.08)',
+-                                border: '1px solid rgba(184,146,58,0.2)',
++                                background: 'rgba(184,162,131,0.08)',
++                                border: '1px solid rgba(184,162,131,0.2)',
+                                 color: '#8a704d'
+                             }}>
+                                 {dish}
+@@ -5648,6 +5754,30 @@
+ })()}
+ 
+ 
++{/* ── SERVICE PULSE (Bklit rings / donut / bars) ── */}
++{(() => {
++  const b = tableOccupancyBreakdown || {};
++  const total = Number(b.total) || 0;
++  const live = (orders || []).filter(o => ['pending', 'ready', 'served'].includes(o.status));
++  const by = (s) => live.filter(o => o.status === s).length;
++  const cookingP = pickupEntries.filter(e => e.kitchenFired && e.status !== 'pickup-ready').length;
++  const readyP = pickupEntries.filter(e => e.status === 'pickup-ready').length;
++  const toConfirmP = reservationEntries.filter(r => r.status === 'pending').length;
++  if (total === 0 && live.length === 0) return null;
++  return (
++    <OpVisualGrid mb={0}>
++      {total > 0 && (
++        <OpRings title="Floor" sub="Live table status" centerLabel="TABLES"
++          items={[{ label: 'Occupied', value: Number(b.occupied) || 0, max: total }, { label: 'Bill pending', value: Number(b.bill_pending) || 0, max: total }, { label: 'Held for booking', value: Number(b.reserved) || 0, max: total }, { label: 'Free', value: Number(b.free) || 0, max: total }]} />
++      )}
++      <OpDonut title="Order pipeline" sub="Open orders right now" size={140} centerValue={live.length} centerLabel="OPEN ORDERS"
++        rows={[{ label: 'In the kitchen', value: by('pending') }, { label: 'Ready to serve', value: by('ready') }, { label: 'Served, unsettled', value: by('served') }]} />
++      <OpBars title="Queue" sub="Who is waiting on you" nameWidth={112}
++        rows={[{ label: 'Dine-in waiting', value: waitlistEntries.length }, { label: 'Pickups cooking', value: cookingP }, { label: 'Ready to collect', value: readyP }, { label: 'To confirm', value: toConfirmP }]} />
++    </OpVisualGrid>
++  );
++})()}
++
+ {/* ══════════════════════════════════════════════════
+     LIVE FLOOR MAP — revenue heat + status ring + service calls + joins
+ ══════════════════════════════════════════════════ */}
+@@ -5758,8 +5888,8 @@
+           }}>
+           {/* Service call pulse */}
+           {serviceCall && (
+-            <span style={{ position:'absolute', top:-6, right:-6, width:14, height:14, borderRadius:'50%', background:'#e29a58', boxShadow:'0 0 0 3px rgba(211,191,162,0.1)' }}>
+-              <span style={{ position:'absolute', inset:0, borderRadius:'50%', background:'#e29a58', animation:'pulseDot 1.4s ease-out infinite' }} />
++            <span style={{ position:'absolute', top:-6, right:-6, width:14, height:14, borderRadius:'50%', background:'#c9aa88', boxShadow:'0 0 0 3px rgba(211,191,162,0.1)' }}>
++              <span style={{ position:'absolute', inset:0, borderRadius:'50%', background:'#c9aa88', animation:'pulseDot 1.4s ease-out infinite' }} />
+             </span>
+           )}
+           {/* Joined-table link icon */}
+@@ -5806,7 +5936,7 @@
+       </div>
+     ))}
+     <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+-      <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#e29a58' }} />
++      <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#c9aa88' }} />
+       <span style={{ fontSize:'0.55rem', color:'#b4b4b4', fontWeight:'700' }}>Service call</span>
+     </div>
+   </div>
+@@ -5858,7 +5988,7 @@
+                         <span style={{ width:6, height:6, borderRadius:'50%', background: ORDER_STATUS_RING[o.status] || '#555' }} />
+                         <span style={{ fontSize:'0.7rem', fontWeight:800, color:'#ddd' }}>{it.name}</span>
+                         {it.portion && it.portion !== 'Single' && <span style={{ fontSize:'0.55rem', color:'#b4b4b4' }}>({it.portion})</span>}
+-                        {o.isModified && !it.isExtraItem && <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'#e29a58', color:'#fff', letterSpacing:'0.4px' }}>{it.modChange === 'new' ? 'REPLACED · NEW' : it.modChange === 'qty' ? 'REPLACED · QTY' : 'REPLACED'}</span>}
++                        {o.isModified && !it.isExtraItem && <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'#c9aa88', color:'#fff', letterSpacing:'0.4px' }}>{it.modChange === 'new' ? 'REPLACED · NEW' : it.modChange === 'qty' ? 'REPLACED · QTY' : 'REPLACED'}</span>}
+                       </div>
+                       <span style={{ fontSize:'0.65rem', fontWeight:900, color:'#888' }}>×{it.quantity}</span>
+                     </div>
+@@ -5880,7 +6010,7 @@
+                       {activeReservation.partySize ? ` · ${activeReservation.partySize} guests` : ''}
+                     </div>
+                     <button type="button" onClick={() => { const rid = activeReservation._id; setActiveTableTicket(null); setConfirmModal({ show: true, title: 'Cancel this reservation?', subtitle: 'The guest is marked cancelled and the table is released.', onConfirm: () => cancelReservation(rid) }); }}
+-                      style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 0', borderRadius:8, border:'1px solid rgba(226,154,88,0.3)', background:'rgba(226,154,88,0.08)', color:'#e29a58', fontSize:'0.58rem', fontWeight:900, cursor:'pointer' }}>
++                      style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 0', borderRadius:8, border:'1px solid rgba(201,170,136,0.3)', background:'rgba(201,170,136,0.08)', color:'#c9aa88', fontSize:'0.58rem', fontWeight:900, cursor:'pointer' }}>
+                       <X size={11}/> CANCEL RESERVATION
+                     </button>
+                   </div>
+@@ -6183,7 +6313,7 @@
+             padding: '14px 16px', background: 'transparent', border: 'none',
+             cursor: 'pointer', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.4px',
+             color: queueTab === tab.id ? '#d3bfa2' : '#969696',
+-            borderBottom: `2px solid ${queueTab === tab.id ? '#B8923A' : 'transparent'}`,
++            borderBottom: `2px solid ${queueTab === tab.id ? '#b8a283' : 'transparent'}`,
+             transition: 'all 0.15s', marginBottom: '-1px'
+           }}>
+             <span style={{ color: queueTab === tab.id ? '#8a704d' : '#0c0c0c' }}>{tab.icon}</span>
+@@ -6225,7 +6355,7 @@
              </div>
            </div>
          ) : (
@@ -78,7 +357,7 @@
              {filtered.map(entry => {
                const waitMins = Math.floor((Date.now() - new Date(entry.createdAt)) / 60000);
                const urgency = waitMins > 60 ? 'critical' : waitMins > 30 ? 'high' : waitMins > 15 ? 'medium' : 'low';
-@@ -6892,6 +6936,12 @@
+@@ -6892,9 +7022,15 @@
              {/* Payment mix */}
              <div style={panel}>
                <div style={label}>Payment mix</div>
@@ -90,8 +369,289 @@
 +              )}
                <div style={{ marginTop: '16px' }}>
                  {bar('Cash', cash, '#d3bfa2')}
-                 {bar('UPI', upi, '#B8923A')}
-@@ -8028,6 +8078,18 @@
+-                {bar('UPI', upi, '#B8923A')}
++                {bar('UPI', upi, '#b8a283')}
+                 {bar('Card', card, '#8A704D')}
+               </div>
+               {unrecorded > 0 && (
+@@ -7016,6 +7152,21 @@
+         {tile('Due in 7 days', money(sum.dueSoon), sum.dueSoonCount ? `${sum.dueSoonCount} coming up` : 'nothing soon', false)}
+         {tile('Bills on record', bills.length, 'all time', false)}
+       </div>
++      {bills.length > 0 && (() => {
++        const unpaid = bills.filter(b => b.status === 'unpaid');
++        const paidN = bills.filter(b => b.status === 'paid').length;
++        const later = Math.max(0, (Number(sum.outstanding) || 0) - (Number(sum.overdue) || 0) - (Number(sum.dueSoon) || 0));
++        const byVendor = Object.values(unpaid.reduce((m, b) => { const k = String(b.vendorName || 'Vendor').trim(); (m[k] = m[k] || { label: k, value: 0 }).value += Number(b.amount) || 0; return m; }, {})).sort((a, b) => b.value - a.value);
++        return (
++          <OpVisualGrid mb={0}>
++            <OpDonut title="What you owe" sub="Outstanding by urgency" size={140} valueFormat={money}
++              centerValue={`\u20B9${Math.round((Number(sum.outstanding) || 0) / 1000).toLocaleString('en-IN')}k`} centerLabel="OUTSTANDING"
++              rows={[{ label: 'Overdue', value: sum.overdue }, { label: 'Due in 7 days', value: sum.dueSoon }, { label: 'Later', value: later }]} />
++            <OpBars title="Top vendors owed" sub="Unpaid bills by vendor" rows={byVendor} valueFormat={money} nameWidth={112} />
++            <OpGauge title="Settled" sub="Bills paid vs. all on record" value={(paidN / bills.length) * 100} centerValue={Math.round((paidN / bills.length) * 100)} label="PAID" hint={`${paidN} of ${bills.length} bills paid`} />
++          </OpVisualGrid>
++        );
++      })()}
+ 
+       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+         {/* Record a bill */}
+@@ -7051,7 +7202,7 @@
+               <input placeholder="Optional" value={payableForm.notes} style={input} onChange={e => setPayableForm(p => ({ ...p, notes: e.target.value }))} />
+             </div>
+             <button type="button" onClick={submit}
+-              style={{ marginTop: '4px', padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>
++              style={{ marginTop: '4px', padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#b8a283)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>
+               RECORD BILL
+             </button>
+           </div>
+@@ -7156,7 +7307,7 @@
+                 setExpenseForm({ category: 'utilities', description: '', amount: '', spentOn: todayISTForm() });
+                 showNotif('Running cost recorded'); fetchExpenses();
+               } catch (err) { showNotif(err.response?.data?.error || 'Could not record the cost', 'error'); }
+-            }} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>RECORD COST</button>
++            }} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#b8a283)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>RECORD COST</button>
+           </div>
+         </div>
+         <div style={panel}>
+@@ -7225,6 +7376,15 @@
+         {tile('Valid', valid, 'current certificates', false)}
+         {tile('On record', items.length, 'licences and certificates', false)}
+       </div>
++      {items.length > 0 && (
++        <OpVisualGrid mb={0}>
++          <OpDonut title="Licence status" sub="Certificates by validity" size={140} centerValue={items.length} centerLabel="ON RECORD"
++            rows={[{ label: 'Expired', value: expired.length }, { label: 'Renew in 30 days', value: soon.length }, { label: 'Valid', value: valid }]} />
++          <OpGauge title="Compliance health" sub="Certificates currently valid" value={(valid / items.length) * 100} centerValue={Math.round((valid / items.length) * 100)} label="VALID" hint={`${valid} of ${items.length} are in date`} />
++          <OpBars title="Next to renew" sub="Days left, soonest first" nameWidth={116} valueFormat={(v) => `${v}d`}
++            rows={[...items].sort((a, b) => days(a.expiresOn) - days(b.expiresOn)).slice(0, 5).map(i => ({ label: i.name, value: Math.max(1, days(i.expiresOn)) }))} />
++        </OpVisualGrid>
++      )}
+       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+         <div style={card}>
+           <div style={label}>Add a licence or certificate</div>
+@@ -7237,7 +7397,7 @@
+               <div><div style={{ ...label, marginBottom: '6px' }}>Expires</div><input type="date" value={form.expiresOn} style={{ ...input, colorScheme: 'dark' }} onChange={e => setComplianceForm(p => ({ ...p, expiresOn: e.target.value }))} /></div>
+             </div>
+             <input placeholder="Notes (optional)" value={form.notes} style={input} onChange={e => setComplianceForm(p => ({ ...p, notes: e.target.value }))} />
+-            <button type="button" onClick={save} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>SAVE</button>
++            <button type="button" onClick={save} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#b8a283)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>SAVE</button>
+           </div>
+         </div>
+         <div style={card}>
+@@ -7322,6 +7482,15 @@
+         {tile('Due within 14 days', soon.length, soon.length ? 'confirm the visit' : 'nothing due soon', soon.length > 0)}
+         {tile('Service spend, on record', `₹${spent.toLocaleString('en-IN')}`, `${logs.length} service ${logs.length === 1 ? 'visit' : 'visits'}`, false)}
+       </div>
++      {items.length > 0 && (
++        <OpVisualGrid mb={0}>
++          <OpDonut title="Service status" sub="Equipment by schedule" size={140} centerValue={items.length} centerLabel="TRACKED"
++            rows={[{ label: 'Overdue / never serviced', value: overdue.length }, { label: 'Due in 14 days', value: soon.length }, { label: 'On schedule', value: Math.max(0, items.length - overdue.length - soon.length) }]} />
++          <OpGauge title="Maintenance health" sub="Equipment on schedule" value={(Math.max(0, items.length - overdue.length) / items.length) * 100} centerValue={Math.round((Math.max(0, items.length - overdue.length) / items.length) * 100)} label="ON TRACK" hint={`${overdue.length} need a service now`} />
++          <OpBars title="Next service" sub="Days until due, soonest first" nameWidth={116} valueFormat={(v) => `${v}d`}
++            rows={items.filter(e => dueIn(e) !== null).sort((a, b) => dueIn(a) - dueIn(b)).slice(0, 5).map(e => ({ label: e.name, value: Math.max(1, dueIn(e)) }))} />
++        </OpVisualGrid>
++      )}
+       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+         <div style={card}>
+           <div style={label}>Add equipment</div>
+@@ -7332,7 +7501,7 @@
+               <div><div style={{ ...label, marginBottom: '6px' }}>Service every (days)</div><input type="number" min="1" value={equipForm.serviceEveryDays} style={input} onChange={e => setEquipForm(p => ({ ...p, serviceEveryDays: e.target.value }))} /></div>
+               <div><div style={{ ...label, marginBottom: '6px' }}>Last serviced</div><input type="date" value={equipForm.lastServicedOn} style={{ ...input, colorScheme: 'dark' }} onChange={e => setEquipForm(p => ({ ...p, lastServicedOn: e.target.value }))} /></div>
+             </div>
+-            <button type="button" onClick={addItem} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>ADD EQUIPMENT</button>
++            <button type="button" onClick={addItem} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#b8a283)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>ADD EQUIPMENT</button>
+           </div>
+         </div>
+         <div style={card}>
+@@ -7407,6 +7576,14 @@
+         {tile('Urgent', urgent.length, urgent.length ? 'act before the next shift' : 'nothing urgent', urgent.length > 0)}
+         {tile('Resolved, last 3 days', allNotes.filter(n => n.status === 'resolved').length, 'closed out', false)}
+       </div>
++      {allNotes.length > 0 && (
++        <OpVisualGrid mb={0}>
++          <OpDonut title="Handover status" sub="Notes by state" size={140} centerValue={allNotes.length} centerLabel="NOTES"
++            rows={[{ label: 'Open, urgent', value: urgent.length }, { label: 'Open, normal', value: open.length - urgent.length }, { label: 'Resolved', value: allNotes.filter(n => n.status === 'resolved').length }]} />
++          <OpGauge title="Closed out" sub="Handovers resolved" value={(allNotes.filter(n => n.status === 'resolved').length / allNotes.length) * 100}
++            centerValue={Math.round((allNotes.filter(n => n.status === 'resolved').length / allNotes.length) * 100)} label="RESOLVED" hint={`${open.length} still waiting`} />
++        </OpVisualGrid>
++      )}
+       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.5fr)', gap: '14px', alignItems: 'start' }}>
+         <div style={card}>
+           <div style={label}>Hand over to the next shift</div>
+@@ -7422,7 +7599,7 @@
+                   background: shiftForm.priority === pr ? '#d3bfa2' : 'transparent', color: shiftForm.priority === pr ? '#0c0c0c' : '#969696', border: `1px solid ${shiftForm.priority === pr ? '#d3bfa2' : 'rgba(211,191,162,0.18)'}` }}>{pr}</button>
+               ))}
+             </div>
+-            <button type="button" onClick={save} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#B8923A)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>SAVE HANDOVER</button>
++            <button type="button" onClick={save} style={{ padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#d3bfa2,#b8a283)', color: '#0c0c0c', fontSize: '0.68rem', fontWeight: '900', letterSpacing: '0.8px' }}>SAVE HANDOVER</button>
+           </div>
+         </div>
+         <div style={card}>
+@@ -7464,14 +7641,14 @@
+         <motion.div key={alert.id}
+           initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+           style={{
+-            background: 'rgba(184,146,58,0.08)',
+-            border: '1px solid rgba(184,146,58,0.3)',
+-            borderLeft: '3px solid #b8923a',
++            background: 'rgba(184,162,131,0.08)',
++            border: '1px solid rgba(184,162,131,0.3)',
++            borderLeft: '3px solid #b8a283',
+             borderRadius: '12px', padding: '14px 18px',
+             display: 'flex', alignItems: 'flex-start', gap: '14px'
+           }}
+         >
+-          <AlertTriangle size={16} color="#b8923a" style={{ flexShrink: 0, marginTop: '2px' }} />
++          <AlertTriangle size={16} color="#b8a283" style={{ flexShrink: 0, marginTop: '2px' }} />
+           <div style={{ flex: 1, minWidth: 0 }}>
+             <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#d3bfa2', marginBottom: '4px' }}>
+               {alert.ingredientName} is out of stock
+@@ -7570,7 +7747,7 @@
+             <div style={{ marginBottom: '20px' }}>
+               <div style={{ fontSize: '0.55rem', color: '#b4b4b4', fontWeight: '900', letterSpacing: '1.5px', marginBottom: '10px' }}>FLAGS</div>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+-                {[{ key: 'isVeg', label: 'Vegetarian', onColor: '#a88b4f' }, { key: 'isAvailable', label: 'Available', onColor: '#d3bfa2' }, { key: 'isChefSpecial', label: "Chef's Special", onColor: '#c9a84c' }].map(f => {
++                {[{ key: 'isVeg', label: 'Vegetarian', onColor: '#a8957a' }, { key: 'isAvailable', label: 'Available', onColor: '#d3bfa2' }, { key: 'isChefSpecial', label: "Chef's Special", onColor: '#d9c8a6' }].map(f => {
+                   const isOn = !!editDishData[f.key];
+                   return (
+                     <div key={f.key} onClick={() => setEditDishData(p => ({ ...p, [f.key]: !p[f.key] }))}
+@@ -7696,6 +7873,28 @@
+       </div>
+     </div>
+ 
++    {/* ── MENU AT A GLANCE (Bklit) ── */}
++    {menuItems.length > 0 && (() => {
++      const avail = menuItems.filter(m => m.isAvailable !== false);
++      const veg = avail.filter(m => m.isVeg !== false).length;
++      const catName = (id) => categories.find(c => c.categoryId === id)?.name || 'Other';
++      const byCat = Object.values(menuItems.reduce((a, m) => { const k = catName(m.categoryId); (a[k] = a[k] || { label: k, value: 0 }).value += 1; return a; }, {})).sort((a, b) => b.value - a.value);
++      const p = (m) => Number(m.price) || 0;
++      const bands = [['\u2264100', (m) => p(m) <= 100], ['101-200', (m) => p(m) > 100 && p(m) <= 200], ['201-300', (m) => p(m) > 200 && p(m) <= 300], ['301-500', (m) => p(m) > 300 && p(m) <= 500], ['500+', (m) => p(m) > 500]].map(([label, f]) => ({ label, value: menuItems.filter(f).length }));
++      return (
++        <OpVisualGrid mb={0}>
++          <OpGauge title="On the menu now" sub="Dishes guests can order" value={(avail.length / menuItems.length) * 100} centerValue={Math.round((avail.length / menuItems.length) * 100)} label="AVAILABLE" hint={`${avail.length} of ${menuItems.length} dishes available`} />
++          <OpDonut title="Veg & non-veg" sub="Available dishes" size={140} centerValue={avail.length} centerLabel="DISHES" rows={[{ label: 'Vegetarian', value: veg }, { label: 'Non-vegetarian', value: avail.length - veg }]} />
++          <OpBars title="Dishes by category" sub="How the menu is spread" rows={byCat} />
++          <div style={opPanel}>
++            <div style={opTitle}>Price spread</div>
++            <div style={opSub}>Dishes per price band (\u20B9)</div>
++            <BkColumns height={150} label="Dishes" rows={bands} valueFormat={(v) => `${v} ${v === 1 ? 'dish' : 'dishes'}`} />
++          </div>
++        </OpVisualGrid>
++      );
++    })()}
++
+     {/* ── CATEGORY SECTIONS with per-category hide/show ── */}
+     {(() => {
+       // Group dishes by category, then render one collapsible section per category
+@@ -7756,14 +7955,14 @@
+                 </span>
+                 <span style={{
+                   fontSize: '0.52rem', fontWeight: '900', padding: '2px 8px', borderRadius: '8px',
+-                  background: allHidden ? 'rgba(184,146,58,0.1)' : 'rgba(211,191,162,0.07)',
+-                  color: allHidden ? '#b8923a' : '#b4b4b4',
+-                  border: `1px solid ${allHidden ? 'rgba(184,146,58,0.2)' : 'rgba(211,191,162,0.16)'}`
++                  background: allHidden ? 'rgba(184,162,131,0.1)' : 'rgba(211,191,162,0.07)',
++                  color: allHidden ? '#b8a283' : '#b4b4b4',
++                  border: `1px solid ${allHidden ? 'rgba(184,162,131,0.2)' : 'rgba(211,191,162,0.16)'}`
+                 }}>
+                   {availableCount}/{catItems.length} available
+                 </span>
+                 {someHidden && !allHidden && (
+-                  <span style={{ fontSize: '0.5rem', color: '#b8923a', fontWeight: '700' }}>
++                  <span style={{ fontSize: '0.5rem', color: '#b8a283', fontWeight: '700' }}>
+                     · some hidden
+                   </span>
+                 )}
+@@ -7794,9 +7993,9 @@
+                 style={{
+                   padding: '6px 14px', borderRadius: '7px', cursor: 'pointer',
+                   fontSize: '0.6rem', fontWeight: '900',
+-                  background: allHidden ? 'rgba(211,191,162,0.08)' : 'rgba(184,146,58,0.07)',
+-                  border: allHidden ? '1px solid rgba(211,191,162,0.2)' : '1px solid rgba(184,146,58,0.2)',
+-                  color: allHidden ? '#d3bfa2' : '#b8923a',
++                  background: allHidden ? 'rgba(211,191,162,0.08)' : 'rgba(184,162,131,0.07)',
++                  border: allHidden ? '1px solid rgba(211,191,162,0.2)' : '1px solid rgba(184,162,131,0.2)',
++                  color: allHidden ? '#d3bfa2' : '#b8a283',
+                   display: 'flex', alignItems: 'center', gap: '5px',
+                   transition: 'all 0.15s'
+                 }}
+@@ -7813,7 +8012,7 @@
+                   opacity: item.isAvailable ? 1 : 0.5,
+                   position: 'relative',
+                   borderTop: `2px solid ${
+-                    item._autoHiddenByIngredient ? 'rgba(184,146,58,0.5)' :
++                    item._autoHiddenByIngredient ? 'rgba(184,162,131,0.5)' :
+                     item.isAvailable ? 'rgba(211,191,162,0.16)' : '#0f0f0f'
+                   }`,
+                   transition: 'all 0.2s ease'
+@@ -7823,14 +8022,14 @@
+ 
+                   {/* AUTO-HIDDEN BADGE (ingredient depleted) */}
+                   {item._autoHiddenByIngredient && !item.isAvailable && (
+-                    <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(184,146,58,0.15)', border: '1px solid rgba(184,146,58,0.35)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.48rem', fontWeight: '900', color: '#b8923a', display: 'flex', alignItems: 'center', gap: '3px' }}>
++                    <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(184,162,131,0.15)', border: '1px solid rgba(184,162,131,0.35)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.48rem', fontWeight: '900', color: '#b8a283', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                       <AlertTriangle size={9}/> STOCK OUT
+                     </div>
+                   )}
+ 
+                   {/* 86'D BY KITCHEN BADGE — with the reason chef selected */}
+                   {!item._autoHiddenByIngredient && !item.isAvailable && item.outOfStockReason && (
+-                    <div title={item.outOfStockAt ? new Date(item.outOfStockAt).toLocaleString() : ''} style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(184,146,58,0.15)', border: '1px solid rgba(184,146,58,0.35)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.48rem', fontWeight: '900', color: '#b8923a', display: 'flex', alignItems: 'center', gap: '3px' }}>
++                    <div title={item.outOfStockAt ? new Date(item.outOfStockAt).toLocaleString() : ''} style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(184,162,131,0.15)', border: '1px solid rgba(184,162,131,0.35)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.48rem', fontWeight: '900', color: '#b8a283', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                       {item.outOfStockReason === 'ran_out' ? <PackageX size={9}/> : item.outOfStockReason === 'quality_issue' ? <ShieldAlert size={9}/> : <Wrench size={9}/>}
+                       {item.outOfStockReason === 'ran_out' ? '86 · RAN OUT' : item.outOfStockReason === 'quality_issue' ? '86 · QUALITY' : '86 · EQUIPMENT'}
+                     </div>
+@@ -7838,7 +8037,7 @@
+ 
+                   {/* HOT BADGE */}
+                   {hotDishes.has(item.name) && item.isAvailable && (
+-                    <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(184,146,58,0.15)', border: '1px solid rgba(184,146,58,0.4)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', fontWeight: '900', color: '#b8923a', display: 'flex', alignItems: 'center', gap: '4px' }}>
++                    <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(184,162,131,0.15)', border: '1px solid rgba(184,162,131,0.4)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.52rem', fontWeight: '900', color: '#b8a283', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                       <Flame size={10} /> HOT
+                     </div>
+                   )}
+@@ -7847,9 +8046,9 @@
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', paddingRight: '20px', paddingTop: item._autoHiddenByIngredient || hotDishes.has(item.name) ? '20px' : '0' }}>
+                     <div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+-                        <span title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'} style={{ width: '13px', height: '13px', border: `2px solid ${item.isVeg !== false ? '#a88b4f' : '#9a5a2a'}`, borderRadius: '2px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
++                        <span title={item.isVeg !== false ? 'Vegetarian' : 'Non-Vegetarian'} style={{ width: '13px', height: '13px', border: `2px solid ${item.isVeg !== false ? '#a8957a' : '#9a5a2a'}`, borderRadius: '2px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                           {item.isVeg !== false
+-                            ? <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#a88b4f' }} />
++                            ? <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#a8957a' }} />
+                             : <span style={{ width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent', borderBottom: '5px solid #9a5a2a' }} />}
+                         </span>
+                         <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '900', color: item.isAvailable ? '#fff' : '#c2c2c2', lineHeight: '1.3' }}>{item.name}</h3>
+@@ -7882,7 +8081,7 @@
+                       </span>
+                     )}
+                     {item.spicylevel && (
+-                      <span style={{ fontSize: '0.58rem', padding: '2px 7px', background: 'rgba(184,146,58,0.06)', border: '1px solid rgba(184,146,58,0.15)', borderRadius: '5px', color: '#8a704d', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
++                      <span style={{ fontSize: '0.58rem', padding: '2px 7px', background: 'rgba(184,162,131,0.06)', border: '1px solid rgba(184,162,131,0.15)', borderRadius: '5px', color: '#8a704d', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                         {Array.from({ length: item.spicylevel === 'low' ? 1 : item.spicylevel === 'medium' ? 2 : 3 }).map((_, i) => (
+                           <Flame key={i} size={9} />
+                         ))}
+@@ -7934,7 +8133,7 @@
+ {activeTab === 'customers' && (() => {
+   /* ── Premium palette: obsidian, brass, ivory (no red / green / blue) ── */
+   const P = {
+-    gold: '#B8923A', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
++    gold: '#b8a283', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
+     line: 'rgba(211,191,162,0.14)', lineSoft: 'rgba(255,255,255,0.05)',
+     panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+     well: '#070707',
+@@ -7946,7 +8145,7 @@
+     new:       { label: 'New',      color: P.ivory, bg: 'rgba(240,237,232,0.07)' },
+     regular:   { label: 'Regular',  color: P.muted, bg: 'rgba(143,138,128,0.12)' },
+     loyal:     { label: 'Loyal',    color: P.gold,  bg: 'rgba(211,191,162,0.14)' },
+-    'at-risk': { label: 'At risk',  color: '#8A704D', bg: 'rgba(168,134,74,0.14)' },
++    'at-risk': { label: 'At risk',  color: '#8A704D', bg: 'rgba(168,149,122,0.14)' },
+     champion:  { label: 'Champion', color: P.brass, bg: 'rgba(211,191,162,0.20)' },
+   };
+   const SEG_ICON = { new: UserCheck, regular: User, loyal: Star, 'at-risk': AlertCircle, champion: Crown };
+@@ -8028,6 +8227,18 @@
          })}
        </div>
  
@@ -110,16 +670,526 @@
        {/* ── TOOLBAR ── */}
        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-@@ -8859,7 +8921,7 @@
+@@ -8272,74 +8483,86 @@
+ <motion.div key="marketing" initial={false} animate={{opacity:1,y:0}}
+   style={{display:'flex',flexDirection:'column',gap:'0px',paddingBottom:'80px'}}>
+  
+-  {/* ── SUB-TAB SWITCHER ── */}
+-  <div style={{
+-    display:'flex',alignItems:'center',gap:'0px',
+-    padding:'20px 0 0',marginBottom:'24px',
+-    borderBottom:'1px solid rgba(211,191,162,0.12)'
+-  }}>
+-    {[
+-      {id:'announcements', label:'Menu Banners',  icon:<Megaphone size={13}/>,
+-        badge: announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length },
+-      {id:'offers',        label:'Offers',        icon:<Tag size={13}/>,
+-        badge: (Array.isArray(offers)?offers:[]).filter(o=>o.isActive&&(!o.expiresAt||new Date(o.expiresAt).getTime()>Date.now())).length },
+-      {id:'combos',        label:'Combos',        icon:<Layers size={13}/>,
+-        badge: null },
+-      {id:'campaigns',     label:'Campaigns',     icon:<Send size={13}/>,
+-        badge: null },
+-      {id:'analytics',     label:'Push Analytics', icon:<BarChart3 size={13}/>,
+-        badge: null },
+-      {id:'discovery',     label:'Directory Insights', icon:<Search size={13}/>,
+-        badge: null },
+-    ].filter(st => !(st.id === 'combos' && offFeatures.includes('combos'))).map(st=>{
+-      const isActive = marketingSubTab === st.id;
+-      return (
+-        <button type="button" key={st.id} onClick={()=>setMarketingSubTab(st.id)}
+-          style={{
+-            display:'flex',alignItems:'center',gap:'7px',
+-            padding:'10px 20px',
+-            background:'transparent',border:'none',
+-            borderBottom: isActive ? '2px solid #d3bfa2' : '2px solid transparent',
+-            color: isActive ? '#d3bfa2' : '#969696',
+-            fontSize:'0.68rem',fontWeight:'900',cursor:'pointer',
+-            letterSpacing:'0.5px',transition:'all 0.15s',
+-            marginBottom:'-1px'
+-          }}>
+-          <span style={{color: isActive?'#d3bfa2':'#969696'}}>{st.icon}</span>
+-          {st.label}
+-          {st.badge > 0 && (
+-            <span style={{
+-              fontSize:'0.5rem',fontWeight:'900',
+-              padding:'1px 6px',borderRadius:'8px',
+-              background: isActive?'rgba(211,191,162,0.15)':'rgba(255,255,255,0.04)',
+-              color: isActive?'#d3bfa2':'#969696',
+-              border:`1px solid ${isActive?'rgba(211,191,162,0.25)':'rgba(255,255,255,0.06)'}`,
+-              fontFamily:'monospace'
+-            }}>{st.badge}</span>
+-          )}
+-        </button>
+-      );
+-    })}
+- 
+-    {/* Right side: live status pill */}
+-    <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center'}}>
+-      {announcements.some(a=>a.isActive&&new Date(a.expiresAt)>new Date()) && (
+-        <div style={{display:'flex',alignItems:'center',gap:'6px',padding:'5px 12px',borderRadius:'20px',background:'rgba(236,220,185,0.05)',border:'1px solid rgba(236,220,185,0.2)'}}>
+-          <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'#ecdcb9',boxShadow:'0 0 6px rgba(236,220,185,0.6)',animation:'moodPulse 2s ease-in-out infinite'}}/>
+-          <span style={{fontSize:'0.54rem',fontWeight:'900',color:'#ecdcb9',letterSpacing:'1px'}}>BANNER LIVE ON MENU</span>
++  {/* ── MARKETING HUB: hero + segmented switcher ── */}
++  {(() => {
++    const offerList = Array.isArray(offers) ? offers : [];
++    const campList = Array.isArray(campaigns) ? campaigns : [];
++    const bannerLive = announcements.filter(a => a.isActive && new Date(a.expiresAt) > new Date()).length;
++    const bannerSched = announcements.filter(a => !a.isActive && a.startsAt && new Date(a.startsAt) > new Date()).length;
++    const offerLive = offerList.filter(o => o.isActive && (!o.expiresAt || new Date(o.expiresAt).getTime() > Date.now())).length;
++    const given = offerList.reduce((a, o) => a + (Number(o.totalDiscount) || 0), 0);
++    const reach = campList.reduce((a, c) => a + (Number(c.sentCount) || 0), 0);
++    const tabs = [
++      { id: 'announcements', label: 'Menu Banners', icon: <Megaphone size={14} />, badge: bannerLive },
++      { id: 'offers', label: 'Offers', icon: <Tag size={14} />, badge: offerLive },
++      { id: 'combos', label: 'Combos', icon: <Layers size={14} />, badge: null },
++      { id: 'campaigns', label: 'Campaigns', icon: <Send size={14} />, badge: null },
++      { id: 'analytics', label: 'Push Analytics', icon: <BarChart3 size={14} />, badge: null },
++      { id: 'discovery', label: 'Directory Insights', icon: <Search size={14} />, badge: null },
++    ].filter(st => !(st.id === 'combos' && offFeatures.includes('combos')));
++    const quick = [['New banner', 'announcements', <Megaphone size={13} key="a" />], ['New offer', 'offers', <Tag size={13} key="b" />], ['Send campaign', 'campaigns', <Send size={13} key="c" />]];
++    return (
++      <>
++        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 22, padding: '22px 24px', margin: '20px 0 18px',
++          background: 'radial-gradient(120% 140% at 0% 0%, rgba(211,191,162,0.16), transparent 55%), linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)), #090909',
++          border: '1px solid rgba(211,191,162,0.18)', boxShadow: '0 24px 60px -30px rgba(0,0,0,0.85)' }}>
++          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
++            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
++              <div style={{ fontSize: '0.58rem', fontWeight: 900, letterSpacing: 3, color: '#d3bfa2' }}>MARKETING</div>
++              <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#f7f3eb', letterSpacing: '-0.02em', marginTop: 6, lineHeight: 1.25 }}>Bring guests back, one message at a time</div>
++              <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.55)', marginTop: 8, lineHeight: 1.6, maxWidth: 520 }}>Run banners on your menu, publish offers and message guests directly. Everything here goes live to your menu and the guest app.</div>
++              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
++                {bannerLive > 0 && (
++                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(236,220,185,0.06)', border: '1px solid rgba(236,220,185,0.22)', fontSize: '0.54rem', fontWeight: 900, color: '#ecdcb9', letterSpacing: 1 }}>
++                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ecdcb9', boxShadow: '0 0 6px rgba(236,220,185,0.6)', animation: 'moodPulse 2s ease-in-out infinite' }} />BANNER LIVE ON MENU
++                  </span>
++                )}
++                {bannerSched > 0 && (
++                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(184,162,131,0.07)', border: '1px solid rgba(184,162,131,0.22)', fontSize: '0.54rem', fontWeight: 900, color: '#b8a283', letterSpacing: 1 }}>
++                    <Clock size={10} color="#b8a283" />{bannerSched} SCHEDULED
++                  </span>
++                )}
++              </div>
++            </div>
++            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
++              {quick.map(([label, id, icon]) => (
++                <motion.button key={id} type="button" onClick={() => setMarketingSubTab(id)} whileTap={{ scale: 0.96 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}
++                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minHeight: 40, padding: '0 14px', borderRadius: 12, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 800,
++                    color: marketingSubTab === id ? '#14110b' : '#ecdcb9', background: marketingSubTab === id ? 'linear-gradient(135deg,#d3bfa2,#bfa98a)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(211,191,162,0.3)' }}>
++                  {icon}{label}
++                </motion.button>
++              ))}
++            </div>
++          </div>
++          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 10, marginTop: 18 }}>
++            <MktStat l="Live banners" v={bannerLive} c="#d3bfa2" icon={<Megaphone size={14} />} />
++            <MktStat l="Live offers" v={offerLive} c="#ecdcb9" icon={<Tag size={14} />} />
++            <MktStat l="Discount given" v={`\u20B9${Math.round(given).toLocaleString('en-IN')}`} c="#b8a283" icon={<Percent size={14} />} />
++            <MktStat l="Guests reached" v={reach} c="#d3bfa2" icon={<Users size={14} />} />
++          </div>
+         </div>
+-      )}
+-      {announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length > 0 && (
+-        <div style={{display:'flex',alignItems:'center',gap:'6px',padding:'5px 12px',borderRadius:'20px',background:'rgba(184,146,58,0.06)',border:'1px solid rgba(184,146,58,0.2)'}}>
+-          <Clock size={9} color="#b8923a"/>
+-          <span style={{fontSize:'0.54rem',fontWeight:'900',color:'#b8923a',letterSpacing:'1px'}}>
+-            {announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length} SCHEDULED
+-          </span>
++
++        <div style={{ position: 'sticky', top: -8, zIndex: 6, margin: '0 -2px 20px', padding: '8px 2px', background: 'rgba(5,5,5,0.82)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
++          <div role="tablist" aria-label="Marketing sections" style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', padding: 5, borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(211,191,162,0.12)' }}>
++            {tabs.map(st => {
++              const on = marketingSubTab === st.id;
++              return (
++                <button type="button" role="tab" aria-selected={on} key={st.id} onClick={() => setMarketingSubTab(st.id)}
++                  style={{ position: 'relative', flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8, minHeight: 40, padding: '0 16px', borderRadius: 12, border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
++                    color: on ? '#f7f3eb' : '#969696', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.3px', transition: 'color .15s' }}>
++                  {on && <motion.span layoutId="mkt-pill" aria-hidden="true" transition={{ type: 'spring', stiffness: 500, damping: 38 }} style={{ position: 'absolute', inset: 0, borderRadius: 12, background: 'linear-gradient(135deg, rgba(211,191,162,0.22), rgba(211,191,162,0.06))', border: '1px solid rgba(211,191,162,0.45)' }} />}
++                  <span style={{ position: 'relative', display: 'flex', color: on ? '#d3bfa2' : '#969696' }}>{st.icon}</span>
++                  <span style={{ position: 'relative' }}>{st.label}</span>
++                  {st.badge > 0 && <span style={{ position: 'relative', fontSize: '0.52rem', fontWeight: 900, padding: '1px 7px', borderRadius: 8, fontFamily: 'monospace', background: on ? 'rgba(211,191,162,0.18)' : 'rgba(255,255,255,0.05)', color: on ? '#ecdcb9' : '#969696', border: `1px solid ${on ? 'rgba(211,191,162,0.3)' : 'rgba(255,255,255,0.07)'}` }}>{st.badge}</span>}
++                </button>
++              );
++            })}
++          </div>
+         </div>
+-      )}
+-    </div>
+-  </div>
+- 
++      </>
++    );
++  })()}
++
+   {/* ══════════════════════════════════════════════════
+       SUB-TAB: ANNOUNCEMENTS (MENU BANNERS)
+   ══════════════════════════════════════════════════ */}
+@@ -8351,21 +8574,28 @@
+       {[
+         {l:'Total Banners', v:announcements.length,                                                                          c:'#d3bfa2', icon:<Megaphone size={13}/>},
+         {l:'Live Now',      v:announcements.filter(a=>a.isActive&&new Date(a.expiresAt)>new Date()).length,                  c:'#ecdcb9', icon:<Zap size={13}/>},
+-        {l:'Scheduled',     v:announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length,      c:'#b8923a', icon:<Clock size={13}/>},
++        {l:'Scheduled',     v:announcements.filter(a=>!a.isActive&&a.startsAt&&new Date(a.startsAt)>new Date()).length,      c:'#b8a283', icon:<Clock size={13}/>},
+         {l:'Total Views',   v:announcements.reduce((acc,x)=>acc+(x.viewCount||0),0),                                        c:'#8a704d', icon:<Eye size={13}/>},
+       ].map((s,i)=>(
+-        <div key={i} style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+-          <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
+-          <div>
+-            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+-            <div style={{fontSize:'0.48rem',color:'#969696',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+-          </div>
+-        </div>
++        <MktStat key={i} {...s} />
+       ))}
+     </div>
++    {announcements.length > 0 && (() => {
++      const now = new Date();
++      const live = announcements.filter(a => a.isActive && new Date(a.expiresAt) > now).length;
++      const sched = announcements.filter(a => !a.isActive && a.startsAt && new Date(a.startsAt) > now).length;
++      return (
++        <OpVisualGrid mb={0}>
++          <OpDonut title="Banner status" sub="Live, scheduled and ended" size={140} centerValue={announcements.length} centerLabel="BANNERS"
++            rows={[{ label: 'Live now', value: live }, { label: 'Scheduled', value: sched }, { label: 'Ended', value: Math.max(0, announcements.length - live - sched) }]} />
++          <OpBars title="Most viewed" sub="Views per banner" nameWidth={120}
++            rows={[...announcements].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 5).map(a => ({ label: a.title || a.text || 'Banner', value: a.viewCount || 0 }))} />
++        </OpVisualGrid>
++      );
++    })()}
+  
+     {/* Two-column layout */}
+-    <div style={{display:'grid',gridTemplateColumns:'390px 1fr',gap:'22px',alignItems:'start'}}>
++    <div className="op-split" style={{display:'grid',gridTemplateColumns:'390px 1fr',gap:'22px',alignItems:'start'}}>
+  
+       {/* ── COMPOSE FORM ── */}
+       <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'16px',overflow:'hidden',position:'sticky',top:'20px'}}>
+@@ -8447,9 +8677,9 @@
+           )}
+  
+           {/* Scheduled start */}
+-          <div style={{background:'rgba(184,146,58,0.04)',border:'1px solid rgba(184,146,58,0.12)',borderRadius:'10px',padding:'12px'}}>
++          <div style={{background:'rgba(184,162,131,0.04)',border:'1px solid rgba(184,162,131,0.12)',borderRadius:'10px',padding:'12px'}}>
+             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+-              <div style={{fontSize:'0.48rem',color:'#b8923a',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',textTransform:'uppercase'}}>
++              <div style={{fontSize:'0.48rem',color:'#b8a283',fontWeight:'900',letterSpacing:'1.5px',display:'flex',alignItems:'center',gap:'5px',textTransform:'uppercase'}}>
+                 <Clock size={9}/> Goes Live At
+                 <span style={{color:'#a6a6a6',fontWeight:'600',marginLeft:'3px'}}>(blank = now)</span>
+               </div>
+@@ -8476,13 +8706,13 @@
+                 {label:'Sat 12PM',fn:()=>istAt(istDayStr((6-istDow()+7)%7||7),12)},
+               ].map(p=>(
+                 <button type="button" key={p.label} onClick={()=>{const f=istFields(p.fn());setNewAnnouncement(prev=>({...prev,startDate:f.date,startTime:f.time}));}}
+-                  style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(184,146,58,0.2)',background:'rgba(184,146,58,0.06)',color:'#b8923a',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
++                  style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid rgba(184,162,131,0.2)',background:'rgba(184,162,131,0.06)',color:'#b8a283',fontSize:'0.52rem',fontWeight:'800',cursor:'pointer'}}>{p.label}</button>
+               ))}
+             </div>
+             {newAnnouncement.startDate && newAnnouncement.startTime && (
+-              <div style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'5px',padding:'5px 9px',borderRadius:'6px',background:'rgba(184,146,58,0.07)',border:'1px solid rgba(184,146,58,0.15)'}}>
+-                <Clock size={9} color="#b8923a"/>
+-                <span style={{fontSize:'0.56rem',color:'#b8923a',fontWeight:'800'}}>
++              <div style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'5px',padding:'5px 9px',borderRadius:'6px',background:'rgba(184,162,131,0.07)',border:'1px solid rgba(184,162,131,0.15)'}}>
++                <Clock size={9} color="#b8a283"/>
++                <span style={{fontSize:'0.56rem',color:'#b8a283',fontWeight:'800'}}>
+                   Goes live: {new Date(`${newAnnouncement.startDate}T${newAnnouncement.startTime}:00+05:30`).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}
+                 </span>
+               </div>
+@@ -8522,17 +8752,17 @@
+           {(newAnnouncement.title||newAnnouncement.message) && (
+             <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'10px',padding:'12px'}}>
+               <div style={{fontSize:'0.48rem',color:'#969696',fontWeight:'900',letterSpacing:'1.5px',marginBottom:'9px',textTransform:'uppercase'}}>Customer Preview</div>
+-              <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b',borderRadius:'9px',padding:'13px',borderLeft:'3px solid #C9A84C',display:'flex',alignItems:'flex-start',gap:'11px'}}>
+-                <div style={{width:'32px',height:'32px',borderRadius:'7px',flexShrink:0,background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+-                  {newAnnouncement.type==='offer'?<Tag size={14} color="#C9A84C"/>:newAnnouncement.type==='discount'?<Percent size={14} color="#C9A84C"/>:newAnnouncement.type==='wish'?<Sparkles size={14} color="#C9A84C"/>:<Megaphone size={14} color="#C9A84C"/>}
++              <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b',borderRadius:'9px',padding:'13px',borderLeft:'3px solid #d9c8a6',display:'flex',alignItems:'flex-start',gap:'11px'}}>
++                <div style={{width:'32px',height:'32px',borderRadius:'7px',flexShrink:0,background:'rgba(217,200,166,0.1)',border:'1px solid rgba(217,200,166,0.2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
++                  {newAnnouncement.type==='offer'?<Tag size={14} color="#d9c8a6"/>:newAnnouncement.type==='discount'?<Percent size={14} color="#d9c8a6"/>:newAnnouncement.type==='wish'?<Sparkles size={14} color="#d9c8a6"/>:<Megaphone size={14} color="#d9c8a6"/>}
+                 </div>
+                 <div style={{flex:1,minWidth:0}}>
+                   {newAnnouncement.imageUrl && <img src={newAnnouncement.imageUrl} alt="" style={{width:'100%',maxHeight:120,objectFit:'cover',borderRadius:7,marginBottom:8,display:'block'}} />}
+                   <div style={{fontSize:'0.82rem',fontWeight:'800',color:'#fff',marginBottom:'3px'}}>{newAnnouncement.title||'Your headline'}</div>
+                   <div style={{fontSize:'0.68rem',color:'#888',lineHeight:1.5}}>{newAnnouncement.message||'Your message'}</div>
+                   {newAnnouncement.discountValue && newAnnouncement.type!=='wish' && (
+-                    <div style={{marginTop:'7px',display:'inline-flex',padding:'2px 9px',borderRadius:'5px',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.2)'}}>
+-                      <span style={{fontSize:'0.65rem',fontWeight:'900',color:'#C9A84C'}}>{newAnnouncement.discountValue}{newAnnouncement.discountType==='percent'?'%':'₹'} OFF</span>
++                    <div style={{marginTop:'7px',display:'inline-flex',padding:'2px 9px',borderRadius:'5px',background:'rgba(217,200,166,0.1)',border:'1px solid rgba(217,200,166,0.2)'}}>
++                      <span style={{fontSize:'0.65rem',fontWeight:'900',color:'#d9c8a6'}}>{newAnnouncement.discountValue}{newAnnouncement.discountType==='percent'?'%':'₹'} OFF</span>
+                     </div>
+                   )}
+                 </div>
+@@ -8587,7 +8817,7 @@
+             style={{
+               padding:'12px',borderRadius:'9px',border:'none',
+               background:(newAnnouncement.title&&newAnnouncement.message)
+-                ?(newAnnouncement.startDate?'linear-gradient(135deg,#8a6a22,#b8923a)':'linear-gradient(135deg,#bda88a,#d3bfa2)')
++                ?(newAnnouncement.startDate?'linear-gradient(135deg,#8f7a5c,#b8a283)':'linear-gradient(135deg,#bda88a,#d3bfa2)')
+                 :'#121212',
+               color:(newAnnouncement.title&&newAnnouncement.message)?'#0c0c0c':'#969696',
+               fontWeight:'900',fontSize:'0.72rem',letterSpacing:'0.5px',
+@@ -8625,9 +8855,9 @@
+             <motion.div key={a._id} initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+               style={{
+                 position:'relative',
+-                background:isLive?'rgba(211,191,162,0.025)':isScheduled?'rgba(184,146,58,0.03)':'#0f0f0f',
+-                border:`1px solid ${isLive?'rgba(211,191,162,0.15)':isScheduled?'rgba(184,146,58,0.15)':'rgba(211,191,162,0.12)'}`,
+-                borderLeft:`3px solid ${isLive?'rgba(211,191,162,0.45)':isScheduled?'rgba(184,146,58,0.45)':'rgba(211,191,162,0.16)'}`,
++                background:isLive?'rgba(211,191,162,0.025)':isScheduled?'rgba(184,162,131,0.03)':'#0f0f0f',
++                border:`1px solid ${isLive?'rgba(211,191,162,0.15)':isScheduled?'rgba(184,162,131,0.15)':'rgba(211,191,162,0.12)'}`,
++                borderLeft:`3px solid ${isLive?'rgba(211,191,162,0.45)':isScheduled?'rgba(184,162,131,0.45)':'rgba(211,191,162,0.16)'}`,
+                 borderRadius:'13px',padding:'16px 18px',
+                 boxShadow: isLive ? '0 8px 22px rgba(211,191,162,0.06), inset 0 1px 0 rgba(255,255,255,0.02)' : '0 4px 12px rgba(0,0,0,0.15)',
+                 opacity:isEnded?0.42:1,transition:'all 0.2s',overflow:'hidden'
+@@ -8635,25 +8865,25 @@
+               {isLive&&<div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,rgba(211,191,162,0.3),transparent)'}}/>}
+  
+               <div style={{display:'flex',alignItems:'flex-start',gap:'12px'}}>
+-                <div style={{width:'34px',height:'34px',borderRadius:'8px',flexShrink:0,background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.14)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+-                  {a.type==='offer'?<Tag size={14} color="#C9A84C"/>:a.type==='discount'?<Percent size={14} color="#C9A84C"/>:a.type==='wish'?<Sparkles size={14} color="#C9A84C"/>:<Megaphone size={14} color="#C9A84C"/>}
++                <div style={{width:'34px',height:'34px',borderRadius:'8px',flexShrink:0,background:'rgba(217,200,166,0.07)',border:'1px solid rgba(217,200,166,0.14)',display:'flex',alignItems:'center',justifyContent:'center'}}>
++                  {a.type==='offer'?<Tag size={14} color="#d9c8a6"/>:a.type==='discount'?<Percent size={14} color="#d9c8a6"/>:a.type==='wish'?<Sparkles size={14} color="#d9c8a6"/>:<Megaphone size={14} color="#d9c8a6"/>}
+                 </div>
+  
+                 <div style={{flex:1,minWidth:0}}>
+                   <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'4px',flexWrap:'wrap'}}>
+                     <span style={{fontWeight:'800',color:'#e8e4de',fontSize:'0.82rem'}}>{a.title}</span>
+                     {isLive&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(236,220,185,0.07)',color:'#ecdcb9',border:'1px solid rgba(236,220,185,0.18)',letterSpacing:'1px'}}>● LIVE</span>}
+-                    {isScheduled&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(184,146,58,0.07)',color:'#b8923a',border:'1px solid rgba(184,146,58,0.18)',letterSpacing:'1px'}}>◷ SCHEDULED</span>}
++                    {isScheduled&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(184,162,131,0.07)',color:'#b8a283',border:'1px solid rgba(184,162,131,0.18)',letterSpacing:'1px'}}>◷ SCHEDULED</span>}
+                     {isEnded&&<span style={{fontSize:'0.46rem',fontWeight:'900',padding:'2px 7px',borderRadius:'10px',background:'rgba(255,255,255,0.02)',color:'#969696',border:'1px solid rgba(255,255,255,0.04)',letterSpacing:'1px'}}>ENDED</span>}
+                   </div>
+                   <div style={{fontSize:'0.7rem',color:'#b4b4b4',lineHeight:1.5,marginBottom:'8px'}}>{a.message}</div>
+                   <div style={{display:'flex',gap:'10px',flexWrap:'wrap',fontSize:'0.56rem',color:'#969696',alignItems:'center'}}>
+                     {a.discountValue&&(
+-                      <span style={{padding:'2px 8px',borderRadius:'4px',background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.13)',color:'#C9A84C',fontWeight:'900',fontFamily:'monospace'}}>
++                      <span style={{padding:'2px 8px',borderRadius:'4px',background:'rgba(217,200,166,0.07)',border:'1px solid rgba(217,200,166,0.13)',color:'#d9c8a6',fontWeight:'900',fontFamily:'monospace'}}>
+                         {a.discountValue}{a.discountType==='percent'?'%':'₹'} OFF
+                       </span>
+                     )}
+-                    {isScheduled&&timeUntil&&<span style={{color:'#b8923a',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>}
++                    {isScheduled&&timeUntil&&<span style={{color:'#b8a283',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>starts in {timeUntil} · {new Date(a.startsAt).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}</span>}
+                     {isLive&&timeLeft&&<span style={{color:'#8a704d',fontWeight:'700',display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ends in {timeLeft}</span>}
+                     {isEnded&&<span style={{display:'flex',alignItems:'center',gap:'3px'}}><Clock size={8}/>ended {new Date(a.expiresAt).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}
+                     <span style={{display:'flex',alignItems:'center',gap:'3px'}}><Eye size={8}/>{a.viewCount||0} views</span>
+@@ -8665,7 +8895,7 @@
+                   <div style={{display:'flex',gap:'5px'}}>
+                     {isLive&&(
+                       <button type="button" onClick={()=>setConfirmModal({show:true,title:'End this announcement?',subtitle:'Removed from customer menu immediately.',onConfirm:async()=>{try{await axios.patch(`${BASE_URL}/announcements/${a._id}`,{isActive:false, tenantId});fetchAnnouncements();showNotif('Announcement ended');}catch{showNotif('Failed','error');}}})}
+-                        style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid rgba(184,146,58,0.22)',background:'rgba(184,146,58,0.06)',color:'#b8923a',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
++                        style={{padding:'5px 10px',borderRadius:'6px',cursor:'pointer',border:'1px solid rgba(184,162,131,0.22)',background:'rgba(184,162,131,0.06)',color:'#b8a283',fontSize:'0.56rem',fontWeight:'900',display:'flex',alignItems:'center',gap:'4px'}}>
+                         <Zap size={8}/> END
+                       </button>
+                     )}
+@@ -8718,18 +8948,27 @@
+       {[
+         {l:'Total Offers',  v:(Array.isArray(offers)?offers:[]).length,                                       c:'#d3bfa2', icon:<Tag size={13}/>},
+         {l:'Active',        v:(Array.isArray(offers)?offers:[]).filter(o=>o.isActive&&(!o.expiresAt||new Date(o.expiresAt).getTime()>Date.now())).length,                 c:'#ecdcb9', icon:<CheckCircle2 size={13}/>},
+-        {l:'Percent Off',   v:(Array.isArray(offers)?offers:[]).filter(o=>o.type==='percent_off').length,     c:'#b8923a', icon:<Percent size={13}/>},
++        {l:'Percent Off',   v:(Array.isArray(offers)?offers:[]).filter(o=>o.type==='percent_off').length,     c:'#b8a283', icon:<Percent size={13}/>},
+         {l:'Total Redeemed',v:(Array.isArray(offers)?offers:[]).reduce((a,o)=>a+(o.usageCount||0),0),         c:'#8a704d', icon:<ShoppingCart size={13}/>},
+       ].map((s,i)=>(
+-        <div key={i} style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+-          <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
+-          <div>
+-            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+-            <div style={{fontSize:'0.48rem',color:'#969696',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+-          </div>
+-        </div>
++        <MktStat key={i} {...s} />
+       ))}
+     </div>
++    {(() => {
++      const list = Array.isArray(offers) ? offers : [];
++      if (list.length === 0) return null;
++      const isLive = (o) => o.isActive && (!o.expiresAt || new Date(o.expiresAt).getTime() > Date.now());
++      const live = list.filter(isLive).length;
++      const types = {}; list.forEach(o => { const k = String(o.type || 'other').replace(/_/g, ' '); types[k] = (types[k] || 0) + 1; });
++      return (
++        <OpVisualGrid mb={0}>
++          <OpGauge title="Live offers" sub="Running right now" value={(live / list.length) * 100} centerValue={Math.round((live / list.length) * 100)} label="LIVE" hint={`${live} of ${list.length} offers are active`} />
++          <OpDonut title="Offer types" sub="How your offers are built" size={140} centerValue={list.length} centerLabel="OFFERS" rows={Object.entries(types).map(([label, value]) => ({ label, value }))} />
++          <OpBars title="Discount given" sub="Top offers by total discount" nameWidth={112} valueFormat={(v) => `\u20B9${Math.round(v).toLocaleString('en-IN')}`}
++            rows={[...list].sort((a, b) => (Number(b.totalDiscount) || 0) - (Number(a.totalDiscount) || 0)).slice(0, 5).map(o => ({ label: o.title || 'Offer', value: Number(o.totalDiscount) || 0 }))} />
++        </OpVisualGrid>
++      );
++    })()}
+  
+     {/* Create offer form */}
+     <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'16px',overflow:'hidden'}}>
+@@ -8752,7 +8991,7 @@
+             <div style={{fontSize:'0.48rem',color:'#a6a6a6',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Coupon Code</div>
+             <input type="text" placeholder="e.g. HAPPY20 (optional)"
+               value={newOffer.code||''} onChange={e=>setNewOffer(p=>({...p,code:e.target.value.toUpperCase()}))}
+-              style={{width:'100%',padding:'9px 12px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#C9A84C',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box',fontFamily:'monospace'}}/>
++              style={{width:'100%',padding:'9px 12px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#d9c8a6',borderRadius:'8px',fontSize:'0.8rem',fontWeight:'900',outline:'none',boxSizing:'border-box',fontFamily:'monospace'}}/>
+           </div>
+           <div>
+             <div style={{fontSize:'0.48rem',color:'#a6a6a6',fontWeight:'900',letterSpacing:'0.8px',marginBottom:'6px',textTransform:'uppercase'}}>Type</div>
+@@ -8859,9 +9098,9 @@
          <div style={{color:'#8a8a8a',fontSize:'0.78rem',fontWeight:'700'}}>No offers yet — create one above</div>
        </div>
      ):(
 -      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'13px'}}>
+-        {(Array.isArray(offers)?offers:[]).map(offer=>(
+-          <div key={offer._id} style={{
 +      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(min(100%, 280px), 1fr))',gap:'13px'}}>
-         {(Array.isArray(offers)?offers:[]).map(offer=>(
-           <div key={offer._id} style={{
++        {(Array.isArray(offers)?offers:[]).map((offer,oi)=>(
++          <motion.div key={offer._id} initial={{opacity:0,y:12}} animate={{opacity:offer.isActive?1:0.5,y:0}} whileHover={{y:-3}} transition={{duration:0.35,delay:Math.min(oi,8)*0.04}} style={{
              background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
-@@ -10972,7 +11034,7 @@
+             border:`1px solid ${offer.isActive?'rgba(236,220,185,0.1)':'rgba(211,191,162,0.12)'}`,
+             borderTop:`2px solid ${offer.isActive?'rgba(236,220,185,0.28)':'rgba(211,191,162,0.16)'}`,
+@@ -8871,7 +9110,7 @@
+               <div>
+                 <div style={{fontSize:'0.85rem',fontWeight:'900',color:'#fff',marginBottom:'4px'}}>{offer.title}</div>
+                 {offer.code&&(
+-                  <span style={{fontSize:'0.62rem',fontWeight:'900',padding:'2px 9px',borderRadius:'5px',background:'rgba(201,168,76,0.07)',border:'1px solid rgba(201,168,76,0.15)',color:'#C9A84C',fontFamily:'monospace'}}>{offer.code}</span>
++                  <span style={{fontSize:'0.62rem',fontWeight:'900',padding:'2px 9px',borderRadius:'5px',background:'rgba(217,200,166,0.07)',border:'1px solid rgba(217,200,166,0.15)',color:'#d9c8a6',fontFamily:'monospace'}}>{offer.code}</span>
+                 )}
+               </div>
+               <div style={{display:'flex',alignItems:'center',gap:'5px',padding:'3px 8px',borderRadius:'6px',background:offer.isActive?'rgba(236,220,185,0.05)':'rgba(255,255,255,0.02)',border:`1px solid ${offer.isActive?'rgba(236,220,185,0.14)':'rgba(255,255,255,0.04)'}`}}>
+@@ -8889,7 +9128,7 @@
+                 <span style={{fontSize:'0.58rem',color:'#b4b4b4',display:'flex',alignItems:'center',gap:'3px'}}><ShoppingCart size={9}/>{offer.usageCount} used</span>
+               )}
+               {offer.expiresAt&&(
+-                <span style={{fontSize:'0.56rem',color:new Date(offer.expiresAt)<new Date()?'#e29a58':'#b4b4b4',display:'flex',alignItems:'center',gap:'3px'}}>
++                <span style={{fontSize:'0.56rem',color:new Date(offer.expiresAt)<new Date()?'#c9aa88':'#b4b4b4',display:'flex',alignItems:'center',gap:'3px'}}>
+                   <Clock size={8}/>{new Date(offer.expiresAt).toLocaleDateString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short'})}
+                 </span>
+               )}
+@@ -8908,10 +9147,10 @@
+               <button type="button" onClick={()=>setConfirmModal({show:true,title:`Delete "${offer.title}"?`,subtitle:'This cannot be undone.',onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/offers/${offer._id}`, { data: { tenantId } });
+ fetchOffers();showNotif(`"${offer.title}" deleted`);}catch{showNotif('Delete failed','error');}}})}
+                 style={{width:'34px',height:'34px',background:'transparent',border:'1px solid rgba(211,191,162,0.16)',color:'#969696',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+-                onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.25)';e.currentTarget.style.color='#e29a58';}}
++                onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(201,170,136,0.25)';e.currentTarget.style.color='#c9aa88';}}
+                 onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.16)';e.currentTarget.style.color='#969696';}}><X size={12} /></button>
+             </div>
+-          </div>
++          </motion.div>
+         ))}
+       </div>
+     )}
+@@ -9039,7 +9278,7 @@
+                     </div>
+                   ))}
+                 </div>
+-                {it.failedDevices > 0 && <div style={{ marginTop: '9px', fontSize: '0.48rem', color: '#b8923a', fontWeight: 800 }}>{fmt(it.failedDevices)} device{it.failedDevices > 1 ? 's' : ''} could not be reached (expired or revoked notification permission)</div>}
++                {it.failedDevices > 0 && <div style={{ marginTop: '9px', fontSize: '0.48rem', color: '#b8a283', fontWeight: 800 }}>{fmt(it.failedDevices)} device{it.failedDevices > 1 ? 's' : ''} could not be reached (expired or revoked notification permission)</div>}
+               </div>
+             ))}
+           </div>
+@@ -9074,15 +9313,19 @@
+         {l:'Total Reached',  v:(Array.isArray(campaigns)?campaigns:[]).reduce((a,c)=>a+(c.sentCount||0),0),          c:'#ecdcb9', icon:<Users size={13}/>},
+         {l:'Avg Reach',      v:(Array.isArray(campaigns)?campaigns:[]).length>0?Math.round((Array.isArray(campaigns)?campaigns:[]).reduce((a,c)=>a+(c.sentCount||0),0)/(Array.isArray(campaigns)?campaigns:[]).length):0, c:'#8a704d', icon:<BarChart2 size={13}/>},
+       ].map((s,i)=>(
+-        <div key={i} style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderTop:`2px solid ${s.c}20`,borderRadius:'13px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'11px'}}>
+-          <div style={{width:'28px',height:'28px',borderRadius:'7px',flexShrink:0,background:`${s.c}0d`,border:`1px solid ${s.c}1a`,display:'flex',alignItems:'center',justifyContent:'center',color:s.c}}>{s.icon}</div>
+-          <div>
+-            <div style={{fontSize:'1.3rem',fontWeight:'900',color:s.c,fontFamily:'monospace',lineHeight:1}}>{s.v}</div>
+-            <div style={{fontSize:'0.48rem',color:'#969696',fontWeight:'900',letterSpacing:'1px',marginTop:'3px',textTransform:'uppercase'}}>{s.l}</div>
+-          </div>
+-        </div>
++        <MktStat key={i} {...s} />
+       ))}
+     </div>
++    {(() => {
++      const list = Array.isArray(campaigns) ? campaigns : [];
++      if (list.length === 0) return null;
++      return (
++        <OpVisualGrid mb={0}>
++          <OpBars title="Reach by campaign" sub="Guests reached per send" nameWidth={120}
++            rows={list.slice(0, 6).map((c, i) => ({ label: c.title || c.name || c.subject || `Campaign ${i + 1}`, value: Number(c.sentCount) || 0 }))} />
++        </OpVisualGrid>
++      );
++    })()}
+  
+     {/* Send campaign */}
+     <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.12)',borderRadius:'16px',overflow:'hidden'}}>
+@@ -9209,11 +9452,11 @@
+       {!mktReady.campaigns?(
+         <div style={{padding:'12px'}}><SkelRows count={3} label="Loading campaigns" /></div>
+       ):(Array.isArray(campaigns)?campaigns:[]).length===0?(
+-        <div style={{textAlign:'center',padding:'40px',color:'#0c0c0c',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
++        <div style={{textAlign:'center',padding:'40px',color:'#969696',fontSize:'0.72rem',fontWeight:'700'}}>No campaigns sent yet</div>
+       ):(
+         <div style={{padding:'12px',display:'flex',flexDirection:'column',gap:'8px'}}>
+-          {[...(Array.isArray(campaigns)?campaigns:[])].map(c=>( /* server already returns newest first; .reverse() put the oldest campaign on top */
+-            <div key={c._id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'12px',borderRadius:'9px',background:'#070707',border:'1px solid rgba(211,191,162,0.12)'}}>
++          {[...(Array.isArray(campaigns)?campaigns:[])].map((c,ci)=>( /* server already returns newest first; .reverse() put the oldest campaign on top */
++            <motion.div key={c._id} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{duration:0.3,delay:Math.min(ci,8)*0.04}} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'12px',borderRadius:'9px',background:'#070707',border:'1px solid rgba(211,191,162,0.12)'}}>
+               <div style={{width:'30px',height:'30px',borderRadius:'8px',flexShrink:0,background:'rgba(211,191,162,0.05)',border:'1px solid rgba(211,191,162,0.1)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                 <Send size={11} color="#8a704d"/>
+               </div>
+@@ -9226,13 +9469,19 @@
+                   <span style={{fontSize:'0.58rem',color:'#969696',display:'flex',alignItems:'center',gap:'3px',flexShrink:0,whiteSpace:'nowrap'}}><Users size={8}/>{c.sentCount||0} reached</span>
+                 </div>
+                 <div style={{fontSize:'0.68rem',color:'#b4b4b4',lineHeight:1.5,marginBottom:'5px'}}>{c.body||c.message||''}</div>
++                {(c.sentCount||0)>0&&(
++                  <div role="img" aria-label={`${c.sentCount} guests reached`} style={{height:'4px',borderRadius:'3px',background:'rgba(255,255,255,0.07)',overflow:'hidden',margin:'2px 0 8px'}}>
++                    <motion.div initial={{scaleX:0}} animate={{scaleX:1}} transition={{duration:0.8,ease:[0.85,0,0.15,1],delay:Math.min(ci,8)*0.04}}
++                      style={{height:'100%',width:`${Math.max(4,((c.sentCount||0)/Math.max(1,...(Array.isArray(campaigns)?campaigns:[]).map(x=>x.sentCount||0)))*100)}%`,background:'linear-gradient(90deg,#8a704d,#d3bfa2)',borderRadius:'3px',transformOrigin:'0 50%'}} />
++                  </div>
++                )}
+                 <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',fontSize:'0.54rem',color:'#969696'}}>
+                   <span style={{color:'#8a704d',fontWeight:'800'}}>SENT BY: {c.tenantName || tenantConfig?.name || tenantId}</span>
+                   <span>•</span>
+                   <span>{new Date(c.createdAt||Date.now()).toLocaleString('en-IN',{ timeZone: 'Asia/Kolkata',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})}</span>
+                 </div>
+               </div>
+-            </div>
++            </motion.div>
+           ))}
+         </div>
+       )}
+@@ -9279,7 +9528,7 @@
+             position: 'absolute', inset: '-3px', borderRadius: '18px',
+             border: `2px solid ${mood.level === 'critical'
+               ? 'rgba(154,90,42,0.6)'
+-              : 'rgba(184,146,58,0.5)'}`,
++              : 'rgba(184,162,131,0.5)'}`,
+             animation: 'moodPulse 1.5s ease-in-out infinite',
+             pointerEvents: 'none', zIndex: 1
+           }} />
+@@ -9358,9 +9607,9 @@
+               letterSpacing: '0.5px',
+               lineHeight: 1,
+               color: mood.level === 'critical'
+-                ? '#e29a58'
++                ? '#c9aa88'
+                 : mood.level === 'hot'
+-                ? '#b8923a'
++                ? '#b8a283'
+                 : mood.level === 'warm'
+                 ? '#8a704d'
+                 : '#b4b4b4',
+@@ -9725,11 +9974,29 @@
+ {activeTab === 'intelligence' && (
+   <motion.div key="marketing" initial={false} animate={{ opacity: 1 }} style={{ ...styles.insightsWrapper, textAlign: 'left' }}>
+ 
++    {/* ── MENU ENGINEERING AT A GLANCE (Bklit) ── */}
++    {(() => {
++      const costed = (profitabilityData || []).filter(d => d.hasRecipe);
++      if (costed.length < 2) return null;
++      const avgSold = costed.reduce((a, b) => a + (b.totalQtySold || 0), 0) / costed.length;
++      const avgMargin = costed.reduce((a, b) => a + (b.marginPct || 0), 0) / costed.length;
++      const q = (hiSold, hiMargin) => costed.filter(d => ((d.totalQtySold || 0) >= avgSold) === hiSold && ((d.marginPct || 0) >= avgMargin) === hiMargin).length;
++      return (
++        <OpVisualGrid>
++          <OpDonut title="Menu engineering" sub="Costed dishes by sales and margin" size={140} centerValue={costed.length} centerLabel="DISHES"
++            rows={[{ label: 'Stars (sell well, earn well)', value: q(true, true) }, { label: 'Plowhorses (sell well, thin margin)', value: q(true, false) }, { label: 'Puzzles (earn well, sell slowly)', value: q(false, true) }, { label: 'Dogs (low on both)', value: q(false, false) }]} />
++          <OpGauge title="Average margin" sub="Across costed dishes" value={avgMargin} centerValue={Math.round(avgMargin)} label="MARGIN" hint={`${costed.length} dishes with a recipe`} />
++          <OpBars title="Highest-margin dishes" sub="Margin %, costed dishes only" nameWidth={116} valueFormat={(v) => `${Math.round(v)}%`}
++            rows={[...costed].sort((a, b) => (b.marginPct || 0) - (a.marginPct || 0)).slice(0, 5).map(d => ({ label: d.name, value: Math.max(0, d.marginPct || 0) }))} />
++        </OpVisualGrid>
++      );
++    })()}
++
+     {(() => {
+       // ── Gold-only tone palette — no green/blue/red anywhere ──
+       const tone = {
+         urgent:   '#d3bfa2',
+-        warning:  '#b8923a',
++        warning:  '#b8a283',
+         positive: '#ecdcb9',
+         info:     '#8a704d',
+         neutral:  '#6a6a6a',
+@@ -10972,7 +11239,7 @@
            {recs.filter(r => r.priority === 1).length > 0 && (
              <>
                <SectionHeader icon={<AlertOctagon size={16} />} title="Needs Action Today" subtitle="These directly affect revenue or compliance — address first" />
@@ -128,7 +1198,7 @@
                  {recs.filter(r => r.priority === 1).map(rec => (
                    <RecommendationCard key={rec.id} rec={rec} urgent />
                  ))}
-@@ -10984,7 +11046,7 @@
+@@ -10984,7 +11251,7 @@
            {recs.filter(r => r.priority === 2).length > 0 && (
              <>
                <SectionHeader icon={<TrendingUp size={16} />} title="High-Impact Opportunities" subtitle="Meaningful revenue or efficiency gains, act within the week" />
@@ -137,7 +1207,7 @@
                  {recs.filter(r => r.priority === 2).map(rec => (
                    <RecommendationCard key={rec.id} rec={rec} />
                  ))}
-@@ -10996,7 +11058,7 @@
+@@ -10996,7 +11263,7 @@
            {recs.filter(r => r.priority === 3).length > 0 && (
              <>
                <SectionHeader icon={<Lightbulb size={16} />} title="Optimization Suggestions" subtitle="Worth scheduling into your monthly review" />
@@ -146,7 +1216,7 @@
                  {recs.filter(r => r.priority === 3).map(rec => (
                    <RecommendationCard key={rec.id} rec={rec} />
                  ))}
-@@ -11008,7 +11070,7 @@
+@@ -11008,7 +11275,7 @@
            {recs.filter(r => r.priority === 4).length > 0 && (
              <>
                <SectionHeader icon={<Globe size={16} />} title="Strategic Considerations" subtitle="Bigger initiatives — plan over weeks, not days" />
@@ -155,7 +1225,7 @@
                  {recs.filter(r => r.priority === 4).map(rec => (
                    <RecommendationCard key={rec.id} rec={rec} />
                  ))}
-@@ -11020,7 +11082,7 @@
+@@ -11020,7 +11287,7 @@
            {recs.filter(r => r.priority === 5).length > 0 && (
              <>
                <SectionHeader icon={<Award size={16} />} title="What's Working Well" subtitle="Protect and double down on these strengths" />
@@ -164,7 +1234,30 @@
                  {recs.filter(r => r.priority === 5).map(rec => (
                    <RecommendationCard key={rec.id} rec={rec} positive />
                  ))}
-@@ -11238,12 +11300,24 @@
+@@ -11183,18 +11450,18 @@
+         {aiBrain.risks?.length > 0 && (
+           <div style={{ marginBottom: '12px' }}>
+             <div style={{ fontSize: '0.48rem', fontWeight: '900', color: 'rgba(255,255,255,0.2)', letterSpacing: '2px', marginBottom: '7px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+-              <AlertTriangle size={9} color="rgba(226,154,88,0.6)" strokeWidth={2} />
++              <AlertTriangle size={9} color="rgba(201,170,136,0.6)" strokeWidth={2} />
+               STOCK RISKS
+             </div>
+             {aiBrain.risks.slice(0, 3).map(r => (
+               <div key={r.itemName} style={{
+                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                 padding: '8px 12px', marginBottom: '5px',
+-                background: 'rgba(226,154,88,0.05)', border: '1px solid rgba(226,154,88,0.15)', borderRadius: '8px'
++                background: 'rgba(201,170,136,0.05)', border: '1px solid rgba(201,170,136,0.15)', borderRadius: '8px'
+               }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+-                  <AlertTriangle size={11} color="#e29a58" strokeWidth={2} />
+-                  <span style={{ color: '#e29a58', fontSize: '0.68rem', fontWeight: '700' }}>{r.itemName} may run short</span>
++                  <AlertTriangle size={11} color="#c9aa88" strokeWidth={2} />
++                  <span style={{ color: '#c9aa88', fontSize: '0.68rem', fontWeight: '700' }}>{r.itemName} may run short</span>
+                 </div>
+                 <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.6rem', fontFamily: 'monospace' }}>
+                   {r.required}{r.unit} needed · {r.currentStock}{r.unit} left
+@@ -11238,12 +11505,24 @@
        <SC label="Loyalty Rate"     value={`${stats.loyaltyRate}%`}                 sub={`${trendsData?.customers?.repeat||0} of ${trendsData?.customers?.total||0} repeat`} />
      </div>
  
@@ -192,7 +1285,7 @@
        const hourly = (hourlyAnalytics.hourly || []).filter(h => h.orderCount > 0 || (h.hour >= 8 && h.hour <= 23)).map(h => ({ hour: `${h.hour}h`, orders: h.orderCount, revenue: h.revenue }));
        const dow = hourlyAnalytics.dayOfWeek || [];
        const hasHourly = hourly.some(h => h.orders > 0);
-@@ -11254,57 +11328,26 @@
+@@ -11254,57 +11533,26 @@
        const empty = <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: '0.7rem' }}>No data yet</div>;
        const top = hasDow ? [...dow].sort((a, b) => b.revenue - a.revenue)[0] : null;
        return (
@@ -254,7 +1347,7 @@
              )}
            </div>
          </div>
-@@ -11353,7 +11396,7 @@
+@@ -11353,7 +11601,7 @@
        const daysToGstr3B = Math.round((nextGstr3B - _todayMid)/86400000);
  
        return (
@@ -263,7 +1356,35 @@
  
            {/* GST Card */}
            <BC>
-@@ -11426,6 +11469,11 @@
+@@ -11378,11 +11626,11 @@
+             <div style={{ marginBottom: '16px' }}>
+               <div style={{ display:'flex', height:'7px', borderRadius:'4px', overflow:'hidden', gap:'1px' }}>
+                 <div style={{ flex:1, background:'rgba(211,191,162,0.35)', borderRadius:'4px 0 0 4px' }} title={`Net: ₹${Math.round(netRevenueAfterGst5).toLocaleString()}`} />
+-                <div style={{ width:'2.5%', background:'#c9a84c' }} />
++                <div style={{ width:'2.5%', background:'#d9c8a6' }} />
+                 <div style={{ width:'2.5%', background:'#bda88a', borderRadius:'0 4px 4px 0' }} />
+               </div>
+               <div style={{ display:'flex', gap:'14px', marginTop:'6px' }}>
+-                {[{c:'rgba(211,191,162,0.35)',l:'Net Revenue'},{c:'#c9a84c',l:'CGST'},{c:'#bda88a',l:'SGST'}].map(s=>(
++                {[{c:'rgba(211,191,162,0.35)',l:'Net Revenue'},{c:'#d9c8a6',l:'CGST'},{c:'#bda88a',l:'SGST'}].map(s=>(
+                   <div key={s.l} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                     <div style={{ width:'7px', height:'7px', borderRadius:'2px', background:s.c, flexShrink:0 }} />
+                     <span style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.25)', fontWeight:'600' }}>{s.l}</span>
+@@ -11397,10 +11645,10 @@
+                 { label:'GSTR-1', desc:'Outward supplies', date:nextGstr1.toLocaleDateString('en-IN',{day:'numeric',month:'short'}), days:daysToGstr1 },
+                 { label:'GSTR-3B', desc:'Summary + payment', date:nextGstr3B.toLocaleDateString('en-IN',{day:'numeric',month:'short'}), days:daysToGstr3B },
+               ].map(s=>(
+-                <div key={s.label} style={{ padding:'11px 13px', background: s.days<=5?'rgba(226,154,88,0.05)':'rgba(255,255,255,0.02)', border:`1px solid ${s.days<=5?'rgba(226,154,88,0.2)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
++                <div key={s.label} style={{ padding:'11px 13px', background: s.days<=5?'rgba(201,170,136,0.05)':'rgba(255,255,255,0.02)', border:`1px solid ${s.days<=5?'rgba(201,170,136,0.2)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
+                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+-                    <span style={{ fontSize:'0.65rem', fontWeight:'900', color: s.days<=5?'#e29a58':'#d3bfa2' }}>{s.label}</span>
+-                    <span style={{ fontSize:'0.48rem', fontWeight:'900', padding:'2px 7px', borderRadius:'4px', background: s.days<=5?'rgba(226,154,88,0.1)':'rgba(211,191,162,0.06)', color: s.days<=5?'#e29a58':'rgba(211,191,162,0.5)' }}>{s.days}d</span>
++                    <span style={{ fontSize:'0.65rem', fontWeight:'900', color: s.days<=5?'#c9aa88':'#d3bfa2' }}>{s.label}</span>
++                    <span style={{ fontSize:'0.48rem', fontWeight:'900', padding:'2px 7px', borderRadius:'4px', background: s.days<=5?'rgba(201,170,136,0.1)':'rgba(211,191,162,0.06)', color: s.days<=5?'#c9aa88':'rgba(211,191,162,0.5)' }}>{s.days}d</span>
+                   </div>
+                   <div style={{ fontSize:'0.5rem', color:'rgba(255,255,255,0.2)' }}>{s.desc}</div>
+                   <div style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.35)', fontWeight:'700', marginTop:'3px' }}>Due {s.date}</div>
+@@ -11426,6 +11674,11 @@
            {/* P&L Card */}
            <BC>
              <BT icon={<TrendingUp size={14} strokeWidth={1.5}/>}>P&L SUMMARY</BT>
@@ -275,7 +1396,83 @@
              {[
                { l:'TOTAL REVENUE',            v:monthlyRevenue,           sign:'',  bold:false },
                { l:`— GST PAID (${(_totalGstPct*100).toFixed(2).replace(/\.00$/, '')}%)`,           v:-totalGst5,               sign:'-', bold:false },
-@@ -11852,7 +11900,7 @@
+@@ -11446,7 +11699,7 @@
+                 borderBottom: !s.bold?'1px solid rgba(255,255,255,0.04)':undefined,
+               }}>
+                 <span style={{ fontSize: s.bold?'0.62rem':'0.6rem', color: s.bold?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.25)', fontWeight:'800', letterSpacing:'0.3px' }}>{s.l}</span>
+-                <span style={{ fontSize: s.bold?'0.88rem':'0.75rem', fontWeight:'900', fontFamily:'monospace', color: s.net ? (netAfterAll>=0?'#d3bfa2':'rgba(226,154,88,0.8)') : s.bold?'#d3bfa2':'rgba(255,255,255,0.6)' }}>
++                <span style={{ fontSize: s.bold?'0.88rem':'0.75rem', fontWeight:'900', fontFamily:'monospace', color: s.net ? (netAfterAll>=0?'#d3bfa2':'rgba(201,170,136,0.8)') : s.bold?'#d3bfa2':'rgba(255,255,255,0.6)' }}>
+                   {s.sign&&s.v<0?'-':''}₹{Math.abs(Math.round(s.v)).toLocaleString()}
+                 </span>
+               </div>
+@@ -11461,10 +11714,10 @@
+                 <div style={{ marginTop:'14px', padding:'12px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px' }}>
+                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                     <span style={{ fontSize:'0.48rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1.5px' }}>FOOD COST RATIO</span>
+-                    <span style={{ fontSize:'0.55rem', fontWeight:'900', color: fcPct>40?'rgba(240,165,0,0.8)':'rgba(211,191,162,0.7)', fontFamily:'monospace' }}>{fcPct}%</span>
++                    <span style={{ fontSize:'0.55rem', fontWeight:'900', color: fcPct>40?'rgba(211,191,162,0.8)':'rgba(211,191,162,0.7)', fontFamily:'monospace' }}>{fcPct}%</span>
+                   </div>
+                   <div style={{ height:'5px', background:'rgba(255,255,255,0.06)', borderRadius:'3px', overflow:'hidden' }}>
+-                    <div style={{ height:'100%', width:`${Math.min(fcPct,100)}%`, background: fcPct>40?'rgba(240,165,0,0.6)':'rgba(211,191,162,0.5)', borderRadius:'3px', transition:'width 0.4s ease' }} />
++                    <div style={{ height:'100%', width:`${Math.min(fcPct,100)}%`, background: fcPct>40?'rgba(211,191,162,0.6)':'rgba(211,191,162,0.5)', borderRadius:'3px', transition:'width 0.4s ease' }} />
+                   </div>
+                   <div style={{ display:'flex', justifyContent:'space-between', marginTop:'4px' }}>
+                     <span style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.15)' }}>IDEAL &lt;35%</span>
+@@ -11517,7 +11770,7 @@
+                 {[
+                   { l:'TOTAL ORDERS', v:`${total}` },
+                   { l:'PEAK HOUR',    v:fmt(peak?.hour||0) },
+-                  { l:'DEAD HOURS',   v:`${deadHours.length}h`, c: deadHours.length>4?'rgba(240,165,0,0.7)':'rgba(211,191,162,0.7)' }
++                  { l:'DEAD HOURS',   v:`${deadHours.length}h`, c: deadHours.length>4?'rgba(211,191,162,0.7)':'rgba(211,191,162,0.7)' }
+                 ].map(s=>(
+                   <div key={s.l} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px', padding:'10px 11px' }}>
+                     <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'4px' }}>{s.l}</div>
+@@ -11573,8 +11826,8 @@
+               </div>
+ 
+               {slowHours.length > 0 && (
+-                <div style={{ padding:'9px 11px', background:'rgba(240,165,0,0.04)', border:'1px solid rgba(240,165,0,0.15)', borderRadius:'8px', display:'flex', gap:'7px', alignItems:'flex-start' }}>
+-                  <Zap size={11} color="rgba(240,165,0,0.6)" strokeWidth={2} style={{ flexShrink:0, marginTop:'1px' }} />
++                <div style={{ padding:'9px 11px', background:'rgba(211,191,162,0.04)', border:'1px solid rgba(211,191,162,0.15)', borderRadius:'8px', display:'flex', gap:'7px', alignItems:'flex-start' }}>
++                  <Zap size={11} color="rgba(211,191,162,0.6)" strokeWidth={2} style={{ flexShrink:0, marginTop:'1px' }} />
+                   <span style={{ fontSize:'0.6rem', color:'rgba(255,255,255,0.3)', lineHeight:1.55 }}>
+                     Slow hours: {slowHours.slice(0,3).map(h=>fmt(h.hour)).join(', ')} — consider happy hour promos
+                   </span>
+@@ -11597,7 +11850,7 @@
+                 { l:'GROUPS TODAY',  v:waitlistAnalytics.today.total,   c:'#d3bfa2',  icon:<Users size={13}/> },
+                 { l:'SEATED',        v:waitlistAnalytics.today.seated,  c:'rgba(211,191,162,0.7)', icon:<UserCheck size={13}/> },
+                 { l:'PICKUP',        v:waitlistAnalytics.today.pickup,  c:'rgba(255,255,255,0.5)', icon:<ShoppingBag size={13}/> },
+-                { l:'STILL WAITING', v:waitlistAnalytics.today.waiting, c:'rgba(240,165,0,0.7)',   icon:<Timer size={13}/> },
++                { l:'STILL WAITING', v:waitlistAnalytics.today.waiting, c:'rgba(211,191,162,0.7)',   icon:<Timer size={13}/> },
+               ].map(s=>(
+                 <div key={s.l} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'11px', padding:'13px' }}>
+                   <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'7px', color:s.c }}>{s.icon}<span style={{ fontSize:'0.44rem', fontWeight:'900', letterSpacing:'1.2px' }}>{s.l}</span></div>
+@@ -11609,13 +11862,13 @@
+             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
+               <div style={{ padding:'11px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                 <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>WALK-AWAYS</div>
+-                <div style={{ fontSize:'1.15rem', fontWeight:'900', color: waitlistAnalytics.today.walked>0?'rgba(226,154,88,0.7)':'rgba(211,191,162,0.5)', fontFamily:'monospace' }}>
++                <div style={{ fontSize:'1.15rem', fontWeight:'900', color: waitlistAnalytics.today.walked>0?'rgba(201,170,136,0.7)':'rgba(211,191,162,0.5)', fontFamily:'monospace' }}>
+                   {waitlistAnalytics.today.walked}
+                 </div>
+               </div>
+               <div style={{ padding:'11px 13px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'10px' }}>
+                 <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>AVG WAIT (MONTH)</div>
+-                <div style={{ fontSize:'1.15rem', fontWeight:'900', fontFamily:'monospace', color: waitlistAnalytics.month.avgWaitMin<15?'rgba(211,191,162,0.7)':waitlistAnalytics.month.avgWaitMin<25?'rgba(255,255,255,0.6)':'rgba(226,154,88,0.6)' }}>
++                <div style={{ fontSize:'1.15rem', fontWeight:'900', fontFamily:'monospace', color: waitlistAnalytics.month.avgWaitMin<15?'rgba(211,191,162,0.7)':waitlistAnalytics.month.avgWaitMin<25?'rgba(255,255,255,0.6)':'rgba(201,170,136,0.6)' }}>
+                   {waitlistAnalytics.month.avgWaitMin}m
+                 </div>
+               </div>
+@@ -11666,7 +11919,7 @@
+               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 0', marginBottom:'14px' }}>
+                 <span style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.3)' }}>Growth (MoM)</span>
+                 {growthPct !== null ? (
+-                  <span style={{ fontSize:'0.82rem', fontWeight:'900', padding:'4px 11px', borderRadius:'6px', display:'inline-flex', alignItems:'center', gap:'5px', background: isPos?'rgba(211,191,162,0.08)':'rgba(226,154,88,0.08)', color: isPos?'#d3bfa2':'rgba(226,154,88,0.8)' }}>
++                  <span style={{ fontSize:'0.82rem', fontWeight:'900', padding:'4px 11px', borderRadius:'6px', display:'inline-flex', alignItems:'center', gap:'5px', background: isPos?'rgba(211,191,162,0.08)':'rgba(201,170,136,0.08)', color: isPos?'#d3bfa2':'rgba(201,170,136,0.8)' }}>
+                     {isPos ? <ArrowUp size={12}/> : <ArrowDown size={12}/>} {isPos?'+':''}{growthPct}%
+                   </span>
+                 ) : <span style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.2)' }}>No prior data</span>}
+@@ -11852,7 +12105,7 @@
                  </div>
                ))}
              </div>
@@ -284,7 +1481,7 @@
                {profitabilityData.slice(0,8).map((d,idx)=>(
                  <div key={d._id} style={{ padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px', alignItems:'center' }}>
-@@ -11955,7 +12003,7 @@
+@@ -11955,7 +12208,7 @@
      {Object.keys(categoryRankings).length > 0 && (
        <BC style={{ marginBottom:'14px' }}>
          <BT icon={<Layers size={14} strokeWidth={1.5}/>}>CATEGORY PERFORMANCE</BT>
@@ -293,7 +1490,135 @@
            {Object.entries(categoryRankings).map(([cat,m])=>(
              <div key={cat} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'12px', padding:'15px' }}>
                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', paddingBottom:'10px', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-@@ -13663,7 +13711,7 @@
+@@ -12063,7 +12316,7 @@
+         </div>
+         <div style={{ display:'grid', gridTemplateColumns: aggregatorAnalytics.swiggyEnabled&&aggregatorAnalytics.zomatoEnabled?'1fr 1fr':'1fr', gap:'12px' }}>
+           {aggregatorAnalytics.swiggyEnabled && (
+-            <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,165,25,0.15)', borderTop:'2px solid rgba(255,165,25,0.5)', borderRadius:'12px', padding:'14px' }}>
++            <div style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(211,191,162,0.15)', borderTop:'2px solid rgba(211,191,162,0.5)', borderRadius:'12px', padding:'14px' }}>
+               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
+                 <span style={{ fontSize:'0.75rem', fontWeight:'900', color:'rgba(252,128,25,0.8)' }}>SWIGGY</span>
+                 <span style={{ fontSize:'0.58rem', color:'rgba(255,255,255,0.25)' }}>{aggregatorAnalytics.swiggy?.orderCount||0} orders</span>
+@@ -12183,9 +12436,9 @@
+                   { l:'SALARIES PAID',  v:`${paidCount}/${staffEfficiency.length}`, accent: paidCount===staffEfficiency.length },
+                   { l:'PENDING PAYROLL',v:`₹${pendingPay.toLocaleString()}`, warn: pendingPay>0 },
+                 ].map(s=>(
+-                  <div key={s.l} style={{ padding:'11px 12px', background: s.accent?'rgba(211,191,162,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.15)':s.warn?'rgba(240,165,0,0.15)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
++                  <div key={s.l} style={{ padding:'11px 12px', background: s.accent?'rgba(211,191,162,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${s.accent?'rgba(211,191,162,0.15)':s.warn?'rgba(211,191,162,0.15)':'rgba(255,255,255,0.06)'}`, borderRadius:'10px' }}>
+                     <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', letterSpacing:'1px', marginBottom:'5px' }}>{s.l}</div>
+-                    <div style={{ fontSize:'0.88rem', fontWeight:'900', fontFamily:'monospace', color: s.accent?'#d3bfa2':s.warn?'rgba(240,165,0,0.7)':'rgba(255,255,255,0.6)' }}>{s.v}</div>
++                    <div style={{ fontSize:'0.88rem', fontWeight:'900', fontFamily:'monospace', color: s.accent?'#d3bfa2':s.warn?'rgba(211,191,162,0.7)':'rgba(255,255,255,0.6)' }}>{s.v}</div>
+                   </div>
+                 ))}
+               </div>
+@@ -12266,14 +12519,14 @@
+           <BT icon={<Layers size={14} strokeWidth={1.5}/>}>INVENTORY HEALTH</BT>
+           <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:'16px', alignItems:'center', marginBottom:'14px' }}>
+             <div style={{ textAlign:'center', padding:'16px 20px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:'12px' }}>
+-              <div style={{ fontSize:'2rem', fontWeight:'900', color: score>80?'#d3bfa2':score>50?'rgba(240,165,0,0.7)':'rgba(255,255,255,0.3)', fontFamily:'monospace', lineHeight:1 }}>{score}%</div>
++              <div style={{ fontSize:'2rem', fontWeight:'900', color: score>80?'#d3bfa2':score>50?'rgba(211,191,162,0.7)':'rgba(255,255,255,0.3)', fontFamily:'monospace', lineHeight:1 }}>{score}%</div>
+               <div style={{ fontSize:'0.44rem', color:'rgba(255,255,255,0.2)', fontWeight:'900', marginTop:'4px', letterSpacing:'1px' }}>HEALTH SCORE</div>
+             </div>
+             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'7px' }}>
+               {[
+                 { l:'TOTAL ITEMS', v:totalItems },
+                 { l:'HEALTHY',     v:healthy,    c:'rgba(211,191,162,0.8)' },
+-                { l:'LOW STOCK',   v:lowItems,   c: lowItems>0?'rgba(240,165,0,0.7)':'rgba(255,255,255,0.3)' },
++                { l:'LOW STOCK',   v:lowItems,   c: lowItems>0?'rgba(211,191,162,0.7)':'rgba(255,255,255,0.3)' },
+                 { l:'DEPLETED',    v:depleted,   c: depleted>0?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.3)' },
+               ].map(s=>(
+                 <div key={s.l} style={{ padding:'10px 11px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:'9px' }}>
+@@ -12296,7 +12549,7 @@
+                 {criticals.map(item=>(
+                   <div key={item._id} style={{ padding:'9px 11px', background:'rgba(255,255,255,0.02)', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.06)' }}>
+                     <div style={{ fontSize:'0.68rem', fontWeight:'800', color:'rgba(255,255,255,0.6)' }}>{item.itemName}</div>
+-                    <div style={{ fontSize:'0.58rem', color: item.currentStock<=0?'rgba(255,255,255,0.35)':'rgba(240,165,0,0.6)', marginTop:'2px' }}>
++                    <div style={{ fontSize:'0.58rem', color: item.currentStock<=0?'rgba(255,255,255,0.35)':'rgba(211,191,162,0.6)', marginTop:'2px' }}>
+                       {item.currentStock<=0 ? 'Out of stock' : `${item.currentStock} ${item.unit} left`}
+                     </div>
+                   </div>
+@@ -12578,6 +12831,26 @@
+       </button>
+     </div>
+ 
++    {/* ══════════ AUDIT VISUALS (Bklit) ══════════ */}
++    {(() => {
++      const logs = auditLogs || [];
++      if (logs.length === 0) return null;
++      const NAMES = { BILLING: 'Billing', MENU_UPDATES: 'Menu updates', MENU_VISIBILITY: 'Menu visibility', INVENTORY: 'Inventory', RECIPE_INGREDIENTS: 'Recipes', SALARY_STAFF: 'Salary & staff', SECURITY_SYSTEM: 'Security' };
++      const cat = {}; logs.forEach(l => { const k = NAMES[l.category] || 'Other'; cat[k] = (cat[k] || 0) + 1; });
++      const ist = (d) => new Date(new Date(d).getTime() + 330 * 60000).toISOString().slice(0, 10);
++      const week = Array.from({ length: 7 }, (_, i) => { const ms = Date.now() - (6 - i) * 864e5; const k = ist(ms); return { label: new Date(ms + 330 * 60000).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' }), value: logs.filter(l => ist(l.createdAt) === k).length }; });
++      return (
++        <OpVisualGrid mb={20}>
++          <OpDonut title="What changed" sub="Records by area" size={140} centerValue={logs.length} centerLabel="RECORDS" rows={Object.entries(cat).map(([label, value]) => ({ label, value }))} />
++          <div style={opPanel}>
++            <div style={opTitle}>Last 7 days</div>
++            <div style={opSub}>Actions recorded per day</div>
++            <BkColumns height={170} label="Actions" rows={week} valueFormat={(v) => `${v} ${v === 1 ? 'action' : 'actions'}`} />
++          </div>
++        </OpVisualGrid>
++      );
++    })()}
++
+     {/* ══════════ CATEGORY SECTIONS ══════════ */}
+     {[
+       { key: 'BILLING',            label: 'BILLING',               icon: <ReceiptIndianRupee size={14} strokeWidth={1.5} />, accent: '#d3bfa2' },
+@@ -13071,6 +13344,24 @@
+ 
+           {/* ── MANAGEMENT ── */}
+ {activeTab === 'management' && (() => {
++  // month of the most recent attendance record (keeps this strip free of clock reads during render)
++  const month = ((attendanceLogs || []).map(l => String(l.date || '')).sort().pop() || '').slice(0, 7);
++  const roster = staff || [];
++  if (roster.length === 0) return null;
++  const roles = {}; roster.forEach(m => { const k = m.role || 'Staff'; roles[k] = (roles[k] || 0) + 1; });
++  const hours = roster.map(m => {
++    const logs = (attendanceLogs || []).filter(l => (l.staffId === m._id || String(l.staffId) === String(m._id)) && String(l.date || '').startsWith(month));
++    return { label: m.name || 'Staff', value: Math.round(logs.reduce((n, l) => n + (Number(l.totalWorkingHours) || 0), 0) * 10) / 10 };
++  }).sort((a, b) => b.value - a.value);
++  return (
++    <OpVisualGrid mb={0}>
++      <OpDonut title="Team" sub="Staff by role" size={140} centerValue={roster.length} centerLabel="STAFF" rows={Object.entries(roles).map(([label, value]) => ({ label, value }))} />
++      <OpBars title="Hours this month" sub="Logged working hours, most first" nameWidth={112} valueFormat={(v) => `${v}h`} rows={hours} />
++    </OpVisualGrid>
++  );
++})()}
++
++{activeTab === 'management' && (() => {
+   const P = { panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', line: 'rgba(211,191,162,0.12)', label: { fontSize: '0.56rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#969696', fontWeight: '800' } };
+   const card = { background: P.panel, border: `1px solid ${P.line}`, borderRadius: '16px', padding: '18px 22px', boxShadow: '0 16px 34px rgba(0,0,0,0.32)', textAlign: 'left', marginBottom: '16px' };
+   const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+@@ -13485,7 +13776,7 @@
+                             fontFamily:'monospace'
+                           }}>{days}<span style={{fontSize:'0.55rem',color:'#a6a6a6',marginLeft:'3px'}}>days</span></span>
+                           {overtimeHrs>0&&(
+-                            <span style={{fontSize:'0.52rem',fontWeight:'900',color:'#b8923a',background:'rgba(184,146,58,0.08)',padding:'1px 6px',borderRadius:'4px',border:'1px solid rgba(184,146,58,0.2)'}}>
++                            <span style={{fontSize:'0.52rem',fontWeight:'900',color:'#b8a283',background:'rgba(184,162,131,0.08)',padding:'1px 6px',borderRadius:'4px',border:'1px solid rgba(184,162,131,0.2)'}}>
+                               +{overtimeHrs.toFixed(1)}h OT
+                             </span>
+                           )}
+@@ -13544,8 +13835,8 @@
+                             }} style={{
+                               padding:'5px 11px',borderRadius:'7px',cursor:'pointer',
+                               fontSize:'0.6rem',fontWeight:'900',
+-                              border:'1px solid rgba(184,146,58,0.25)',
+-                              background:'rgba(184,146,58,0.07)',color:'#b8923a'
++                              border:'1px solid rgba(184,162,131,0.25)',
++                              background:'rgba(184,162,131,0.07)',color:'#b8a283'
+                             }}>PAY NOW</button>
+                           );
+                         })()}
+@@ -13567,7 +13858,7 @@
+                           cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                           transition:'all 0.15s'
+                         }}
+-                          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.3)';e.currentTarget.style.color='#e29a58';}}
++                          onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(201,170,136,0.3)';e.currentTarget.style.color='#c9aa88';}}
+                           onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.12)';e.currentTarget.style.color='#969696';}}>
+                           <X size={12}/>
+                         </button>
+@@ -13663,7 +13954,7 @@
                <span style={{width:'3px',height:'14px',background:'#8a704d',borderRadius:'2px'}}/>
                <span style={{fontSize:'0.55rem',fontWeight:'900',color:'#b4b4b4',letterSpacing:'1.5px'}}>{role.toUpperCase()}S ({roleStaff.length})</span>
              </div>
@@ -302,7 +1627,47 @@
                {roleStaff.map(m=>{
                  const dayLogs=attendanceLogs.filter(l=>l.date===attendanceDate&&(l.staffId===m._id||l.staffId?.toString()===m._id?.toString())).sort((a,b)=>new Date(a.clockIn)-new Date(b.clockIn));
                  const activeLogs=dayLogs.filter(l=>l.clockIn&&!l.clockOut);
-@@ -13866,6 +13914,16 @@
+@@ -13740,17 +14031,17 @@
+                             }}>
+                               <span style={{fontSize:'0.5rem',color:'#969696',fontWeight:'900',minWidth:'16px',fontFamily:'monospace'}}>#{idx+1}</span>
+                               <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{inTime}</span>
+-                              {log.autoClosed && <span title="No clock-out was recorded. Closed automatically after 12 hours. Correct the hours." style={{fontSize:'0.5rem',color:'#B8923A',fontWeight:'900',letterSpacing:'0.8px',border:'1px solid rgba(184,146,58,0.45)',borderRadius:'5px',padding:'2px 6px'}}>AUTO-CLOSED · REVIEW</span>}
++                              {log.autoClosed && <span title="No clock-out was recorded. Closed automatically after 12 hours. Correct the hours." style={{fontSize:'0.5rem',color:'#b8a283',fontWeight:'900',letterSpacing:'0.8px',border:'1px solid rgba(184,162,131,0.45)',borderRadius:'5px',padding:'2px 6px'}}>AUTO-CLOSED · REVIEW</span>}
+                               <span style={{fontSize:'0.5rem',color:'#969696'}}>→</span>
+                               {outTime?(
+                                 <>
+                                   <span style={{fontSize:'0.62rem',color:'#d3bfa2',fontWeight:'700',fontFamily:'monospace'}}>{outTime}</span>
+                                   <span style={{
+                                     marginLeft:'auto',fontSize:'0.58rem',fontWeight:'900',
+-                                    color:hrs>=9?'#b8923a':'#b4b4b4',
++                                    color:hrs>=9?'#b8a283':'#b4b4b4',
+                                     padding:'1px 6px',borderRadius:'4px',
+-                                    background:hrs>=9?'rgba(184,146,58,0.08)':'transparent',
+-                                    border:hrs>=9?'1px solid rgba(184,146,58,0.2)':'none'
++                                    background:hrs>=9?'rgba(184,162,131,0.08)':'transparent',
++                                    border:hrs>=9?'1px solid rgba(184,162,131,0.2)':'none'
+                                   }}>
+                                     {hrs?`${hrs.toFixed(1)}h`:'—'}{hrs>=9&&<AlertTriangle size={9} style={{display:'inline',verticalAlign:'middle',marginLeft:'3px'}} />}
+                                   </span>
+@@ -13765,7 +14056,7 @@
+                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'4px'}}>
+                             <span style={{fontSize:'0.6rem',color:'#b4b4b4',fontWeight:'700'}}>Total: {totalHoursToday.toFixed(2)}h</span>
+                             {totalHoursToday>=9&&(
+-                              <span style={{fontSize:'0.56rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',background:'rgba(184,146,58,0.08)',color:'#b8923a',border:'1px solid rgba(184,146,58,0.2)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
++                              <span style={{fontSize:'0.56rem',fontWeight:'900',padding:'2px 7px',borderRadius:'4px',background:'rgba(184,162,131,0.08)',color:'#b8a283',border:'1px solid rgba(184,162,131,0.2)',display:'inline-flex',alignItems:'center',gap:'4px'}}>
+                                 <AlertTriangle size={9} /> {(totalHoursToday-8).toFixed(1)}h overtime
+                               </span>
+                             )}
+@@ -13797,7 +14088,7 @@
+ {activeTab === 'inventory' && (() => {
+   /* ── Premium palette: obsidian, brass, ivory. Alerts use brass weight, never red / green / orange. ── */
+   const P = {
+-    gold: '#B8923A', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
++    gold: '#b8a283', brass: '#d3bfa2', ivory: '#ECDCB9', muted: '#969696', faint: '#8A8A8A',
+     line: 'rgba(211,191,162,0.14)', lineSoft: 'rgba(255,255,255,0.05)',
+     panel: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+     well: '#070707',
+@@ -13866,6 +14157,16 @@
          ))}
        </div>
  
@@ -319,7 +1684,7 @@
        {/* ── SMART PURCHASE ASSISTANT ── */}
        {purchaseRecommendations.length > 0 && (
          <div style={{ ...panelStyle, padding: '18px 20px' }}>
-@@ -13967,7 +14025,7 @@
+@@ -13967,7 +14268,7 @@
              )}
            </div>
  
@@ -328,7 +1693,7 @@
            <div style={{ minWidth: 0 }}>
            {/* NAME with autocomplete */}
            <div style={{ position: 'relative', marginBottom: '12px' }}>
-@@ -14394,7 +14452,7 @@
+@@ -14394,7 +14695,7 @@
              {vendors.length === 0 ? (
                <div style={{ textAlign: 'center', padding: '26px', color: P.muted, fontSize: '12px' }}>No vendors yet. Add one above to start linking ingredients.</div>
              ) : (
@@ -337,7 +1702,7 @@
                  {vendors.map(v => {
                    const linkedCount = inventory.filter(i => i.vendorId === v._id).length;
                    const dueCount = (procurementData || []).filter(p => p.vendorId === v._id && p.suggestedReorderQty > 0).length;
-@@ -14440,7 +14498,7 @@
+@@ -14440,7 +14741,7 @@
              </div>
              <span style={pill(true)}>{procurementData.filter(i => i.isLow || (i.daysRemaining !== null && i.daysRemaining <= 7)).length} need reorder</span>
            </div>
@@ -346,7 +1711,97 @@
              {procurementData.slice(0, 12).map(item => {
                const urgent = item.daysRemaining !== null && item.daysRemaining <= 3;
                const soon = item.daysRemaining !== null && item.daysRemaining <= 7;
-@@ -14957,7 +15015,7 @@
+@@ -14632,6 +14933,18 @@
+       })()}
+     </div>
+ 
++    {/* ══════════ RECIPE COVERAGE (Bklit) ══════════ */}
++    {menuItems.length > 0 && (() => {
++      const mapped = recipes.filter(r => r.ingredients?.length > 0).length;
++      const total = menuItems.length;
++      return (
++        <OpVisualGrid mb={0}>
++          <OpGauge title="Recipe coverage" sub="Dishes with ingredients linked" value={(mapped / total) * 100} centerValue={Math.round((mapped / total) * 100)} label="COSTED" hint={`${mapped} of ${total} dishes can be costed and stock-tracked`} />
++          <OpDonut title="Costing status" sub="Which dishes are ready" size={140} centerValue={total} centerLabel="DISHES" rows={[{ label: 'Recipe linked', value: mapped }, { label: 'Needs a recipe', value: Math.max(0, total - mapped) }]} />
++        </OpVisualGrid>
++      );
++    })()}
++
+     {/* ══════════ RECIPE BUILDER ══════════ */}
+     <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(211,191,162,0.18)', borderRadius: '18px', overflow: 'hidden' }}>
+ 
+@@ -14697,7 +15010,7 @@
+             const marginPct = price > 0 ? Math.round((profit / price) * 100) : 0;
+             const fcPct     = price > 0 ? Math.round((totalCost / price) * 100) : 0;
+             const profRow   = profitabilityData.find(p => p._id?.toString() === dish._id);
+-            const marginColor = marginPct >= 55 ? '#d3bfa2' : marginPct >= 35 ? '#c8a84b' : '#e29a58';
++            const marginColor = marginPct >= 55 ? '#d3bfa2' : marginPct >= 35 ? '#d9c8a6' : '#c9aa88';
+ 
+             return (
+               <div style={{ background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', overflow: 'hidden' }}>
+@@ -14727,8 +15040,8 @@
+                   {[
+                     { label: 'Ingredient Cost / Serving', value: `₹${totalCost.toFixed(2)}`, color: totalCost > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)' },
+                     { label: 'Menu Price',                 value: `₹${price}`,               color: '#d3bfa2' },
+-                    { label: 'Profit per Serving',         value: `₹${profit.toFixed(2)}`,   color: profit > 0 ? '#d3bfa2' : '#e29a58' },
+-                    { label: 'Food Cost %',                value: `${fcPct}%`,                color: fcPct > 40 ? '#c8a84b' : 'rgba(255,255,255,0.6)' },
++                    { label: 'Profit per Serving',         value: `₹${profit.toFixed(2)}`,   color: profit > 0 ? '#d3bfa2' : '#c9aa88' },
++                    { label: 'Food Cost %',                value: `${fcPct}%`,                color: fcPct > 40 ? '#d9c8a6' : 'rgba(255,255,255,0.6)' },
+                     { label: 'Gross Margin %',             value: `${marginPct}%`,            color: marginColor },
+                   ].map(({ label, value, color }) => (
+                     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+@@ -14748,8 +15061,8 @@
+                         <div style={{ height: '100%', width: `${Math.min(Math.max(marginPct, 0), 100)}%`, background: marginColor, borderRadius: '3px', transition: 'width 0.45s ease' }} />
+                       </div>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+-                        <span style={{ fontSize: '0.44rem', color: '#e29a58', fontWeight: '700' }}>LOW &lt;35%</span>
+-                        <span style={{ fontSize: '0.44rem', color: '#c8a84b', fontWeight: '700' }}>FAIR 35–55%</span>
++                        <span style={{ fontSize: '0.44rem', color: '#c9aa88', fontWeight: '700' }}>LOW &lt;35%</span>
++                        <span style={{ fontSize: '0.44rem', color: '#d9c8a6', fontWeight: '700' }}>FAIR 35–55%</span>
+                         <span style={{ fontSize: '0.44rem', color: '#d3bfa2', fontWeight: '700' }}>GOOD &gt;55%</span>
+                       </div>
+                     </div>
+@@ -14777,9 +15090,9 @@
+ 
+                 {/* Zero stock warning */}
+                 {recipeIngredientRows.some(row => { const inv = inventory.find(i => i._id === row.inventoryId); return inv && inv.currentStock <= 0; }) && (
+-                  <div style={{ margin: '0 14px 14px', display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '9px 11px', background: 'rgba(200,168,75,0.07)', border: '1px solid rgba(200,168,75,0.2)', borderRadius: '8px' }}>
+-                    <AlertTriangle size={12} color="#c8a84b" strokeWidth={2} style={{ flexShrink: 0, marginTop: '1px' }} />
+-                    <span style={{ fontSize: '0.6rem', color: 'rgba(200,168,75,0.8)', lineHeight: 1.55, fontWeight: '500' }}>
++                  <div style={{ margin: '0 14px 14px', display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '9px 11px', background: 'rgba(217,200,166,0.07)', border: '1px solid rgba(217,200,166,0.2)', borderRadius: '8px' }}>
++                    <AlertTriangle size={12} color="#d9c8a6" strokeWidth={2} style={{ flexShrink: 0, marginTop: '1px' }} />
++                    <span style={{ fontSize: '0.6rem', color: 'rgba(217,200,166,0.8)', lineHeight: 1.55, fontWeight: '500' }}>
+                       Some ingredients are at zero stock. Recipe saves normally — dish only hides during settlement if Auto-Hide is enabled.
+                     </span>
+                   </div>
+@@ -14818,7 +15131,7 @@
+                       <select
+                         value={row.inventoryId}
+                         onChange={e => { const v = e.target.value; setRecipeIngredientRows(rows => rows.map((r, i) => i === idx ? { ...r, inventoryId: v } : r)); }}
+-                        style={{ width: '100%', padding: '9px 11px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: `1px solid ${isZero ? 'rgba(200,168,75,0.35)' : isLow ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '9px', color: isZero ? '#c8a84b' : '#fff', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}>
++                        style={{ width: '100%', padding: '9px 11px', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: `1px solid ${isZero ? 'rgba(217,200,166,0.35)' : isLow ? 'rgba(211,191,162,0.2)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '9px', color: isZero ? '#d9c8a6' : '#fff', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}>
+                         <option value="">— Select —</option>
+                         {inventory.map(i => (
+                           <option key={i._id} value={i._id}>
+@@ -14827,7 +15140,7 @@
+                         ))}
+                       </select>
+                       {inv && (
+-                        <div style={{ marginTop: '3px', paddingLeft: '3px', fontSize: '0.48rem', color: isZero ? '#c8a84b' : 'rgba(255,255,255,0.28)', fontWeight: '600' }}>
++                        <div style={{ marginTop: '3px', paddingLeft: '3px', fontSize: '0.48rem', color: isZero ? '#d9c8a6' : 'rgba(255,255,255,0.28)', fontWeight: '600' }}>
+                           Stock: <span style={{ fontFamily: 'monospace' }}>{inv.currentStock} {inv.unit}</span>
+                           &nbsp;·&nbsp;WAC: <span style={{ fontFamily: 'monospace' }}>₹{(inv.weightedAvgCost || inv.costPrice || 0).toFixed(2)}/{inv.unit}</span>
+                         </div>
+@@ -14859,7 +15172,7 @@
+                     <button type="button"
+                       onClick={() => setRecipeIngredientRows(p => p.filter((_, i) => i !== idx))}
+                       style={{ width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', transition: 'all 0.15s', flexShrink: 0 }}
+-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(226,154,88,0.4)'; e.currentTarget.style.color = '#e29a58'; e.currentTarget.style.background = 'rgba(226,154,88,0.07)'; }}
++                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(201,170,136,0.4)'; e.currentTarget.style.color = '#c9aa88'; e.currentTarget.style.background = 'rgba(201,170,136,0.07)'; }}
+                       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}>
+                       <X size={13} strokeWidth={2.2} />
+                     </button>
+@@ -14957,7 +15270,7 @@
        </div>
  
        {/* Cards grid */}
@@ -355,7 +1810,121 @@
          {menuItems
            .filter(m => m.name.toLowerCase().includes((recipeSearchQuery || '').toLowerCase()))
            .map(dish => {
-@@ -15681,7 +15739,7 @@
+@@ -14979,7 +15292,7 @@
+               ? Math.round(((dishPrice - recipeCost) / dishPrice) * 100)
+               : null;
+ 
+-            const marginColor = margin === null ? null : margin >= 55 ? '#d3bfa2' : margin >= 35 ? '#c8a84b' : '#e29a58';
++            const marginColor = margin === null ? null : margin >= 55 ? '#d3bfa2' : margin >= 35 ? '#d9c8a6' : '#c9aa88';
+             const hasOutIngredient = hasRecipe && recipeForDish.ingredients.some(ing => ing.inventoryId?.currentStock <= 0);
+ 
+             return (
+@@ -15006,7 +15319,7 @@
+                     <span style={{ fontSize: '0.46rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px', background: 'rgba(211,191,162,0.15)', color: '#d3bfa2', border: '1px solid rgba(211,191,162,0.3)', letterSpacing: '0.5px' }}>EDITING</span>
+                   )}
+                   {hasOutIngredient && (
+-                    <AlertTriangle size={11} color="#c8a84b" strokeWidth={2} />
++                    <AlertTriangle size={11} color="#d9c8a6" strokeWidth={2} />
+                   )}
+                   <span style={{ fontSize: '0.46rem', fontWeight: '900', padding: '2px 7px', borderRadius: '4px', background: hasRecipe ? 'rgba(211,191,162,0.08)' : 'rgba(255,255,255,0.03)', color: hasRecipe ? '#d3bfa2' : 'rgba(255,255,255,0.25)', border: `1px solid ${hasRecipe ? 'rgba(211,191,162,0.18)' : 'rgba(255,255,255,0.07)'}`, letterSpacing: '0.5px' }}>
+                     {hasRecipe ? `${recipeForDish.ingredients.length} ING` : 'NOT MAPPED'}
+@@ -15042,7 +15355,7 @@
+                       const invItem = ing.inventoryId;
+                       const isOut   = invItem?.currentStock <= 0;
+                       return (
+-                        <span key={i} style={{ fontSize: '0.52rem', padding: '3px 7px', borderRadius: '4px', background: isOut ? 'rgba(200,168,75,0.08)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isOut ? 'rgba(200,168,75,0.25)' : 'rgba(255,255,255,0.1)'}`, color: isOut ? '#c8a84b' : 'rgba(255,255,255,0.45)', fontWeight: '600' }}>
++                        <span key={i} style={{ fontSize: '0.52rem', padding: '3px 7px', borderRadius: '4px', background: isOut ? 'rgba(217,200,166,0.08)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isOut ? 'rgba(217,200,166,0.25)' : 'rgba(255,255,255,0.1)'}`, color: isOut ? '#d9c8a6' : 'rgba(255,255,255,0.45)', fontWeight: '600' }}>
+                           {invItem?.itemName || 'Unknown'} · {ing.quantityUsed}{invItem?.unit || ''}
+                           {isOut ? ' OUT' : ''}
+                         </span>
+@@ -15076,7 +15389,7 @@
+                       } catch { showNotif('Failed to remove', 'error'); }
+                     }}
+                     style={{ width: '100%', padding: '7px', borderRadius: '8px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', fontSize: '0.56rem', fontWeight: '800', cursor: 'pointer', letterSpacing: '0.5px', transition: 'all 0.15s' }}
+-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(226,154,88,0.35)'; e.currentTarget.style.color = '#e29a58'; e.currentTarget.style.background = 'rgba(226,154,88,0.06)'; }}
++                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(201,170,136,0.35)'; e.currentTarget.style.color = '#c9aa88'; e.currentTarget.style.background = 'rgba(201,170,136,0.06)'; }}
+                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'transparent'; }}>
+                     REMOVE RECIPE
+                   </button>
+@@ -15152,6 +15465,25 @@
+         </div>
+       ))}
+     </div>
++    {reservationEntries.length > 0 && (() => {
++      const r = reservationEntries;
++      const st = (s) => r.filter(x => x.status === s).length;
++      const active = r.filter(x => !['cancelled', 'no-show'].includes(x.status));
++      const sizes = [['1-2', 1, 2], ['3-4', 3, 4], ['5-6', 5, 6], ['7+', 7, Infinity]].map(([label, lo, hi]) => ({ label, value: active.filter(x => (x.partySize || 0) >= lo && (x.partySize || 0) <= hi).length }));
++      const known = st('confirmed') + st('pending') + st('cancelled') + st('no-show');
++      return (
++        <OpVisualGrid mb={0}>
++          <OpDonut title="Booking status" sub="For the selected day" size={140} centerValue={r.length} centerLabel="BOOKINGS"
++            rows={[{ label: 'Confirmed', value: st('confirmed') }, { label: 'Pending', value: st('pending') }, { label: 'Cancelled', value: st('cancelled') }, { label: 'No-show', value: st('no-show') }, { label: 'Seated / other', value: Math.max(0, r.length - known) }]} />
++          <div style={opPanel}>
++            <div style={opTitle}>Party sizes</div>
++            <div style={opSub}>Active bookings by group size</div>
++            <BkColumns height={150} label="Bookings" rows={sizes} valueFormat={(v) => `${v} ${v === 1 ? 'booking' : 'bookings'}`} />
++          </div>
++          <OpGauge title="Confirmed" sub="Share of bookings locked in" value={(st('confirmed') / r.length) * 100} centerValue={Math.round((st('confirmed') / r.length) * 100)} label="CONFIRMED" hint={`${st('pending')} still waiting on you`} />
++        </OpVisualGrid>
++      );
++    })()}
+ 
+     {/* Timeline — hourly slots */}
+     <div style={{background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.07)',borderRadius:'20px',overflow:'hidden'}}>
+@@ -15472,7 +15804,7 @@
+       {l:'Total Items',v:extraItems.length,c:'#d3bfa2',icon:<Package size={14}/>},
+       {l:'Available',v:extraItems.filter(i=>i.isAvailable).length,c:'#ecdcb9',icon:<CheckCircle2 size={14}/>},
+       {l:'Hidden',v:extraItems.filter(i=>!i.isAvailable).length,c:'#b4b4b4',icon:<EyeOff size={14}/>},
+-      {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:extraItems.some(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0)?'#b8923a':'rgba(255,255,255,0.3)',icon:<AlertTriangle size={14}/>},
++      {l:'Low Stock',v:extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length,c:extraItems.some(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0)?'#b8a283':'rgba(255,255,255,0.3)',icon:<AlertTriangle size={14}/>},
+       {l:'Stock Value',v:`₹${extraItems.reduce((a,i)=>a+Math.round(i.currentStock*(i.costPrice||i.price)),0).toLocaleString()}`,c:'#d3bfa2',icon:<WalletCards size={14}/>},
+     ].map((s,i)=>(
+       <div key={i} style={{
+@@ -15494,6 +15826,20 @@
+       </div>
+     ))}
+   </div>
++  {extraItems.length > 0 && (() => {
++    const out = extraItems.filter(i => i.currentStock <= 0).length;
++    const low = extraItems.filter(i => i.currentStock > 0 && i.currentStock <= (i.lowStockThreshold || 5)).length;
++    const avail = extraItems.filter(i => i.isAvailable).length;
++    return (
++      <OpVisualGrid mb={0}>
++        <OpDonut title="Stock status" sub="Retail and extras" size={140} centerValue={extraItems.length} centerLabel="ITEMS"
++          rows={[{ label: 'In stock', value: Math.max(0, extraItems.length - low - out) }, { label: 'Running low', value: low }, { label: 'Out of stock', value: out }]} />
++        <OpBars title="Stock value" sub="Capital tied up, top items" nameWidth={112} valueFormat={(v) => `\u20B9${Math.round(v).toLocaleString('en-IN')}`}
++          rows={extraItems.map(i => ({ label: i.name, value: Math.round((Number(i.currentStock) || 0) * (Number(i.costPrice) || Number(i.price) || 0)) })).sort((a, b) => b.value - a.value)} />
++        <OpGauge title="Available" sub="Items guests can buy" value={(avail / extraItems.length) * 100} centerValue={Math.round((avail / extraItems.length) * 100)} label="ON SALE" hint={`${extraItems.length - avail} hidden`} />
++      </OpVisualGrid>
++    );
++  })()}
+  
+   {/* ── ADD ITEM FORM ── */}
+   <div style={{
+@@ -15612,9 +15958,9 @@
+         style={{
+           display:'flex',alignItems:'center',gap:'6px',
+           padding:'7px 14px',borderRadius:'20px',fontSize:'0.62rem',fontWeight:'900',cursor:'pointer',
+-          border:activeExtraCategory==='__lowstock__'?'none':'1px solid rgba(184,146,58,0.2)',
+-          background:activeExtraCategory==='__lowstock__'?'linear-gradient(135deg,#8a6a22,#b8923a)':'rgba(184,146,58,0.05)',
+-          color:activeExtraCategory==='__lowstock__'?'#0c0c0c':'#b8923a',transition:'all 0.15s'
++          border:activeExtraCategory==='__lowstock__'?'none':'1px solid rgba(184,162,131,0.2)',
++          background:activeExtraCategory==='__lowstock__'?'linear-gradient(135deg,#8f7a5c,#b8a283)':'rgba(184,162,131,0.05)',
++          color:activeExtraCategory==='__lowstock__'?'#0c0c0c':'#b8a283',transition:'all 0.15s'
+         }}>
+         <AlertTriangle size={10}/>
+         LOW STOCK ({extraItems.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length})
+@@ -15673,7 +16019,7 @@
+               {items.filter(i=>i.isAvailable).length} available
+             </span>
+             {items.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length>0&&(
+-              <span style={{fontSize:'0.52rem',color:'#b8923a',fontWeight:'700',padding:'2px 8px',background:'rgba(184,146,58,0.06)',border:'1px solid rgba(184,146,58,0.15)',borderRadius:'6px'}}>
++              <span style={{fontSize:'0.52rem',color:'#b8a283',fontWeight:'700',padding:'2px 8px',background:'rgba(184,162,131,0.06)',border:'1px solid rgba(184,162,131,0.15)',borderRadius:'6px'}}>
+                 {items.filter(i=>i.currentStock<=(i.lowStockThreshold||5)&&i.currentStock>0).length} low
+               </span>
+             )}
+@@ -15681,7 +16027,7 @@
          </div>
   
          {/* Items grid */}
@@ -364,7 +1933,257 @@
            {items.map(item=>{
              const isLow=item.currentStock<=(item.lowStockThreshold||5)&&item.currentStock>0;
              const isOut=item.currentStock<=0;
-@@ -17469,7 +17527,7 @@
+@@ -15689,8 +16035,8 @@
+             return (
+               <div key={item._id} style={{
+                 background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',
+-                border:`1px solid ${isOut?'rgba(226,154,88,0.2)':isLow?'rgba(184,146,58,0.2)':'rgba(211,191,162,0.12)'}`,
+-                borderTop:`2px solid ${isOut?'rgba(226,154,88,0.4)':isLow?'rgba(184,146,58,0.35)':item.isAvailable?'rgba(211,191,162,0.12)':'#121212'}`,
++                border:`1px solid ${isOut?'rgba(201,170,136,0.2)':isLow?'rgba(184,162,131,0.2)':'rgba(211,191,162,0.12)'}`,
++                borderTop:`2px solid ${isOut?'rgba(201,170,136,0.4)':isLow?'rgba(184,162,131,0.35)':item.isAvailable?'rgba(211,191,162,0.12)':'#121212'}`,
+                 borderRadius:'14px',padding:'18px',
+                 opacity:item.isAvailable?1:0.55,
+                 position:'relative',
+@@ -15710,10 +16056,10 @@
+                     position:'absolute',top:'10px',left:'10px',
+                     display:'flex',alignItems:'center',gap:'4px',
+                     padding:'2px 8px',borderRadius:'4px',
+-                    background:isOut?'rgba(226,154,88,0.12)':'rgba(184,146,58,0.1)',
+-                    border:`1px solid ${isOut?'rgba(226,154,88,0.3)':'rgba(184,146,58,0.25)'}`,
++                    background:isOut?'rgba(201,170,136,0.12)':'rgba(184,162,131,0.1)',
++                    border:`1px solid ${isOut?'rgba(201,170,136,0.3)':'rgba(184,162,131,0.25)'}`,
+                     fontSize:'0.48rem',fontWeight:'900',
+-                    color:isOut?'#e29a58':'#b8923a'
++                    color:isOut?'#c9aa88':'#b8a283'
+                   }}>
+                     <AlertTriangle size={8}/>{isOut?'OUT OF STOCK':'LOW STOCK'}
+                   </div>
+@@ -15741,10 +16087,10 @@
+                   {margin!==null&&(
+                     <span style={{
+                       fontSize:'0.58rem',fontWeight:'900',
+-                      color:margin>=40?'#ecdcb9':margin>=20?'#8a704d':'#e29a58',
++                      color:margin>=40?'#ecdcb9':margin>=20?'#8a704d':'#c9aa88',
+                       padding:'2px 7px',borderRadius:'4px',
+-                      background:margin>=40?'rgba(236,220,185,0.06)':margin>=20?'rgba(138,112,77,0.06)':'rgba(226,154,88,0.06)',
+-                      border:`1px solid ${margin>=40?'rgba(236,220,185,0.14)':margin>=20?'rgba(138,112,77,0.14)':'rgba(226,154,88,0.14)'}`
++                      background:margin>=40?'rgba(236,220,185,0.06)':margin>=20?'rgba(138,112,77,0.06)':'rgba(201,170,136,0.06)',
++                      border:`1px solid ${margin>=40?'rgba(236,220,185,0.14)':margin>=20?'rgba(138,112,77,0.14)':'rgba(201,170,136,0.14)'}`
+                     }}>{margin}% margin</span>
+                   )}
+                 </div>
+@@ -15753,7 +16099,7 @@
+                 <div style={{marginBottom:'14px'}}>
+                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'5px'}}>
+                     <span style={{fontSize:'0.55rem',color:'#969696',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.5px'}}>Stock</span>
+-                    <span style={{fontSize:'0.7rem',fontWeight:'900',color:isOut?'#e29a58':isLow?'#b8923a':'#d3bfa2',fontFamily:'monospace'}}>
++                    <span style={{fontSize:'0.7rem',fontWeight:'900',color:isOut?'#c9aa88':isLow?'#b8a283':'#d3bfa2',fontFamily:'monospace'}}>
+                       {item.currentStock} <span style={{fontSize:'0.55rem',color:'#a6a6a6'}}>{item.unit}s</span>
+                     </span>
+                   </div>
+@@ -15761,7 +16107,7 @@
+                     <div style={{
+                       height:'100%',borderRadius:'4px',transition:'width 0.3s',
+                       width:`${Math.min(100,Math.max(0,(item.currentStock/(item.lowStockThreshold||5)*100)))}%`,
+-                      background:isOut?'#e29a58':isLow?'linear-gradient(90deg,#8a6a22,#b8923a)':'linear-gradient(90deg,#8a704d,#d3bfa2)'
++                      background:isOut?'#c9aa88':isLow?'linear-gradient(90deg,#8f7a5c,#b8a283)':'linear-gradient(90deg,#8a704d,#d3bfa2)'
+                     }}/>
+                   </div>
+                   {item.lowStockThreshold>0&&(
+@@ -15812,7 +16158,7 @@
+                       subtitle:'This permanently removes the item from your catalog.',
+                       onConfirm:async()=>{try{await axios.delete(`${BASE_URL}/extra-items/item/${item._id}?tenantId=${encodeURIComponent(tenantId)}`);}catch(err){showNotif(err?.response?.data?.error||'Could not remove item','error');return;}fetchExtraItems();showNotif(`${item.name} removed`);}
+                     })} style={{width:'34px',height:'34px',background:'transparent',border:'1px solid rgba(211,191,162,0.16)',color:'#969696',borderRadius:'7px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}
+-                      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(226,154,88,0.25)';e.currentTarget.style.color='#e29a58';}}
++                      onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(201,170,136,0.25)';e.currentTarget.style.color='#c9aa88';}}
+                       onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(211,191,162,0.16)';e.currentTarget.style.color='#969696';}}><X size={12} /></button>
+                   </div>
+                 </div>
+@@ -16309,26 +16655,26 @@
+         onClick={() => setNewDish(prev => ({...prev, isVeg: true}))}
+         style={{
+           padding: '14px', borderRadius: '10px', cursor: 'pointer',
+-          border: newDish.isVeg === true ? '1px solid rgba(168,139,79,0.5)' : '1px solid rgba(211,191,162,0.16)',
+-          background: newDish.isVeg === true ? 'rgba(168,139,79,0.08)' : 'transparent',
++          border: newDish.isVeg === true ? '1px solid rgba(168,149,122,0.5)' : '1px solid rgba(211,191,162,0.16)',
++          background: newDish.isVeg === true ? 'rgba(168,149,122,0.08)' : 'transparent',
+           display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.15s'
+         }}
+       >
+         {/* Veg symbol */}
+         <div style={{
+-          width: '22px', height: '22px', border: `2px solid #a88b4f`,
++          width: '22px', height: '22px', border: `2px solid #a8957a`,
+           borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+-          flexShrink: 0, background: newDish.isVeg === true ? 'rgba(168,139,79,0.15)' : 'transparent'
++          flexShrink: 0, background: newDish.isVeg === true ? 'rgba(168,149,122,0.15)' : 'transparent'
+         }}>
+-          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#a88b4f' }} />
++          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#a8957a' }} />
+         </div>
+         <div style={{textAlign:'left'}}>
+           <div style={{fontSize:'0.75rem',fontWeight:'900',color: newDish.isVeg === true ? '#fff' : '#b4b4b4'}}>VEGETARIAN</div>
+           <div style={{fontSize:'0.58rem',color:'#a6a6a6',marginTop:'2px'}}>No meat or eggs</div>
+         </div>
+         {newDish.isVeg === true && (
+-          <div style={{marginLeft:'auto',width:'16px',height:'16px',borderRadius:'50%',background:'rgba(168,139,79,0.2)',border:'1px solid #a88b4f',display:'flex',alignItems:'center',justifyContent:'center'}}>
+-            <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#a88b4f'}}/>
++          <div style={{marginLeft:'auto',width:'16px',height:'16px',borderRadius:'50%',background:'rgba(168,149,122,0.2)',border:'1px solid #a8957a',display:'flex',alignItems:'center',justifyContent:'center'}}>
++            <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#a8957a'}}/>
+           </div>
+         )}
+       </button>
+@@ -16504,7 +16850,7 @@
+         {pendingDeleteStaff && (
+           <div style={styles.modalBackdrop}>
+             <motion.div initial={false} animate={{scale:1,opacity:1}} style={styles.confirmBox}>
+-              <div style={{display:'flex',justifyContent:'center',color:'#e29a58',marginBottom:'15px'}}><AlertTriangle size={32}/></div>
++              <div style={{display:'flex',justifyContent:'center',color:'#c9aa88',marginBottom:'15px'}}><AlertTriangle size={32}/></div>
+               <h3 style={{color:'#fff',margin:'0 0 10px',fontSize:'1.1rem',fontWeight:'900'}}>PERMANENT WIPEOUT</h3>
+               <p style={{color:'#c2c2c2',fontSize:'0.85rem',marginBottom:'25px',lineHeight:'1.5'}}>
+                 Delete <b style={{color:'#fff'}}>{pendingDeleteStaff.name.split(' (')[0]}</b> and all their records?
+@@ -16526,7 +16872,7 @@
+ disabled={!!wipingStaffId}
+ style={{
+   ...styles.confirmBtn,
+-  background: wipingStaffId ? '#555' : '#e29a58',
++  background: wipingStaffId ? '#555' : '#c9aa88',
+   color:'#fff',
+   cursor: wipingStaffId ? 'not-allowed' : 'pointer',
+   opacity: wipingStaffId ? 0.6 : 1
+@@ -16835,7 +17181,7 @@
+   {payPrompt && (
+     <div style={styles.modalBackdrop}>
+       <motion.div initial={false} animate={{scale:1,opacity:1}} style={{...styles.confirmBox, width:'400px', textAlign:'left'}}>
+-        <div style={{fontSize:'0.55rem',color:'#C8A96E',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>PAYROLL</div>
++        <div style={{fontSize:'0.55rem',color:'#d9c8a6',fontWeight:'900',letterSpacing:'2px',marginBottom:'6px'}}>PAYROLL</div>
+         <div style={{fontFamily:"'Playfair Display', serif",fontSize:'1.05rem',color:'#F0EDE8',marginBottom:'6px'}}>Pay {payPrompt.name}</div>
+         <div style={{fontSize:'0.7rem',color:'#a6a6a6',marginBottom:'18px',lineHeight:1.5}}>
+           {payPrompt.workDays} days worked in {payPrompt.monthLabel}. The amount is calculated by the server from the base salary and attendance.
+@@ -16844,10 +17190,10 @@
+         <label style={{fontSize:'0.55rem',color:'#b4b4b4',fontWeight:'900',letterSpacing:'1px',display:'block',marginBottom:'6px'}}>OPERATOR PASSWORD</label>
+         <input type="password" autoFocus value={payPassword} onChange={e => setPayPassword(e.target.value)}
+           onKeyDown={e => { if (e.key === 'Enter' && payPassword && !payBusy) document.getElementById('pay-confirm-btn')?.click(); }}
+-          style={{width:'100%',boxSizing:'border-box',padding:'11px 12px',background:'#0b0c0e',border:'1px solid rgba(200,169,110,0.24)',borderRadius:'10px',color:'#F0EDE8',fontSize:'0.85rem',outline:'none'}} />
++          style={{width:'100%',boxSizing:'border-box',padding:'11px 12px',background:'#0b0c0e',border:'1px solid rgba(217,200,166,0.24)',borderRadius:'10px',color:'#F0EDE8',fontSize:'0.85rem',outline:'none'}} />
+         <div style={{display:'flex',gap:'10px',marginTop:'18px'}}>
+           <button type="button" onClick={() => { setPayPrompt(null); setPayPassword(''); }}
+-            style={{flex:1,padding:'11px',borderRadius:'10px',background:'transparent',border:'1px solid rgba(200,169,110,0.2)',color:'#b4b4b4',cursor:'pointer',fontWeight:'900',fontSize:'0.7rem'}}>CANCEL</button>
++            style={{flex:1,padding:'11px',borderRadius:'10px',background:'transparent',border:'1px solid rgba(217,200,166,0.2)',color:'#b4b4b4',cursor:'pointer',fontWeight:'900',fontSize:'0.7rem'}}>CANCEL</button>
+           <button id="pay-confirm-btn" type="button" disabled={!payPassword || payBusy}
+             onClick={async () => {
+               if (!payPassword || payBusy) return;
+@@ -16864,7 +17210,7 @@
+                 if (err.response?.status !== 403) { setPayPrompt(null); setPayPassword(''); }
+               } finally { setPayBusy(false); }
+             }}
+-            style={{flex:2,padding:'11px',borderRadius:'10px',border:'none',background:'linear-gradient(135deg,#d3bfa2,#C8A96E)',color:'#0c0c0c',cursor: (!payPassword || payBusy) ? 'not-allowed' : 'pointer',opacity: (!payPassword || payBusy) ? 0.6 : 1,fontWeight:'900',fontSize:'0.7rem',letterSpacing:'0.5px'}}>
++            style={{flex:2,padding:'11px',borderRadius:'10px',border:'none',background:'linear-gradient(135deg,#d3bfa2,#d9c8a6)',color:'#0c0c0c',cursor: (!payPassword || payBusy) ? 'not-allowed' : 'pointer',opacity: (!payPassword || payBusy) ? 0.6 : 1,fontWeight:'900',fontSize:'0.7rem',letterSpacing:'0.5px'}}>
+             {payBusy ? 'PAYING...' : 'CONFIRM PAYMENT'}
+           </button>
+         </div>
+@@ -17018,9 +17364,9 @@
+         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+         style={{
+           width: '520px', maxWidth: '95vw', maxHeight: 'calc(90vh - 48px)', overflowY: 'auto',
+-          background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(184,146,58,0.3)',
++          background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909', border: '1px solid rgba(184,162,131,0.3)',
+           borderRadius: '18px', margin: 'auto',
+-          boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(184,146,58,0.1)'
++          boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(184,162,131,0.1)'
+         }}
+       >
+         {/* Modal header */}
+@@ -17033,8 +17379,8 @@
+         }}>
+           <div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+-              <ShoppingCart size={16} color="#b8923a"/>
+-              <span style={{ fontSize: '0.58rem', color: '#b8923a', fontWeight: '900', letterSpacing: '2px' }}>
++              <ShoppingCart size={16} color="#b8a283"/>
++              <span style={{ fontSize: '0.58rem', color: '#b8a283', fontWeight: '900', letterSpacing: '2px' }}>
+                 PURCHASE ORDER GENERATOR
+               </span>
+             </div>
+@@ -17044,7 +17390,7 @@
+             <div style={{ fontSize: '0.65rem', color: '#b4b4b4', marginTop: '2px' }}>
+               Current stock: {purchaseOrderModal.item?.currentStock} {purchaseOrderModal.item?.unit}
+               {purchaseOrderModal.daysLeft !== null && purchaseOrderModal.daysLeft !== undefined && (
+-                <span style={{ color: '#b8923a', marginLeft: '8px' }}>
++                <span style={{ color: '#b8a283', marginLeft: '8px' }}>
+                   · {purchaseOrderModal.daysLeft}d remaining
+                 </span>
+               )}
+@@ -17085,7 +17431,7 @@
+                 textTransform: 'uppercase', display: 'block', marginBottom: '6px'
+               }}>
+                 ORDER QUANTITY ({purchaseOrderModal.item?.unit})
+-                <span style={{ color: '#b8923a', marginLeft: '6px', fontWeight: '700' }}>
++                <span style={{ color: '#b8a283', marginLeft: '6px', fontWeight: '700' }}>
+                   — Suggested based on 30-day usage
+                 </span>
+               </label>
+@@ -17096,7 +17442,7 @@
+                   onChange={e => setPurchaseOrderModal(p => ({ ...p, customQty: e.target.value, copySuccess: false }))}
+                   style={{
+                     flex: 1, padding: '10px 14px',
+-                    background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border: '1px solid rgba(184,146,58,0.35)',
++                    background: 'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b', border: '1px solid rgba(184,162,131,0.35)',
+                     color: '#fff', borderRadius: '9px', fontSize: '0.9rem',
+                     fontWeight: '900', outline: 'none', fontFamily: 'monospace'
+                   }}
+@@ -17113,9 +17459,9 @@
+                       onClick={() => setPurchaseOrderModal(p => ({ ...p, customQty: String(qty), copySuccess: false }))}
+                       style={{
+                         padding: '4px 10px', borderRadius: '5px', cursor: 'pointer',
+-                        background: purchaseOrderModal.customQty === String(qty) ? 'rgba(184,146,58,0.2)' : '#121212',
+-                        border: `1px solid ${purchaseOrderModal.customQty === String(qty) ? 'rgba(184,146,58,0.5)' : 'rgba(211,191,162,0.16)'}`,
+-                        color: purchaseOrderModal.customQty === String(qty) ? '#b8923a' : '#b4b4b4',
++                        background: purchaseOrderModal.customQty === String(qty) ? 'rgba(184,162,131,0.2)' : '#121212',
++                        border: `1px solid ${purchaseOrderModal.customQty === String(qty) ? 'rgba(184,162,131,0.5)' : 'rgba(211,191,162,0.16)'}`,
++                        color: purchaseOrderModal.customQty === String(qty) ? '#b8a283' : '#b4b4b4',
+                         fontSize: '0.62rem', fontWeight: '800', fontFamily: 'monospace'
+                       }}
+                     >
+@@ -17156,7 +17502,7 @@
+ 
+           {/* ── PURCHASE ORDER PREVIEW ── */}
+           <div style={{
+-            background: '#070707', border: '1px solid rgba(184,146,58,0.2)',
++            background: '#070707', border: '1px solid rgba(184,162,131,0.2)',
+             borderRadius: '12px', padding: '18px', marginBottom: '16px',
+             fontFamily: 'monospace'
+           }}>
+@@ -17201,7 +17547,7 @@
+ 
+                 return lines.map((line, i) => (
+                   <div key={i} style={{
+-                    color: line.startsWith('PURCHASE ORDER') ? '#b8923a'
++                    color: line.startsWith('PURCHASE ORDER') ? '#b8a283'
+                       : line.startsWith('─') ? '#8a8a8a'
+                       : line.startsWith('Item:') || line.startsWith('Quantity:') || line.startsWith('Total:') ? '#fff'
+                       : '#a89f90'
+@@ -17268,8 +17614,8 @@
+               style={{
+                 flex: 2, padding: '13px', borderRadius: '10px', border: 'none',
+                 background: purchaseOrderModal.copySuccess
+-                  ? 'linear-gradient(135deg,#a88b4f,#ecdcb9)'
+-                  : 'linear-gradient(135deg,#8a704d,#b8923a)',
++                  ? 'linear-gradient(135deg,#a8957a,#ecdcb9)'
++                  : 'linear-gradient(135deg,#8a704d,#b8a283)',
+                 color: '#fff', fontWeight: '900', fontSize: '0.78rem',
+                 cursor: 'pointer', letterSpacing: '0.5px',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+@@ -17363,7 +17709,7 @@
+ .p-dash button{transition:transform .18s cubic-bezier(.22,1,.36,1),filter .18s,box-shadow .18s,border-color .18s,background .18s;}
+ .p-dash button:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.08);}
+ .p-dash button:not(:disabled):active{transform:translateY(0) scale(.98);}
+-.p-dash button[style*="linear-gradient(135deg, rgb(211, 191, 162)"]:not(:disabled){background-size:220% 100%;background-image:linear-gradient(110deg,#b99f78 0%,#e6d6b8 38%,#fff3d6 50%,#e6d6b8 62%,#b99f78 100%)!important;animation:pxSheen 6s linear infinite;}
++.p-dash button[style*="linear-gradient(135deg, rgb(211, 191, 162)"]:not(:disabled){background-size:220% 100%;background-image:linear-gradient(110deg,#b99f78 0%,#e6d6b8 38%,#f3ebdc 50%,#e6d6b8 62%,#b99f78 100%)!important;animation:pxSheen 6s linear infinite;}
+ .p-dash .p-nav-btn[style*="rgba(211, 191, 162, 0.24)"]{animation:pxGlowPulse 4.5s ease-in-out infinite;}
+ .p-dash ::selection{background:rgba(211,191,162,.35);}
+ .p-dash table tr{transition:background .15s;}
+@@ -17469,7 +17815,7 @@
    .p-service-divider{display:none!important;}
   
    /* Queue grid */
@@ -373,7 +2192,7 @@
   
    /* 2-col grids */
    div[style*="gridTemplateColumns:'1fr 1fr'"],
-@@ -17679,7 +17737,7 @@
+@@ -17679,7 +18025,7 @@
    div[style*="repeat(auto-fit,minmax(200px,1fr))"]{
      grid-template-columns:1fr 1fr!important;
    }
@@ -382,7 +2201,7 @@
      grid-template-columns:1fr!important;
    }
    div[style*="overflowX:'auto'"],
-@@ -17689,7 +17747,7 @@
+@@ -17689,7 +18035,7 @@
    table{min-width:560px!important;}
   
    /* Attendance grid */
@@ -391,7 +2210,7 @@
      grid-template-columns:1fr!important;
    }
   
-@@ -17700,7 +17758,7 @@
+@@ -17700,7 +18046,7 @@
    }
   
    /* ── EXTRAS ── */
@@ -400,7 +2219,7 @@
      grid-template-columns:1fr!important;
    }
   
-@@ -17760,7 +17818,7 @@
+@@ -17760,7 +18106,7 @@
    }
   
    /* Category rankings */
@@ -409,22 +2228,52 @@
      grid-template-columns:1fr!important;
    }
   
-@@ -17786,6 +17844,14 @@
+@@ -17786,6 +18132,44 @@
    }
  }
   
 +/* ── Premium pass: robust phone layout. React serialises inline grids with a space after commas, so these match what is really in the DOM. ── */
 +@media (max-width:639px){
-+  main div[style*="grid-template-columns: repeat(6,"],
-+  main div[style*="grid-template-columns: repeat(5,"],
-+  main div[style*="grid-template-columns: repeat(4,"],
-+  main div[style*="grid-template-columns: repeat(3,"]{grid-template-columns:repeat(auto-fit,minmax(min(100%,128px),1fr))!important;gap:8px!important;}
++  main div[style*="grid-template-columns: repeat(6,"]:not([style*="gap: 50px"] *),
++  main div[style*="grid-template-columns: repeat(5,"]:not([style*="gap: 50px"] *),
++  main div[style*="grid-template-columns: repeat(4,"]:not([style*="gap: 50px"] *),
++  main div[style*="grid-template-columns: repeat(3,"]:not([style*="gap: 50px"] *){grid-template-columns:repeat(auto-fit,minmax(min(100%,128px),1fr))!important;gap:8px!important;}
 +  main svg,main img,main canvas{max-width:100%;}
 +}
++/* ── Premium pass: wide table-style rows scroll sideways instead of being squashed or clipped on phones (templates generated from the source) ── */
++@media (max-width:760px){
++  /* live service strip: label on its own line, tiles two per row */
++  main div[style*="grid-template-columns: 84px repeat(4, minmax(0, 1fr))"]{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
++  main div[style*="grid-template-columns: 84px repeat(4, minmax(0, 1fr))"] > div:first-child{grid-column:1/-1;}
++  main div[style*="grid-template-columns: 1.3fr 0.6fr 1fr 1fr 1fr 1fr 1fr"]{min-width:620px;}
++  main :has(> div[style*="grid-template-columns: 1.3fr 0.6fr 1fr 1fr 1fr 1fr 1fr"]){overflow-x:auto;-webkit-overflow-scrolling:touch;}
++  main div[style*="grid-template-columns: 1.4fr 0.9fr 0.9fr 1fr 1.1fr"]{min-width:620px;}
++  main :has(> div[style*="grid-template-columns: 1.4fr 0.9fr 0.9fr 1fr 1.1fr"]){overflow-x:auto;-webkit-overflow-scrolling:touch;}
++  main div[style*="grid-template-columns: 1.8fr 0.7fr 0.6fr 1fr 1fr"]{min-width:620px;}
++  main :has(> div[style*="grid-template-columns: 1.8fr 0.7fr 0.6fr 1fr 1fr"]){overflow-x:auto;-webkit-overflow-scrolling:touch;}
++  main div[style*="grid-template-columns: 1.6fr 1fr 0.8fr 0.8fr 0.9fr"]{min-width:620px;}
++  main :has(> div[style*="grid-template-columns: 1.6fr 1fr 0.8fr 0.8fr 0.9fr"]){overflow-x:auto;-webkit-overflow-scrolling:touch;}
++  main div[style*="grid-template-columns: 1.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr"]{min-width:620px;}
++  main :has(> div[style*="grid-template-columns: 1.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr"]){overflow-x:auto;-webkit-overflow-scrolling:touch;}
++  main div[style*="grid-template-columns: 1.3fr 1fr 1fr 0.9fr 0.7fr auto"]{min-width:620px;}
++  main :has(> div[style*="grid-template-columns: 1.3fr 1fr 1fr 0.9fr 0.7fr auto"]){overflow-x:auto;-webkit-overflow-scrolling:touch;}
++}
++/* Marketing: compose panel + list stack on narrower screens (was a fixed 390px column) */
++@media (max-width:980px){
++  .op-split{grid-template-columns:minmax(0,1fr)!important;}
++  .op-split > div{position:static!important;top:auto!important;}
++}
++/* ── Premium pass: motion + focus ── */
++@media (prefers-reduced-motion:no-preference){
++  section.custom-scroll > *:not([style*="gap: 50px"]) { animation: opRise .42s cubic-bezier(.22,1,.36,1) both; }
++}
++@keyframes opRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
++main button:focus-visible, main [role="button"]:focus-visible, main a:focus-visible, main input:focus-visible, main select:focus-visible, main textarea:focus-visible { outline: 2px solid #d3bfa2; outline-offset: 2px; }
++main button, main [role="button"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
  /* ══════════════════════════════════════════════
     EXTRA SMALL  ≤ 380px
  ══════════════════════════════════════════════ */
-@@ -17861,7 +17927,7 @@
+@@ -17861,13 +18245,13 @@
    ghostBtn:{flex:1,padding:'12px',background:'transparent',border:'1px solid rgba(211,191,162,0.16)',color:'#a6a6a6',borderRadius:'10px',fontSize:'0.7rem',fontWeight:'bold',cursor:'pointer'},
    toggleShowBtn:{flex:1,padding:'12px',background:'#d3bfa2',color:'#0c0c0c',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
    toggleHideBtn:{flex:1,padding:'12px',background:'#171717',color:'#969696',border:'none',borderRadius:'10px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
@@ -433,7 +2282,15 @@
    gridLabel:{color:'#8a8a8a',fontSize:'0.7rem',fontWeight:'900',marginBottom:'20px',letterSpacing:'1.5px'},
    specialModeRow:{display:'flex',gap:'15px',marginBottom:'30px'},
    specBtn:{flex:1,padding:'18px',background:'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)), #090909',border:'1px solid rgba(211,191,162,0.16)',color:'#969696',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
-@@ -17901,9 +17967,14 @@
+   activeSpecBtn:{flex:1,padding:'18px',background:'#d3bfa2',border:'none',color:'#0c0c0c',borderRadius:'15px',fontWeight:'900',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',fontSize:'0.8rem',cursor:'pointer'},
+-  waiterRequestRow:{display:'flex',alignItems:'center',gap:'20px',background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b',padding:'15px 20px',borderRadius:'15px',border:'1px solid #d4af37',marginBottom:'12px'},
+-  goldCircle:{width:'40px',height:'40px',background:'#d4af3715',borderRadius:'10px',border:'1px solid #d4af37',display:'flex',alignItems:'center',justifyContent:'center',color:'#d4af37'},
++  waiterRequestRow:{display:'flex',alignItems:'center',gap:'20px',background:'linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.016)), #0b0b0b',padding:'15px 20px',borderRadius:'15px',border:'1px solid #d9c8a6',marginBottom:'12px'},
++  goldCircle:{width:'40px',height:'40px',background:'#d4af3715',borderRadius:'10px',border:'1px solid #d9c8a6',display:'flex',alignItems:'center',justifyContent:'center',color:'#d9c8a6'},
+   doneBtn:{background:'#d3bfa2',color:'#0c0c0c',border:'none',padding:'8px 15px',borderRadius:'8px',fontWeight:'900',fontSize:'0.7rem',cursor:'pointer'},
+   biCard:{background:'linear-gradient(165deg, #101010 0%, #0d0d0d 100%)',padding:'26px',borderRadius:'20px',border:'1px solid rgba(211,191,162,0.09)',boxShadow:'0 12px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.02)'},
+   biTitle:{fontSize:'0.75rem',fontWeight:'900',color:'#c2c2c2',marginBottom:'20px',display:'flex',alignItems:'center',gap:'10px',letterSpacing:'1.2px',textTransform:'uppercase'},
+@@ -17901,9 +18285,14 @@
    let tid = '';
    try { tid = localStorage.getItem('pratyeksha_token') ? (localStorage.getItem('active_tenant') || '') : ''; } catch { /* storage unavailable */ }
    return (
@@ -451,3 +2308,92 @@
    );
  };
  
+--- a/src/BillRequestsPanel.jsx
++++ b/src/BillRequestsPanel.jsx
+@@ -91,7 +91,7 @@
+         {err && <div role="alert" style={{ margin: '10px 0', color: '#e0907a', fontSize: 12.5, display: 'flex', gap: 8 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {err}</div>}
+         {draft && b && (
+           <>
+-            {preview.pendingOrders > 0 && <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(224,180,80,0.1)', border: '1px solid rgba(224,180,80,0.4)', color: '#e0c48f', fontSize: 12 }}>⚠ {preview.pendingOrders} order(s) are still being prepared and are NOT on this bill. Wait until they are served, or send now and revise later.</div>}
++            {preview.pendingOrders > 0 && <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(217,200,166,0.1)', border: '1px solid rgba(217,200,166,0.4)', color: '#d9c8a6', fontSize: 12 }}>⚠ {preview.pendingOrders} order(s) are still being prepared and are NOT on this bill. Wait until they are served, or send now and revise later.</div>}
+             <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '8px 12px', margin: '12px 0' }}>
+               {b.lines.length === 0 && <div style={{ padding: 10, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>No Ready or Served orders on this table yet.</div>}
+               {b.lines.map((l, i) => <div key={i} style={row}><span><b>{l.quantity}×</b> {l.name}{l.portion && l.portion !== 'Single' ? ` (${l.portion})` : ''}{l.comboName ? <i style={{ color: GOLD2 }}> · combo</i> : null}</span><span>{money(l.subtotal)}</span></div>)}
+@@ -172,7 +172,7 @@
+                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderBottom: `1px solid rgba(211,191,162,0.12)` }}>
+                   <div style={{ flex: 1, minWidth: 0 }}>
+                     <div style={{ fontSize: 14, fontWeight: 800, color: '#f7f3eb' }}>Table {r.tableNumber}{r.guestName ? <span style={{ fontWeight: 500, color: 'rgba(255,255,255,0.6)' }}> · {r.guestName}</span> : null}</div>
+-                    <div style={{ fontSize: 11, color: r.status === 'requested' ? '#e0c48f' : '#7fc79a', display: 'flex', alignItems: 'center', gap: 5 }}>
++                    <div style={{ fontSize: 11, color: r.status === 'requested' ? '#d9c8a6' : '#7fc79a', display: 'flex', alignItems: 'center', gap: 5 }}>
+                       {r.status === 'requested' ? `Waiting ${ago(r.requestedAt)}` : <><CheckCircle2 size={12} /> Sent ₹{money(r.bill?.total)} · awaiting payment</>}
+                     </div>
+                   </div>
+--- a/src/ComboBuilder.jsx
++++ b/src/ComboBuilder.jsx
+@@ -81,7 +81,7 @@
+           <div style={{ flex: '1 1 160px' }}><div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: 1.5, color: GOLD2, marginBottom: 6 }}>COMBO PRICE (₹)</div><input style={inp} type="number" min="1" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
+           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.7)', paddingBottom: 10 }}>Dishes normally cost <b style={{ color: GOLD }}>₹{money(normal)}</b>{Number.isFinite(num) && num > 0 && num < normal ? <> · guests save <b style={{ color: '#7fc79a' }}>₹{money(normal - num)}</b></> : null}</div>
+         </div>
+-        {tooHigh && <div style={{ fontSize: 12, color: '#e0c48f' }}>The combo price must be lower than the dishes’ normal total (₹{money(normal)}).</div>}
++        {tooHigh && <div style={{ fontSize: 12, color: '#d9c8a6' }}>The combo price must be lower than the dishes’ normal total (₹{money(normal)}).</div>}
+         {err && <div role="alert" style={{ marginTop: 10, color: '#e0907a', fontSize: 12.5, display: 'flex', gap: 8 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {err}</div>}
+         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+           <button type="button" style={{ ...btn(true, busy || !lines.length || tooHigh), flex: 1 }} disabled={busy || !lines.length || tooHigh} onClick={save}>{busy ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null} {combo ? 'Save changes' : 'Create combo'}</button>
+@@ -125,7 +125,7 @@
+               <span style={{ fontSize: 12, textDecoration: 'line-through', color: 'rgba(255,255,255,0.4)' }}>₹{money(c.originalPrice)}</span>
+               {c.savings > 0 && <span style={{ fontSize: 11, color: '#7fc79a' }}>save ₹{money(c.savings)}</span>}
+             </div>
+-            {!c.available && c.isActive && <div style={{ marginTop: 8, fontSize: 11.5, color: '#e0c48f', display: 'flex', gap: 6 }}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> Hidden from guests: a dish in this combo is unavailable.</div>}
++            {!c.available && c.isActive && <div style={{ marginTop: 8, fontSize: 11.5, color: '#d9c8a6', display: 'flex', gap: 6 }}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> Hidden from guests: a dish in this combo is unavailable.</div>}
+             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+               <button type="button" style={{ ...btn(false), flex: 1 }} onClick={() => setEdit(c)}><Pencil size={13} /> Edit</button>
+               <button type="button" style={{ ...btn(false), color: '#e0907a' }} onClick={() => del(c)} aria-label={`Delete ${c.name}`}><Trash2 size={13} /></button>
+--- a/src/SubscriptionGate.jsx
++++ b/src/SubscriptionGate.jsx
+@@ -15,7 +15,7 @@
+ 
+ const GOLD = '#d3bfa2';
+ const IVORY = '#f7f3eb';
+-const COPPER = '#e29a58';
++const COPPER = '#c9aa88';
+ const EVENT = 'px-subscription-expired';
+ 
+ export function installSubscriptionInterceptor() {
+@@ -57,7 +57,7 @@
+ 
+ const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } };
+ 
+-const shell = { minHeight: '100vh', width: '100%', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box', background: 'radial-gradient(900px 520px at 50% -10%, rgba(211,191,162,0.12), transparent 60%), radial-gradient(700px 500px at 90% 110%, rgba(226,154,88,0.07), transparent 60%), #060606', color: IVORY, fontFamily: 'Poppins, Inter, system-ui, sans-serif', textAlign: 'center' };
++const shell = { minHeight: '100vh', width: '100%', display: 'grid', placeItems: 'center', padding: 20, boxSizing: 'border-box', background: 'radial-gradient(900px 520px at 50% -10%, rgba(211,191,162,0.12), transparent 60%), radial-gradient(700px 500px at 90% 110%, rgba(201,170,136,0.07), transparent 60%), #060606', color: IVORY, fontFamily: 'Poppins, Inter, system-ui, sans-serif', textAlign: 'center' };
+ const linkRow = { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, border: '1px solid rgba(211,191,162,0.16)', background: 'linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))', color: IVORY, textDecoration: 'none', fontSize: 13.5, fontWeight: 600, textAlign: 'left' };
+ const ico = { width: 36, height: 36, borderRadius: 11, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'rgba(211,191,162,0.1)', border: '1px solid rgba(211,191,162,0.22)', color: GOLD };
+ 
+@@ -68,7 +68,7 @@
+   return (
+     <div style={shell}>
+       <div style={{ width: 460, maxWidth: '100%', borderRadius: 28, border: '1px solid rgba(211,191,162,0.2)', background: 'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.018)), #0a0a0a', boxShadow: '0 40px 100px -30px rgba(0,0,0,0.9)', padding: '34px 26px 26px' }}>
+-        <div style={{ width: 64, height: 64, margin: '0 auto 18px', borderRadius: 20, display: 'grid', placeItems: 'center', background: 'rgba(226,154,88,0.1)', border: '1px solid rgba(226,154,88,0.35)', color: COPPER }}>
++        <div style={{ width: 64, height: 64, margin: '0 auto 18px', borderRadius: 20, display: 'grid', placeItems: 'center', background: 'rgba(201,170,136,0.1)', border: '1px solid rgba(201,170,136,0.35)', color: COPPER }}>
+           <CalendarClock size={28} />
+         </div>
+         <div style={{ fontSize: 10, letterSpacing: 2.8, fontWeight: 800, color: GOLD, textTransform: 'uppercase' }}>{paused ? 'Account paused' : 'Subscription ended'}</div>
+@@ -117,8 +117,8 @@
+ const LEVELS = {
+   notice:   { label: 'Renewal reminder', tone: GOLD,   bg: 'rgba(211,191,162,0.07)', border: 'rgba(211,191,162,0.22)', every: 3 * 24 * 3600e3 },
+   warning:  { label: 'Plan ending soon', tone: '#e6d6b8', bg: 'rgba(211,191,162,0.11)', border: 'rgba(211,191,162,0.4)',  every: 24 * 3600e3 },
+-  urgent:   { label: 'Renew now',        tone: COPPER, bg: 'rgba(226,154,88,0.1)',   border: 'rgba(226,154,88,0.42)',  every: 6 * 3600e3 },
+-  critical: { label: 'Final days',       tone: COPPER, bg: 'rgba(226,154,88,0.16)',  border: 'rgba(226,154,88,0.7)',   every: 3600e3 },
++  urgent:   { label: 'Renew now',        tone: COPPER, bg: 'rgba(201,170,136,0.1)',   border: 'rgba(201,170,136,0.42)',  every: 6 * 3600e3 },
++  critical: { label: 'Final days',       tone: COPPER, bg: 'rgba(201,170,136,0.16)',  border: 'rgba(201,170,136,0.7)',   every: 3600e3 },
+ };
+ 
+ const keyFor = (t) => `px_sub_remind_${t}`;
+@@ -162,7 +162,7 @@
+ 
+   return (
+     <>
+-      <div role="status" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '0 0 12px', borderRadius: 14, border: `1px solid ${lvl.border}`, background: lvl.bg, color: IVORY, fontSize: 12.5, textAlign: 'left', boxShadow: crit ? '0 0 0 1px rgba(226,154,88,0.25), 0 8px 28px -12px rgba(226,154,88,0.45)' : 'none', ...style }}>
++      <div role="status" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '0 0 12px', borderRadius: 14, border: `1px solid ${lvl.border}`, background: lvl.bg, color: IVORY, fontSize: 12.5, textAlign: 'left', boxShadow: crit ? '0 0 0 1px rgba(201,170,136,0.25), 0 8px 28px -12px rgba(201,170,136,0.45)' : 'none', ...style }}>
+         <CalendarClock size={17} color={lvl.tone} style={{ flexShrink: 0 }} />
+         <div style={{ flex: '1 1 220px', minWidth: 0, lineHeight: 1.45 }}>
+           <b style={{ color: lvl.tone, letterSpacing: 0.4 }}>{lvl.label} · {status.daysLeft} day{status.daysLeft === 1 ? '' : 's'} left</b>

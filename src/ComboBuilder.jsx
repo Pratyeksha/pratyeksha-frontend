@@ -81,7 +81,7 @@ function Editor({ tenantId, menuItems, combo, onClose, onSaved }) {
           <div style={{ flex: '1 1 160px' }}><div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: 1.5, color: GOLD2, marginBottom: 6 }}>COMBO PRICE (₹)</div><input style={inp} type="number" min="1" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.7)', paddingBottom: 10 }}>Dishes normally cost <b style={{ color: GOLD }}>₹{money(normal)}</b>{Number.isFinite(num) && num > 0 && num < normal ? <> · guests save <b style={{ color: '#7fc79a' }}>₹{money(normal - num)}</b></> : null}</div>
         </div>
-        {tooHigh && <div style={{ fontSize: 12, color: '#e0c48f' }}>The combo price must be lower than the dishes’ normal total (₹{money(normal)}).</div>}
+        {tooHigh && <div style={{ fontSize: 12, color: '#d9c8a6' }}>The combo price must be lower than the dishes’ normal total (₹{money(normal)}).</div>}
         {err && <div role="alert" style={{ marginTop: 10, color: '#e0907a', fontSize: 12.5, display: 'flex', gap: 8 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {err}</div>}
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button type="button" style={{ ...btn(true, busy || !lines.length || tooHigh), flex: 1 }} disabled={busy || !lines.length || tooHigh} onClick={save}>{busy ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null} {combo ? 'Save changes' : 'Create combo'}</button>
@@ -125,7 +125,7 @@ export default function ComboBuilder({ tenantId, menuItems = [], notify }) {
               <span style={{ fontSize: 12, textDecoration: 'line-through', color: 'rgba(255,255,255,0.4)' }}>₹{money(c.originalPrice)}</span>
               {c.savings > 0 && <span style={{ fontSize: 11, color: '#7fc79a' }}>save ₹{money(c.savings)}</span>}
             </div>
-            {!c.available && c.isActive && <div style={{ marginTop: 8, fontSize: 11.5, color: '#e0c48f', display: 'flex', gap: 6 }}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> Hidden from guests: a dish in this combo is unavailable.</div>}
+            {!c.available && c.isActive && <div style={{ marginTop: 8, fontSize: 11.5, color: '#d9c8a6', display: 'flex', gap: 6 }}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> Hidden from guests: a dish in this combo is unavailable.</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button type="button" style={{ ...btn(false), flex: 1 }} onClick={() => setEdit(c)}><Pencil size={13} /> Edit</button>
               <button type="button" style={{ ...btn(false), color: '#e0907a' }} onClick={() => del(c)} aria-label={`Delete ${c.name}`}><Trash2 size={13} /></button>
