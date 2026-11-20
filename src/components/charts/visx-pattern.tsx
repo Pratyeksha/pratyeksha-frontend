@@ -6,7 +6,7 @@ import {
   PatternHexagons as VisxPatternHexagons,
   PatternLines as VisxPatternLines,
   PatternWaves as VisxPatternWaves,
-} from "./patterns/index";
+} from "./patterns";
 
 /** @deprecated Use `PatternPreset` (Nucleo-based presets) instead. */
 export function PatternLines(props: ComponentProps<typeof VisxPatternLines>) {

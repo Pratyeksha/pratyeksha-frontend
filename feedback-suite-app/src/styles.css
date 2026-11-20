@@ -1103,3 +1103,5 @@ body, .feedback-shell, .success-shell { background-color: var(--pratyeksha-bg); 
 .sidebar-powered small { color: #81796d; font-size: 6px; font-weight: 700; letter-spacing: .20em; }
 .sidebar-powered img { width: 154px; max-width: 100%; height: auto; display: block; }
 .admin-footer { display: none !important; }
+
+.link-button{background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:6px}

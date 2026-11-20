@@ -17,6 +17,11 @@ const authApi = () => String(api.defaults.baseURL || '').replace(/\/feedback-sui
 export const forgotAdminPassword = (payload) => axios.post(`${authApi()}/auth/forgot`, { scope: 'feedback', tenantId: resolveTenantId(), ...payload }, { timeout: 30000 });
 export const resetAdminPassword = (payload) => axios.post(`${authApi()}/auth/reset`, { scope: 'feedback', tenantId: resolveTenantId(), ...payload }, { timeout: 30000 });
 
+// Second step of every admin sign-in (authenticator app). See backend security/two-factor.js.
+export const twoFactorSetup = (challengeToken) => axios.post(`${authApi()}/auth/2fa/setup`, { challengeToken }, { timeout: 30000 });
+export const twoFactorEnable = (challengeToken, code) => axios.post(`${authApi()}/auth/2fa/enable`, { challengeToken, code }, { timeout: 30000 });
+export const twoFactorVerify = (challengeToken, body) => axios.post(`${authApi()}/auth/2fa/verify`, { challengeToken, ...body }, { timeout: 30000 });
+
 export const resolveTenantId = () => {
   const queryTenant = new URLSearchParams(window.location.search).get('tenantId');
   return queryTenant || localStorage.getItem('active_tenant') || localStorage.getItem('feedbackTenantId') || '';

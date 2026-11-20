@@ -3,6 +3,7 @@ import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { loginAdmin, forgotAdminPassword, resetAdminPassword } from '../api';
 import { useTenantName } from '../brand';
 import { useNavigate } from 'react-router-dom';
+import TwoFactor from './TwoFactor.jsx';
 
 export default function AdminLogin() {
   const tenantName = useTenantName();
@@ -15,6 +16,7 @@ export default function AdminLogin() {
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [info, setInfo] = useState('');
+  const [challenge, setChallenge] = useState(null);   // password was right: authenticator step next
 
   const submit = async (event) => {
     event.preventDefault();
@@ -22,6 +24,7 @@ export default function AdminLogin() {
     setError('');
     try {
       const { data } = await loginAdmin({ email, password });
+      if (data?.challengeToken && (data.twoFactorRequired || data.twoFactorSetupRequired)) { setPassword(''); setChallenge(data); return; }
       localStorage.setItem('jayAmbeAdminToken', data.token);
       navigate('/admin');
     } catch (err) {
@@ -54,6 +57,12 @@ export default function AdminLogin() {
       setError(err?.response?.data?.error || 'Could not reset the password. Please try again.');
     } finally { setLoading(false); }
   };
+
+  if (challenge) {
+    return <TwoFactor challenge={challenge}
+      onSuccess={(body) => { localStorage.setItem('jayAmbeAdminToken', body.token); navigate('/admin'); }}
+      onBack={(m) => { setChallenge(null); setError(m || ''); }} />;
+  }
 
   if (mode !== 'login') {
     return (

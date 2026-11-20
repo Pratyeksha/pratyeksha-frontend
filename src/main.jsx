@@ -2,26 +2,33 @@ import React, { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import './index.css'
-import './themeScroll.css'
+import './shared/ui/themeScroll.css'
 // Every screen is its own download: a guest opening the menu no longer pulls the owner dashboard, kitchen board or admin tools.
-const App = lazy(() => import('./App.jsx'))
-const OperatorPortal = lazy(() => import('./OperatorPortal.jsx'))
-const KitchenView = lazy(() => import('./KitchenView.jsx'))
-const PratyekshaMasterAdmin = lazy(() => import('./PratyekshaMasterAdmin.jsx'))
-const Pratyeksha = lazy(() => import('./Pratyeksha.jsx'))
-const OwnerApp = lazy(() => import('./OwnerApp.jsx'))
-const OwnerLauncher = lazy(() => import('./OwnerApp.jsx').then((m) => ({ default: m.OwnerLauncher })))
-const CustomerHome = lazy(() => import('./CustomerHome.jsx'))
-const FeedbackSuiteFrame = lazy(() => import('./FeedbackSuiteFrame.jsx'))
-import { configurePwa } from './pwa.js'
-import API_BASE_URL from './apiBase.js'
-import { BrandLoader } from './PremiumUI.jsx'
-import { loaderMessageFor } from './loaderMessages.js'
-import { SubscriptionGate, installSubscriptionInterceptor } from './SubscriptionGate.jsx'
-import PlatformNotice from './PlatformNotice.jsx'
-import { MotionRoot } from './motionKit.jsx'
-import './premium-polish.css'
+/* Guest, kitchen and landing screens use framer-motion; the owner / operator / master portals use `motion` and mount their own
+   MotionConfig. The reduced-motion provider is therefore attached per route (loaded together with the screen) instead of around the
+   whole app, so a portal never downloads the framer-motion copy it does not use. */
+const withMotion = (load) => lazy(() => Promise.all([load(), import('./shared/ui/MotionRoot.jsx')]).then(([m, r]) => ({
+  default: function WithMotion(props) { return <r.MotionRoot><m.default {...props} /></r.MotionRoot>; },
+})))
+const App = withMotion(() => import('./features/guest/App.jsx'))
+const OperatorPortal = lazy(() => import('./features/operator/OperatorPortal.jsx'))
+const KitchenView = withMotion(() => import('./features/kitchen/KitchenView.jsx'))
+const PratyekshaMasterAdmin = lazy(() => import('./features/master/PratyekshaMasterAdmin.jsx'))
+const Pratyeksha = withMotion(() => import('./features/landing/Pratyeksha.jsx'))
+const OwnerApp = lazy(() => import('./features/owner/OwnerApp.jsx'))
+const OwnerLauncher = lazy(() => import('./features/owner/OwnerApp.jsx').then((m) => ({ default: m.OwnerLauncher })))
+const CustomerHome = withMotion(() => import('./features/guest/CustomerHome.jsx'))
+const FeedbackSuiteFrame = lazy(() => import('./features/feedback/FeedbackSuiteFrame.jsx'))
+import { configurePwa } from './shared/lib/pwa.js'
+import API_BASE_URL from './shared/lib/apiBase.js'
+import { BrandLoader } from './shared/ui/PremiumUI.jsx'
+import { loaderMessageFor } from './shared/lib/loaderMessages.js'
+import { SubscriptionGate, installSubscriptionInterceptor } from './features/auth/SubscriptionGate.jsx'
+import { installRequestOptimizer } from './shared/lib/requestOptimizer.js'
+import PlatformNotice from './features/auth/PlatformNotice.jsx'
+import './shared/ui/premium-polish.css'
 
+installRequestOptimizer(); // de-duplicates identical in-flight GETs and caches a few public lists briefly
 installSubscriptionInterceptor();
 
 /* Expired subscriptions lock the customer app, KDS and Owner app behind a renewal page. */
@@ -121,7 +128,6 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AppErrorBoundary>
       <SplashGate>
-      <MotionRoot>
       <BrowserRouter>
       <SurfaceFlag />
       <PlatformNotice />
@@ -163,7 +169,6 @@ createRoot(document.getElementById('root')).render(
       </Routes>
       </Suspense>
       </BrowserRouter>
-      </MotionRoot>
       </SplashGate>
     </AppErrorBoundary>
   </StrictMode>

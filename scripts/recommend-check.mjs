@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { recommendForCart, kindOf } from '../src/recommend.js';
+import { recommendForCart, kindOf } from '../src/shared/lib/recommend.js';
 const cats = [{ _id: 'c1', name: 'Starters' }, { _id: 'c2', name: 'Main Course' }, { _id: 'c3', name: 'Breads' }, { _id: 'c4', name: 'Beverages' }, { _id: 'c5', name: 'Desserts' }];
 const m = (id, categoryId, name, extra = {}) => ({ _id: id, categoryId, name, isAvailable: true, isVeg: true, ...extra });
 const menu = [m('a1', 'c1', 'Paneer Tikka'), m('b1', 'c2', 'Dal Tadka'), m('b2', 'c2', 'Butter Chicken', { isVeg: false }), m('r1', 'c3', 'Butter Naan'), m('r2', 'c3', 'Tandoori Roti'), m('d1', 'c4', 'Masala Chaas'), m('d2', 'c4', 'Cold Coffee'), m('s1', 'c5', 'Gulab Jamun'), m('x1', 'c5', 'Out of stock sweet', { isAvailable: false }), m('z1', 'zzz', 'Ghost item of another menu'), m('combo_1', '__combos__', 'Thali', { isCombo: true })];

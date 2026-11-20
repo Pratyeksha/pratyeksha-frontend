@@ -1,0 +1,12 @@
+.pxl-fab { position: fixed; right: 16px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 90; display: inline-flex; align-items: center; gap: 9px; height: 50px; padding: 0 18px 0 8px; border-radius: 99px; cursor: pointer;
+  color: #1b150a; font: 600 13px Poppins, system-ui, sans-serif; border: 1px solid rgba(255,255,255,.35); background: linear-gradient(135deg, #f6e9cc, #d3bfa2 55%, #b99a6a);
+  box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 0 0 0 rgba(211,191,162,.5); animation: pxlPulse 3.2s ease-out infinite; transition: bottom .3s cubic-bezier(.3,.7,.4,1); -webkit-tap-highlight-color: transparent; }
+.pxl-fab.lifted { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+.pxl-orb { position: relative; width: 36px; height: 36px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6e0, #c9ad7c 55%, #5a4526); box-shadow: inset 0 -3px 6px rgba(0,0,0,.25); display: grid; place-items: center; }
+.pxl-orb i { position: absolute; inset: -4px; border-radius: 50%; border: 1.5px dashed rgba(27,21,10,.45); animation: pxlSpin 9s linear infinite; }
+.pxl-orb b { width: 12px; height: 12px; background: #2b2113; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); animation: pxlTwinkle 2.4s ease-in-out infinite; }
+@keyframes pxlSpin { to { transform: rotate(360deg); } }
+@keyframes pxlTwinkle { 50% { transform: scale(1.35) rotate(45deg); } }
+@keyframes pxlPulse { 0% { box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 0 0 0 rgba(211,191,162,.5); } 70%, 100% { box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 0 0 16px rgba(211,191,162,0); } }
+@media (max-width: 380px) { .pxl-label { display: none; } .pxl-fab { padding: 0 8px; } }
+@media (prefers-reduced-motion: reduce) { .pxl-fab, .pxl-orb i, .pxl-orb b { animation: none; } }

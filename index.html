@@ -36,7 +36,10 @@
     
     <!-- model-viewer (3D dishes) is now loaded on demand by the menu app, only when a guest opens a 3D view. -->
 
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <!-- Fonts load without blocking first paint (public/splash.js appends the stylesheet; the CSP forbids inline handlers). The splash renders with system fonts and text swaps in when the files arrive. -->
+    <link rel="preload" as="image" href="/pratyeksha-logo.png" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Poppins:wght@400;600;700;900&display=swap" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet" /></noscript>
     <style>
       html,body{margin:0;background:#0b0b0c}
       #root>.pxs{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;background:radial-gradient(120% 80% at 50% 0%,#1a160f 0%,#0b0b0c 58%,#070708 100%);overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif}

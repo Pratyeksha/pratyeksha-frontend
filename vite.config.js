@@ -36,6 +36,31 @@ function seo(siteUrl) {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  // `@` → src/ is required by the vendored Bklit chart sources (shadcn-style imports); tailwindcss() only touches CSS that opts in (see src/bklit.css).
-  return { plugins: [react(), tailwindcss(), seo(env.VITE_SITE_URL)], resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } } }
+  // `@` → src/ is required by the vendored Bklit chart sources (shadcn-style imports); tailwindcss() only touches CSS that opts in (see src/shared/ui/bklit.css).
+  return {
+    plugins: [react(), tailwindcss(), seo(env.VITE_SITE_URL)],
+    resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    // Production-only trimming: no debugger statements, and console.log/debug calls are dropped (warn/error stay for diagnostics).
+    esbuild: mode === 'production' ? { drop: ['debugger'], pure: ['console.log', 'console.debug'], legalComments: 'none' } : {},
+    build: {
+      target: 'es2020',
+      cssCodeSplit: true,
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          // Stable vendor chunks: app releases no longer invalidate the browser's cached React / animation / HTTP code,
+          // and every route shares one copy instead of re-bundling it.
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined
+            if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run)\//.test(id)) return 'vendor-react'
+            // Two animation libraries are in use (see main.jsx): keep each in its own chunk so a route only ever fetches the one it needs.
+            if (/node_modules\/motion\//.test(id)) return 'vendor-motion'                                  // `motion` + its nested framer-motion (portals)
+            if (/node_modules\/(framer-motion|motion-dom|motion-utils)\//.test(id)) return 'vendor-framer'  // framer-motion v11 (guest, kitchen, landing)
+            if (/node_modules\/axios\//.test(id)) return 'vendor-http'
+            return undefined
+          },
+        },
+      },
+    },
+  }
 })

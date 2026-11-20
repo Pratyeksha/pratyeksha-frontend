@@ -2,7 +2,7 @@
 import { createCanvas, loadImage, registerFont } from 'canvas';
 import jsQR from 'jsqr';
 import fs from 'node:fs';
-import { renderPoster, withDpi, posterFileName, POSTER } from '../src/qrPoster.js';
+import { renderPoster, withDpi, posterFileName, POSTER } from '../src/shared/lib/qrPoster.js';
 registerFont(process.env.POSTER_FONT_TTF || '/tmp/RobotoCondensed-Bold.ttf', { family: POSTER.fontFamily, weight: '700' });
 const template = await loadImage('public/qr-studio/template.png');
 const cases = [['https://pratyeksha-frontend.vercel.app/qa_alpha?table=10&sig=0123456789abcdef0123', '10'], ['https://pratyeksha-frontend.vercel.app/qa_alpha?table=CT&sig=fedcba98765432100123', 'CT'], ['https://pratyeksha-frontend.vercel.app/qa_alpha?table=101&sig=aaaaaaaaaaaaaaaaaaaa', '101'], ['https://pratyeksha-frontend.vercel.app/a_very_long_tenant_id_for_stress_test_0123456789?table=A12&sig=bbbbbbbbbbbbbbbbbbbb', 'A12']];
