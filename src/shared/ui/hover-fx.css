@@ -1,0 +1,49 @@
+/* Hover & press feedback for the Operator portal (.bk-scope-op) and the Owner app (.bk-scope).
+ * Uses the individual `translate` / `scale` properties plus filter and box-shadow, so it never fights inline `transform`
+ * or background colours set by components. Only runs on devices that can hover; presses work everywhere.
+ */
+.bk-scope-op,.bk-scope{--hx-gold:211,191,162;--hx-ease:cubic-bezier(.22,1,.36,1)}
+
+/* ── Buttons, links, tabs, chips ── */
+:is(.bk-scope-op,.bk-scope) :is(button,[role="button"],[role="tab"],a[href],summary,label[for]){transition:translate .22s var(--hx-ease),scale .22s var(--hx-ease),filter .22s,box-shadow .25s,border-color .22s,opacity .2s;cursor:pointer}
+:is(.bk-scope-op,.bk-scope) :is(button,[role="button"],[role="tab"]):disabled{cursor:not-allowed}
+:is(.bk-scope-op,.bk-scope) :is(button,[role="button"],[role="tab"],a[href]):active:not(:disabled){scale:.96;translate:0 0;filter:brightness(.94);transition-duration:.08s}
+:is(.bk-scope-op,.bk-scope) :is(button,[role="button"],[role="tab"],a[href]):focus-visible{outline:2px solid rgb(var(--hx-gold));outline-offset:2px}
+/* icons nudge */
+:is(.bk-scope-op,.bk-scope) :is(button,[role="button"],a[href]) svg{transition:scale .22s var(--hx-ease),rotate .3s var(--hx-ease)}
+
+@media (hover:hover){
+  :is(.bk-scope-op,.bk-scope) :is(button,[role="button"],[role="tab"],a[href]):hover:not(:disabled){translate:0 -1.5px;filter:brightness(1.13);box-shadow:0 8px 20px -10px rgba(var(--hx-gold),.55)}
+  :is(.bk-scope-op,.bk-scope) :is(button,[role="button"],a[href]):hover:not(:disabled) svg{scale:1.12}
+  :is(.bk-scope-op,.bk-scope) :is(button,[role="button"])[aria-label*="lose" i]:hover:not(:disabled) svg,
+  :is(.bk-scope-op,.bk-scope) button[aria-label*="elete" i]:hover:not(:disabled) svg{rotate:90deg}
+  /* tiny icon-only buttons: no lift, just glow, so toolbars don't jitter */
+  :is(.bk-scope-op,.bk-scope) button:not(:has(:not(svg))):hover:not(:disabled){translate:0 0;scale:1.08}
+
+  /* ── Form fields ── */
+  :is(.bk-scope-op,.bk-scope) :is(input:not([type="checkbox"],[type="radio"],[type="range"],[type="file"]),select,textarea){transition:border-color .2s,box-shadow .25s,background-color .2s}
+  :is(.bk-scope-op,.bk-scope) :is(input:not([type="checkbox"],[type="radio"],[type="range"],[type="file"]),select,textarea):hover:not(:disabled):not(:focus){border-color:rgba(var(--hx-gold),.5)!important;box-shadow:0 0 0 3px rgba(var(--hx-gold),.07)}
+  :is(.bk-scope-op,.bk-scope) :is(input:not([type="checkbox"],[type="radio"],[type="range"],[type="file"]),select,textarea):focus{border-color:rgba(var(--hx-gold),.8)!important;box-shadow:0 0 0 4px rgba(var(--hx-gold),.14)!important;outline:0}
+  :is(.bk-scope-op,.bk-scope) :is(input[type="checkbox"],input[type="radio"],input[type="range"]):hover{filter:brightness(1.25) drop-shadow(0 0 4px rgba(var(--hx-gold),.5))}
+
+  /* ── Tables & lists ── */
+  :is(.bk-scope-op,.bk-scope) tbody tr{transition:background-color .18s,box-shadow .18s}
+  :is(.bk-scope-op,.bk-scope) tbody tr:hover{background-color:rgba(var(--hx-gold),.07);box-shadow:inset 3px 0 0 rgba(var(--hx-gold),.7)}
+  :is(.bk-scope-op,.bk-scope) :is(li,[role="row"],[role="listitem"],[role="option"],.pown-row-hover){transition:background-color .18s}
+  :is(.bk-scope-op,.bk-scope) :is([role="row"],[role="listitem"],[role="option"],.pown-row-hover):hover{background-color:rgba(var(--hx-gold),.06)}
+
+  /* ── Cards: leaf-level panels only (no nested panels, not modals / scroll areas / fixed layers) ── */
+  :is(.bk-scope-op,.bk-scope) :is(div,section,article)[style*="border-radius"][style*="background"][style*="padding"]:not([style*="overflow"],[style*="position: fixed"],[style*="position:fixed"],[style*="z-index"],[style*="100vh"],[style*="max-height"],[style*="sticky"]):not(:has(div[style*="border-radius"][style*="background"][style*="padding"])){transition:translate .28s var(--hx-ease),box-shadow .28s,border-color .25s,filter .25s}
+  :is(.bk-scope-op,.bk-scope) :is(div,section,article)[style*="border-radius"][style*="background"][style*="padding"]:not([style*="overflow"],[style*="position: fixed"],[style*="position:fixed"],[style*="z-index"],[style*="100vh"],[style*="max-height"],[style*="sticky"]):not(:has(div[style*="border-radius"][style*="background"][style*="padding"])):not(:has(input,select,textarea,button)):hover{translate:0 -3px;box-shadow:0 18px 34px -20px rgba(0,0,0,.9),0 0 0 1px rgba(var(--hx-gold),.32);filter:brightness(1.06)}
+  /* chart / KPI blocks */
+  :is(.bk-scope-op,.bk-scope) :is(.pown-kpi-grid,[class*="pown-grid-"])>*{transition:translate .28s var(--hx-ease),box-shadow .28s,border-color .25s}
+  :is(.bk-scope-op,.bk-scope) :is(.pown-kpi-grid,[class*="pown-grid-"])>*:hover{translate:0 -3px;box-shadow:0 18px 34px -20px rgba(0,0,0,.9),0 0 0 1px rgba(var(--hx-gold),.32)}
+  :is(.bk-scope-op,.bk-scope) :is(img,video):not([style*="position: absolute"]){transition:scale .35s var(--hx-ease),filter .3s}
+  :is(.bk-scope-op,.bk-scope) :is(td,li,div) > img:hover{scale:1.05}
+  :is(.bk-scope-op,.bk-scope) [title]:not(button,a,input,select,textarea,svg,path):hover{filter:brightness(1.1)}
+  :is(.bk-scope-op,.bk-scope) *::-webkit-scrollbar-thumb:hover{background:rgba(var(--hx-gold),.55)}
+}
+@media (prefers-reduced-motion:reduce){
+  :is(.bk-scope-op,.bk-scope) *{transition-duration:.01ms!important}
+  :is(.bk-scope-op,.bk-scope) :is(button,[role="button"],a,tr,div,section,article,img):hover{translate:none!important;scale:none!important}
+}

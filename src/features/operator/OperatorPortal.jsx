@@ -4,6 +4,7 @@ import axios from 'axios';
 import { io } from "socket.io-client";
 import PwaInstallButton from '../../shared/ui/PwaInstallButton.jsx';
 import '../../shared/ui/bklit.css';
+import '../../shared/ui/hover-fx.css';
 import { BkArea, BkColumns, BkDonut, BkGauge, BkHBars } from '../owner/ownerCharts.jsx';
 import API_BASE_URL, { SOCKET_BASE_URL } from '../../shared/lib/apiBase.js';
 import { OPERATOR_AUTH_EVENT, getOperatorToken } from '../auth/operatorAuth.js';

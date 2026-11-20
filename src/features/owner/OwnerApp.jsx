@@ -42,6 +42,7 @@ import {
 import SpoonForkIcon from '../../shared/ui/SpoonForkIcon.jsx';
 const Bell = SpoonForkIcon; // crossed spoon & fork instead of the bell
 import '../../shared/ui/bklit.css';
+import '../../shared/ui/hover-fx.css';
 import { BkArea, BkLine, BkColumns, BkHBars, BkDonut, BkMiniBars, BkGauge, BkRings } from './ownerCharts.jsx';
 import { OwnerMotion, PageTransition } from './ownerMotion.jsx';
 import AlertsView from './OwnerAlerts.jsx';
