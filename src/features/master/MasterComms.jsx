@@ -12,15 +12,15 @@ const useNote = () => { const [m, setM] = useState(null); return [m, (t, bad) =>
 const Note = ({ m }) => (m ? <div role={m.bad ? 'alert' : 'status'} style={{ fontSize: 12.5, color: m.bad ? K.danger : K.ok, marginBottom: 8 }}>{m.t}</div> : null);
 const SEV = { info: 'Info', important: 'Important', urgent: 'Urgent' };
 const STAT_TONE = { live: 'gold', scheduled: 'warn', ended: 'dim', cancelled: 'dim' };
-const clientsHook = () => useLoad(() => api('GET', '/tenants'));
+const useClientList = () => useLoad(() => api('GET', '/tenants'));
 const VARS = ['{{name}}', '{{owner}}', '{{expiry}}', '{{days}}'];
 
 /* ───── announcements ───── */
 function Announcements() {
-  const list = useLoad(() => api('GET', '/comms/announcements')); const tpls = useLoad(() => api('GET', '/comms/templates')); const clients = clientsHook(); const [m, note] = useNote();
+  const list = useLoad(() => api('GET', '/comms/announcements')); const tpls = useLoad(() => api('GET', '/comms/templates')); const clients = useClientList(); const [m, note] = useNote();
   const blank = { title: '', message: '', severity: 'info', target: 'all', tenantIds: [], audience: ['owner', 'operator'], when: 'now', scheduledAt: '', expiresAt: '' };
   const [f, setF] = useState(blank); const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [open, setOpen] = useState(null); const [pick, setPick] = useState('');
-  const useTpl = (id) => { const t = (tpls.data || []).find((x) => x._id === id); if (t) setF((p) => ({ ...p, title: t.title || p.title, message: t.body })); };
+  const applyTpl = (id) => { const t = (tpls.data || []).find((x) => x._id === id); if (t) setF((p) => ({ ...p, title: t.title || p.title, message: t.body })); };
   const toggleId = (id) => setF((p) => ({ ...p, tenantIds: p.tenantIds.includes(id) ? p.tenantIds.filter((x) => x !== id) : [...p.tenantIds, id] }));
   const toggleAud = (a) => setF((p) => ({ ...p, audience: p.audience.includes(a) ? p.audience.filter((x) => x !== a) : [...p.audience, a] }));
   const send = async () => {
@@ -37,7 +37,7 @@ function Announcements() {
     <Note m={m} />
     <Section title="New announcement" hint="Appears inside the owner and operator apps. Choose who, and when.">
       <div style={{ display: 'grid', gap: 12, maxWidth: 640 }}>
-        <Field label="Start from a template"><select value={pick} onChange={(e) => { setPick(e.target.value); useTpl(e.target.value); }} style={inputStyle}><option value="">— none —</option>{(tpls.data || []).filter((t) => t.channel === 'inapp').map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}</select></Field>
+        <Field label="Start from a template"><select value={pick} onChange={(e) => { setPick(e.target.value); applyTpl(e.target.value); }} style={inputStyle}><option value="">— none —</option>{(tpls.data || []).filter((t) => t.channel === 'inapp').map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}</select></Field>
         <Field label="Title"><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} style={inputStyle} maxLength={120} /></Field>
         <Field label="Message"><textarea rows={4} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} style={{ ...inputStyle, resize: 'vertical' }} maxLength={1500} /></Field>
         <div className="k-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
@@ -87,7 +87,7 @@ function AnnModal({ id, onClose }) {
 
 /* ───── direct message ───── */
 function Direct() {
-  const clients = clientsHook(); const tpls = useLoad(() => api('GET', '/comms/templates')); const ch = useLoad(() => api('GET', '/comms/channels'));
+  const clients = useClientList(); const tpls = useLoad(() => api('GET', '/comms/templates')); const ch = useLoad(() => api('GET', '/comms/channels'));
   const [f, setF] = useState({ tenantId: '', channel: 'whatsapp', templateId: '', subject: '', body: '', to: '' }); const [busy, setBusy] = useState(false); const [m, note] = useNote(); const [missing, setMissing] = useState([]);
   useEffect(() => { if (!f.tenantId || !f.templateId) return; api('GET', '/comms/render', null, { tenantId: f.tenantId, templateId: f.templateId }).then((r) => { setF((p) => ({ ...p, subject: r.title, body: r.body, to: p.channel === 'email' ? r.email || p.to : p.to })); setMissing(r.missing); }).catch((e) => note(errMsg(e), true)); /* eslint-disable-next-line */ }, [f.tenantId, f.templateId]);
   const send = async () => { setBusy(true); try { const r = await api('POST', '/comms/send', f); if (r.url) window.open(r.url, '_blank'); note(r.note || 'Done.'); } catch (e) { note(errMsg(e), true); } finally { setBusy(false); } };

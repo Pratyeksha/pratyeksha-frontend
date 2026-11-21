@@ -18,6 +18,8 @@ import { SPRING_SNAPPY } from '../../shared/ui/motionTokens.js';
 import { DonutRing, RingGauge, ChartLegend, TimelineStrip } from '../../shared/ui/chartKit.jsx';
 import '../../shared/ui/premium-polish.css';
 import ChatLauncher from './chat/ChatLauncher.jsx';
+import { useStorefronts, usePlatformStats } from './homeData.js';
+import { TileExtras, DealsSection, TonightSection, HeroPanel, DetailExtras, HighlightFilter, OwnerPitch } from './HomeGrowth.jsx';
 
 import API_BASE_URL from '../../shared/lib/apiBase.js';
 import { ensureModelViewer } from './modelViewer.js';
@@ -816,6 +818,54 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{width:0;hei
 @keyframes pxhBeat{0%,40%,100%{transform:scale(1)}15%{transform:scale(1.3)}30%{transform:scale(1.1)}}
 .pxh-foot-mark{margin-top:26px;font-size:9px;font-weight:800;letter-spacing:.5em;padding-left:.5em;color:rgba(211,191,162,.35)}
 @media(prefers-reduced-motion:reduce){.pxh-foot-rule i,.pxh-foot-hl em,.pxh-beat{animation:none}}
+
+/* ══ Map explorer ══ */
+.pxh-mapwrap{display:grid;gap:14px;grid-template-columns:1fr}
+.pxh-mapside{display:grid;gap:12px;align-content:start}
+.pxh-mapside .pxh-maplist{display:none}
+.pxh-stage{border-radius:26px;overflow:hidden;background:#0c0c0c;box-shadow:inset 0 0 0 1px rgba(211,191,162,.2),0 30px 60px -34px rgba(0,0,0,.95)}
+.pxh-stage-map{position:relative;height:clamp(320px,62vh,520px);background:linear-gradient(145deg,#1b1b1b,#101010)}
+.pxh-stage-map iframe{position:absolute;inset:0;width:100%;height:100%;border:0;filter:invert(.92) hue-rotate(180deg) saturate(.55) contrast(.95) brightness(.95)}
+.pxh-stage-empty{position:absolute;inset:0;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;color:rgba(211,191,162,.5);font-size:12px}
+.pxh-stage-fade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,8,.55),transparent 22%,transparent 55%,rgba(8,8,8,.7))}
+.pxh-stage-top{position:absolute;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;gap:8px}
+.pxh-stage-pill{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:99px;background:rgba(14,12,9,.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(211,191,162,.28);color:#ecdcb9;font-size:11.5px;font-weight:800;text-decoration:none;letter-spacing:.02em}
+.pxh-stage-pill.btn{background:linear-gradient(135deg,#e6d6b8,#c9aa88);color:#1a140a;border-color:transparent}
+.pxh-stage-card{position:absolute;left:12px;right:12px;bottom:12px;display:flex;align-items:center;gap:12px;padding:12px 12px 12px 12px;border-radius:20px;background:rgba(14,12,9,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(211,191,162,.3);box-shadow:0 20px 40px -20px #000;animation:pxhCardIn .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pxhCardIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+.pxh-stage-card .inf{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pxh-stage-card strong{font-family:Georgia,serif;font-weight:400;font-size:18px;letter-spacing:-.015em;color:#fff8ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pxh-stage-card small{font-size:11px;color:rgba(255,248,234,.55)}
+.pxh-stage-card .go{width:40px;height:40px;border-radius:14px;border:0;cursor:pointer;display:grid;place-items:center;background:linear-gradient(135deg,#e6d6b8,#c9aa88);color:#1a140a}
+.pxh-stage-card .off{position:absolute;right:14px;top:-11px;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;background:#ecdcb9;color:#1a140a;font-size:9.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.pxh-stage-rail{display:flex;gap:9px;overflow-x:auto;padding:12px;scroll-snap-type:x proximity;scrollbar-width:none;background:linear-gradient(180deg,#0f0d0a,#0a0a0a)}
+.pxh-stage-rail::-webkit-scrollbar{display:none}
+.pxh-chipcard{flex:0 0 auto;scroll-snap-align:start;display:flex;align-items:center;gap:9px;padding:8px 14px 8px 8px;border-radius:16px;border:1px solid rgba(211,191,162,.14);background:rgba(255,255,255,.035);color:#f7f3eb;cursor:pointer;font-family:inherit;transition:all .25s}
+.pxh-chipcard .pin{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;background:color-mix(in srgb,var(--tc) 22%,#111);color:var(--tc)}
+.pxh-chipcard .tx{display:flex;flex-direction:column;text-align:left;gap:1px}.pxh-chipcard b{font-size:12.5px;font-weight:700;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pxh-chipcard i{font-style:normal;font-size:10.5px;color:rgba(255,255,255,.45)}
+.pxh-chipcard.on{background:linear-gradient(135deg,#e6d6b8,#c9aa88);border-color:transparent;color:#1a140a;box-shadow:0 12px 26px -12px rgba(211,191,162,.7)}
+.pxh-chipcard.on .pin{background:rgba(26,20,10,.12);color:#1a140a}.pxh-chipcard.on i{color:rgba(26,20,10,.6)}
+@media(min-width:860px){
+  .pxh-mapwrap{grid-template-columns:minmax(0,1.5fr) minmax(300px,.8fr);align-items:start}
+  .pxh-stage{position:sticky;top:14px}.pxh-stage-map{height:560px}
+  .pxh-mapside .pxh-maplist{display:grid;gap:8px;max-height:260px;overflow-y:auto;padding-right:2px}
+  .pxh-stage-rail{display:none}
+}
+/* teaser */
+.pxh-teaser{position:relative;display:block;width:100%;height:150px;margin-top:16px;padding:0;border:0;border-radius:24px;overflow:hidden;cursor:pointer;text-align:left;font-family:inherit;color:#fff;background:linear-gradient(145deg,#17140e,#0b0a08);box-shadow:inset 0 0 0 1px rgba(211,191,162,.22),0 24px 44px -28px #000;transition:translate .3s,box-shadow .3s}
+.pxh-teaser:hover{translate:0 -3px;box-shadow:inset 0 0 0 1px rgba(211,191,162,.5),0 30px 50px -26px #000}
+.pxh-tmap{position:absolute;inset:0;width:100%;height:100%;transition:scale 1.2s cubic-bezier(.2,.8,.2,1)}.pxh-teaser:hover .pxh-tmap{scale:1.08}
+.pxh-teaser-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,9,7,.92) 8%,rgba(10,9,7,.35) 58%,transparent)}
+.pxh-teaser-copy{position:absolute;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:3px}
+.pxh-teaser-copy small{font-size:9.5px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#c9aa88}
+.pxh-teaser-copy strong{font-family:Georgia,serif;font-weight:400;font-size:24px;letter-spacing:-.02em;line-height:1.1}
+.pxh-teaser-copy em{font-style:normal;font-size:11.5px;color:rgba(255,255,255,.55)}
+.pxh-teaser-go{position:absolute;right:14px;bottom:14px;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:99px;background:linear-gradient(135deg,#e6d6b8,#c9aa88);color:#1a140a;font-size:11.5px;font-weight:900}
+.pxh-pin{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px}
+.pxh-pin i{position:absolute;inset:3px;border-radius:50%;background:#ecdcb9;box-shadow:0 0 0 2px #1a140a}
+.pxh-pin::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(236,220,185,.6);animation:pxhRipple 2.6s ease-out infinite;animation-delay:inherit}
+@keyframes pxhRipple{from{transform:scale(.4);opacity:.9}to{transform:scale(1.5);opacity:0}}
+@media(prefers-reduced-motion:reduce){.pxh-pin::before,.pxh-stage-card{animation:none}}
 @media(prefers-reduced-motion:reduce){.pxh-spin{animation:none}.pxh-sk::after{animation:none;display:none}.pxh-sk-in{animation:none}.pxh-card{transition:none}}
 `;
 
@@ -973,7 +1023,77 @@ function ReportListing({ t, tr }) {
   );
 }
 
-function PlaceDetail({ t, pos, onOrder, onService, tr }) {
+/* ── Map explorer: real Google map for the selected place, floating info chip + snap carousel of nearby places ── */
+function MapStage({ places, sel, onSelect, pos, tr, lang, onOrder }) {
+  const rail = useRef(null);
+  const km = distanceKm(pos, sel);
+  const st = statusLabel(openStatus(sel.hours), tr);
+  const best = bestOffer(sel);
+  const mr = lang === 'mr';
+  useEffect(() => { const el = rail.current?.querySelector('[data-on="1"]'); if (el && rail.current) rail.current.scrollTo({ left: el.offsetLeft - 16, behavior: 'smooth' }); }, [sel.tenantId]);
+  return (
+    <div className="pxh-stage">
+      <div className="pxh-stage-map">
+        {hasPlace(sel) ? <iframe key={sel.tenantId} title={`Map of ${sel.name}`} src={embedUrl(sel)} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen /> : <div className="pxh-stage-empty"><MapPin size={26} />{tr.noLocation}</div>}
+        <span className="pxh-stage-fade" aria-hidden="true" />
+        <div className="pxh-stage-top">
+          <span className="pxh-stage-pill"><i className="pxh-live" /> {places.length} {places.length === 1 && !mr ? 'place' : tr.places}</span>
+          <a className="pxh-stage-pill btn" href={directionsUrl(sel)} target="_blank" rel="noreferrer"><Navigation size={13} /> {mr ? 'मार्ग' : 'Directions'}</a>
+        </div>
+        <div className="pxh-stage-card" key={sel.tenantId}>
+          <Avatar t={sel} size={44} radius={14} />
+          <div className="inf">
+            <strong>{sel.name}</strong>
+            <small>{[areaOf(sel), km != null ? fmtKm(km) : ''].filter(Boolean).join(' · ')}</small>
+            {st && <span className={`pxh-status ${st.tone}`}><i /><span>{st.text}</span></span>}
+          </div>
+          <button type="button" className="go" onClick={() => onOrder(sel)} aria-label={`Open ${sel.name}`}><ChevronRight size={18} /></button>
+          {best && <span className="off"><Tag size={10} /> {offerValue(best)}</span>}
+        </div>
+      </div>
+      <div className="pxh-stage-rail" ref={rail} role="listbox" aria-label="Places">
+        {places.map((t) => {
+          const d = distanceKm(pos, t); const on = t.tenantId === sel.tenantId;
+          return (
+            <button type="button" key={t.tenantId} role="option" aria-selected={on} data-on={on ? 1 : 0} className={`pxh-chipcard${on ? ' on' : ''}`} onClick={() => onSelect(t.tenantId)} style={{ '--tc': tileHue(t) }}>
+              <span className="pin">{isCafe(t) ? <Coffee size={14} /> : <UtensilsCrossed size={14} />}</span>
+              <span className="tx"><b>{t.name}</b><i>{d != null ? fmtKm(d) : areaOf(t) || ''}</i></span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Teaser on the home list: stylised city map with live pins; tapping opens the map explorer */
+function MapTeaser({ places, pos, lang, onOpen }) {
+  const mr = lang === 'mr';
+  const pins = places.slice(0, 7).map((t) => { const h = tileHash(t.tenantId || t.name); return { id: t.tenantId, x: 10 + (h % 78), y: 16 + ((h >> 7) % 58), d: (h % 5) * -0.5 }; });
+  const near = pos ? places.map((t) => distanceKm(pos, t)).filter((v) => v != null).sort((a, b) => a - b)[0] : null;
+  return (
+    <button type="button" className="pxh-teaser" onClick={onOpen} aria-label={mr ? 'नकाशावर पहा' : 'Explore on map'}>
+      <svg className="pxh-tmap" viewBox="0 0 100 60" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs><pattern id="pxhg" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M6 0H0V6" fill="none" stroke="rgba(211,191,162,.07)" strokeWidth=".3" /></pattern></defs>
+        <rect width="100" height="60" fill="url(#pxhg)" />
+        <path d="M-5 44 C 20 38, 30 52, 52 40 S 90 30, 108 36" fill="none" stroke="rgba(120,160,175,.22)" strokeWidth="5" strokeLinecap="round" />
+        <path d="M0 18 L38 26 L62 8 L100 20" fill="none" stroke="rgba(211,191,162,.28)" strokeWidth=".8" />
+        <path d="M22 0 L30 60 M70 0 L58 60 M0 52 L100 48" fill="none" stroke="rgba(211,191,162,.16)" strokeWidth=".6" />
+        <path d="M0 30 L100 33" fill="none" stroke="rgba(211,191,162,.2)" strokeWidth=".5" strokeDasharray="1.5 1.5" />
+      </svg>
+      {pins.map((p) => <span key={p.id} className="pxh-pin" style={{ left: `${p.x}%`, top: `${p.y}%`, animationDelay: `${p.d}s` }}><i /></span>)}
+      <span className="pxh-teaser-shade" aria-hidden="true" />
+      <span className="pxh-teaser-copy">
+        <small>{mr ? 'तुमच्या जवळ' : 'Around you'}</small>
+        <strong>{mr ? 'नकाशावर शोधा' : 'Explore on the map'}</strong>
+        <em>{places.length} {places.length === 1 && !mr ? 'place' : mr ? 'ठिकाणे' : 'places'}{near != null ? ` · ${mr ? 'सर्वात जवळ' : 'nearest'} ${fmtKm(near)}` : ''}</em>
+      </span>
+      <span className="pxh-teaser-go"><MapIcon size={16} /> {mr ? 'उघडा' : 'Open map'}</span>
+    </button>
+  );
+}
+
+function PlaceDetail({ t, pos, onOrder, onService, tr, noMap = false, sf = { stores: {}, highlights: {} } }) {
   const [note, setNote] = useState('');
   const km = distanceKm(pos, t);
   const flashTimer = useRef(null);
@@ -1002,7 +1122,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr }) {
   const callHref = rawPhone.replace(/\D/g, '').length >= 7 ? `tel:${rawPhone.replace(/[^\d+]/g, '')}` : '';
   return (
     <div className="pxh-detail" style={{ border: '1px solid rgba(211,191,162,.18)', borderRadius: 22, overflow: 'hidden', background: 'linear-gradient(160deg,#181818,#0f0f0f)' }}>
-      <div style={{ position: 'relative', height: 'clamp(210px,38vw,300px)', background: 'linear-gradient(145deg,#1b1b1b,#121212)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {!noMap && <div style={{ position: 'relative', height: 'clamp(210px,38vw,300px)', background: 'linear-gradient(145deg,#1b1b1b,#121212)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'rgba(211,191,162,.45)', fontSize: 11 }}>
           <MapPin size={26} />{placeable ? tr.loadingMap : tr.noLocation}
         </div>
@@ -1010,7 +1130,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr }) {
           <iframe key={t.tenantId} title={`Map of ${t.name}`} src={embedUrl(t)} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, filter: 'saturate(.85) contrast(1.02)' }} />
         )}
         {km != null && <span style={{ position: 'absolute', left: 12, top: 12, padding: '5px 10px', borderRadius: 10, background: 'rgba(12,12,12,.82)', border: '1px solid rgba(211,191,162,.3)', color: GOLD, fontSize: 11, fontWeight: 900, backdropFilter: 'blur(6px)' }}>{fmtKm(km)} {tr.away}</span>}
-      </div>
+      </div>}
       <div style={{ padding: '16px 16px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Avatar t={t} size={46} radius={14} />
@@ -1041,6 +1161,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr }) {
             </div>
           );
         })()}
+        <DetailExtras t={t} store={sf.stores[t.tenantId]} labels={sf.highlights} offers={(t.activeOffers || []).filter((o) => o && o._id)} offerLabel={offerValue} offerTerms={(o) => offerTerms(o, tr)} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 14 }}>
           {placeable && <a className="pxh-btn pri" href={directionsUrl(t)} target="_blank" rel="noopener noreferrer" onClick={() => track(t.tenantId, 'directions')} style={{ flex: '1 1 140px' }}><Navigation size={14} /> {tr.directions}</a>}
           {onOrder && <button type="button" className="pxh-btn" onClick={() => onOrder(t)} style={{ flex: '1 1 110px' }}>{tr.openMenu} <ChevronRight size={14} /></button>}
@@ -1155,6 +1276,9 @@ export default function CustomerHome() {
   const [limit, setLimit] = useState(PAGE);
   const [notification, setNotification] = useState(null);
   const [favs, setFavs] = useState(() => readList(FAV_KEY));
+  const sf = useStorefronts();
+  const platformStats = usePlatformStats();
+  const [hlFilter, setHlFilter] = useState([]);
   const [recent, setRecent] = useState(() => readList(RECENT_KEY));
   const [lastPlace, setLastPlace] = useState(() => { try { const v = JSON.parse(localStorage.getItem('px_last_place') || 'null'); return v && v.tenantId ? v : null; } catch { return null; } });
   const [showAllOffers, setShowAllOffers] = useState(false);
@@ -1461,6 +1585,7 @@ export default function CustomerHome() {
   const filtered = useMemo(() => {
     const q = normQ(query);
     const list = tenants.filter((t) => {
+      if (hlFilter.length && !hlFilter.every((h) => (sf.stores[t.tenantId]?.highlights || []).includes(h))) return false;
       const cafe = isCafe(t);
       if (filter === 'cafe' && !cafe) return false;
       if (filter === 'restaurant' && cafe) return false;
@@ -1485,7 +1610,7 @@ export default function CustomerHome() {
       list.sort((a, b) => Number(isFeatured(b)) - Number(isFeatured(a)) || closedRank(a) - closedRank(b));
     }
     return list;
-  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort]);
+  }, [tenants, filter, service, favOnly, offersOnly, vegOnly, incompleteOnly, init.audit, openOnly, minuteKey, favs, query, menuLookup, area, nearMe, pos, sort, hlFilter, sf.stores]);
 
   useEffect(() => {
     const onScroll = () => { setShowTop(window.scrollY > 520); setStuck(window.scrollY > 8); };
@@ -1645,10 +1770,7 @@ export default function CustomerHome() {
     return ids.map((id) => byId.get(id)).filter(Boolean).slice(0, 10);
   }, [recent, favs, byId]);
 
-  const offerCards = useMemo(
-    () => filtered.flatMap((t) => (t.activeOffers || []).map((o) => ({ ...o, _tenant: t }))).slice(0, 12),
-    [filtered]
-  );
+  const dealCards = useMemo(() => filtered.flatMap((t) => (t.activeOffers || []).filter((o) => o && o._id).map((o) => ({ ...o, _tenant: t }))).slice(0, 14), [filtered]);
   const totalOffers = useMemo(() => tenants.reduce((n, t) => n + (Array.isArray(t.activeOffers) ? t.activeOffers.length : 0), 0), [tenants]);
 
   const featuredList = useMemo(() => tenants.filter(isFeatured), [tenants]);
@@ -1679,7 +1801,7 @@ export default function CustomerHome() {
   const greetingLine = guestName ? `${greeting}, ${guestName}` : greeting;
   const visible = filtered.slice(0, limit);
   const resetFilters = () => { setFilter('all'); setService(null); setFavOnly(false); setOffersOnly(false); setVegOnly(false); setOpenOnly(false); setIncompleteOnly(false); setQuery(''); chooseArea('all'); };
-  const hasFilters = filter !== 'all' || service || favOnly || offersOnly || vegOnly || openOnly || incompleteOnly || query || area !== 'all';
+  const hasFilters = hlFilter.length > 0 || filter !== 'all' || service || favOnly || offersOnly || vegOnly || openOnly || incompleteOnly || query || area !== 'all';
   const hasMore = filtered.length > limit;
   const showFeatured = !loading && !hasFilters && view === 'list' && featuredList.length > 0;
   const showHow = !howHidden && !loading && tenants.length > 0 && !hasFilters && !recent.length && !favs.length;
@@ -1810,6 +1932,15 @@ export default function CustomerHome() {
           </div>
           {!guestName && <div style={{ margin: '2px 0 6px' }}><TimeGreeting lang={lang} /></div>}
           <HeroLine lang={lang} />
+          {!loading && tenants.length > 0 && <HeroPanel deals={dealCards.length} stores={sf.stores} tenants={tenants} />}
+          {!loading && tenants.length > 0 && (
+            <nav className="pxg-jump" aria-label="Jump to">
+              {[['pxg-deals', 'Deals'], ['pxg-happening', 'Happening'], ['pxg-places', 'All places']].map(([id, l]) => (
+                <button type="button" key={id} onClick={() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{l}</button>
+              ))}
+              {tenants.some(hasPlace) && <button type="button" onClick={() => { setView('map'); try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* ignore */ } }}>Map</button>}
+            </nav>
+          )}
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
               <b style={{ color: '#d3bfa2' }}>Audit mode</b>
@@ -1910,6 +2041,7 @@ export default function CustomerHome() {
           {totalOffers > 0 && <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${offersOnly ? ' on' : ''}`} aria-pressed={offersOnly} onClick={() => setOffersOnly(!offersOnly)}><Tag size={13} /> {tr.offers}</motion.button>}
           {anyVeg && <motion.button whileTap={{ scale: 0.94 }} transition={SPRING_SNAPPY} type="button" className={`pxh-chip${vegOnly ? ' on' : ''}`} aria-pressed={vegOnly} onClick={() => setVegOnly(!vegOnly)}><Leaf size={13} /> {tr.veg}</motion.button>}
         </div>
+        {!loading && <HighlightFilter labels={sf.highlights} stores={sf.stores} tenants={tenants} value={hlFilter} onChange={setHlFilter} />}
 
         {/* ── Area filter + Near me ── */}
         {(areaChips.length > 0 || canLocate) && (
@@ -1945,8 +2077,13 @@ export default function CustomerHome() {
           );
         })()}
 
+        {/* ── Map teaser: one tap into the map explorer ── */}
+        {!loading && view === 'list' && !query.trim() && tenants.some(hasPlace) && (
+          <Reveal y={12} duration={0.55}><MapTeaser places={tenants.filter(hasPlace)} pos={pos} lang={lang} onOpen={() => { setView('map'); try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* noop */ } }} /></Reveal>
+        )}
+
         {/* ── Featured placements ── */}
-        {showFeatured && (
+        {showFeatured && view === 'list' && (
           <section style={{ marginTop: 18 }} aria-label={tr.featuredRail}>
             <div className="pxh-sec"><Star size={12} fill="currentColor" /> {tr.featuredRail}</div>
             <div className="pxh-rail">
@@ -1971,42 +2108,14 @@ export default function CustomerHome() {
           </section>
         )}
 
-        {/* ── How it works (first-time guests only) ── */}
-        {showHow && (
-          <section style={{ marginTop: 18 }} aria-label={tr.howTitle}>
-            <div className="pxh-how">
-              <div className="pxh-how-head">
-                <div className="pxh-sec" style={{ margin: 0 }}>{tr.howTitle}</div>
-                <button type="button" onClick={hideHow} aria-label={tr.hide} className="pxh-how-x">{tr.hide} <X size={11} /></button>
-              </div>
-              <ol className="pxh-how-list">
-                {[[tr.how1t, tr.how1], [tr.how2t, tr.how2], [tr.how3t, tr.how3]].map(([h, d], i) => (
-                  <li key={i}><span className="n">0{i + 1}</span><div><b>{h}</b><p>{d}</p></div></li>
-                ))}
-              </ol>
-            </div>
-          </section>
+        {/* ── Deals guests can claim (each claim is a consented lead for that owner) ── */}
+        {!loading && view === 'list' && !query.trim() && (
+          <DealsSection offers={dealCards} offerLabel={offerValue} offerTerms={(o) => offerTerms(o, tr)} onOpenPlace={(t) => openTenant(t, 'offers')} Avatar={Avatar} />
         )}
 
-        {/* ── Offers rail ── */}
-        {offerCards.length > 0 && (
-          <section style={{ marginTop: 16 }}>
-            <div className="pxh-rail">
-              {offerCards.map((offer) => (
-                <button type="button" className="pxh-oc" key={`${offer._tenant.tenantId}-${offer._id ?? offer.title ?? ''}-${offer.type}-${offer.value ?? ''}`} onClick={() => { if (offer._id) track(offer._tenant.tenantId, 'offer', null, { offerId: String(offer._id) }); openTenant(offer._tenant, 'offers'); }} style={{ flex: '0 0 auto', minWidth: 214, maxWidth: 250, textAlign: 'left', border: '1px solid rgba(211,191,162,.2)', borderRadius: 16, background: 'linear-gradient(135deg,rgba(211,191,162,.16),rgba(211,191,162,.04) 60%,#121212)', color: '#fff', padding: '12px 13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
-                  {offer.imageUrl && /^https:\/\//i.test(offer.imageUrl)
-                    ? <img src={offer.imageUrl} alt="" loading="lazy" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 11, objectFit: 'cover', flexShrink: 0, display: 'block' }} />
-                    : <Avatar t={offer._tenant} size={38} radius={11} />}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 900, color: GOLD, letterSpacing: .3 }}>{offerValue(offer)}</div>
-                    {offerTerms(offer, tr) && <div style={{ marginTop: 2, fontSize: 9.5, color: 'rgba(255,255,255,.5)', lineHeight: 1.35 }}>{offerTerms(offer, tr)}</div>}
-                    <div style={{ marginTop: 2, fontSize: 11, color: 'rgba(255,255,255,.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offer._tenant.name}</div>
-                  </div>
-                  <ChevronRight size={14} color={GOLD} />
-                </button>
-              ))}
-            </div>
-          </section>
+        {/* ── Specials and events owners posted ── */}
+        {!loading && view === 'list' && !query.trim() && !hasFilters && (
+          <TonightSection tenants={tenants} stores={sf.stores} onOpenPlace={(t) => openTenant(t, 'list')} Avatar={Avatar} />
         )}
 
         {/* ── Jump back in (recent + saved) ── */}
@@ -2024,7 +2133,7 @@ export default function CustomerHome() {
         )}
 
         {/* ── Restaurants ── */}
-        <section style={{ marginTop: 14 }}>
+        <section id="pxg-places" style={{ marginTop: 14, scrollMarginTop: 80 }}>
           {!loading && !loadError && filtered.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, rowGap: 8, flexWrap: 'wrap', margin: '0 0 12px' }}>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontWeight: 700, letterSpacing: .3 }}>
@@ -2073,22 +2182,25 @@ export default function CustomerHome() {
           ) : (
             view === 'map' && mapTenant ? (
               <div className="pxh-mapwrap">
-                <div className="pxh-maplist" style={{ display: 'grid', gap: 9, alignContent: 'start', order: 2 }}>
-                  {filtered.map((t) => {
-                    const km = distanceKm(pos, t);
-                    return (
-                      <button type="button" key={t.tenantId} className={`pxh-place${mapTenant.tenantId === t.tenantId ? ' on' : ''}`} onClick={() => setMapId(t.tenantId)} aria-pressed={mapTenant.tenantId === t.tenantId}>
-                        <Avatar t={t} size={40} radius={12} />
-                        <span style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                          <span style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: 'rgba(255,255,255,.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(t) || 'Location not added'}</span>
-                        </span>
-                        {km != null && <span style={{ fontSize: 10.5, fontWeight: 900, color: GOLD }}>{fmtKm(km)}</span>}
-                      </button>
-                    );
-                  })}
+                <MapStage places={filtered} sel={mapTenant} onSelect={setMapId} pos={pos} tr={tr} lang={lang} onOrder={(x) => openTenant(x, 'map')} />
+                <div className="pxh-mapside">
+                  <div className="pxh-maplist">
+                    {filtered.map((t) => {
+                      const km = distanceKm(pos, t);
+                      return (
+                        <button type="button" key={t.tenantId} className={`pxh-place${mapTenant.tenantId === t.tenantId ? ' on' : ''}`} onClick={() => setMapId(t.tenantId)} aria-pressed={mapTenant.tenantId === t.tenantId}>
+                          <Avatar t={t} size={40} radius={12} />
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                            <span style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: 'rgba(255,255,255,.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{areaOf(t) || 'Location not added'}</span>
+                          </span>
+                          {km != null && <span style={{ fontSize: 10.5, fontWeight: 900, color: GOLD }}>{fmtKm(km)}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <PlaceDetail key={mapTenant.tenantId} t={mapTenant} sf={sf} pos={pos} noMap onOrder={(x) => openTenant(x, 'map')} onService={(x, id) => openTenant(x, 'map', id)} tr={tr} />
                 </div>
-                <div style={{ order: 1 }}><PlaceDetail key={mapTenant.tenantId} t={mapTenant} pos={pos} onOrder={(x) => openTenant(x, 'map')} onService={(x, id) => openTenant(x, 'map', id)} tr={tr} /></div>
               </div>
             ) : (
             <>
@@ -2118,6 +2230,7 @@ export default function CustomerHome() {
                           <div className="pxh-tmeta">
                             {areaOf(tenant) && <><MapPin size={10} /> <span>{areaOf(tenant)}{distanceKm(pos, tenant) != null ? ` · ${fmtKm(distanceKm(pos, tenant))}` : ''}</span></>}
                           </div>
+                          <TileExtras store={sf.stores[tenant.tenantId]} labels={sf.highlights} />
                           {why && !why.name && (why.dish.length > 0 || why.category.length > 0) && (
                             <div className="pxh-why"><Search size={10} /><span>{why.dish.length ? `${tr.serves}: ${why.dish.slice(0, 2).join(', ')}` : `${tr.menuCategory}: ${why.category.join(', ')}`}</span></div>
                           )}
@@ -2161,18 +2274,25 @@ export default function CustomerHome() {
           )}
         </section>
 
-        {/* ── For owners: turn every guest visit into a listing enquiry ── */}
-        {ownerCtaOk && !loading && (
-          <section style={{ marginTop: 28 }} aria-label={tr.ownerTitle}>
-            <div className="pxh-owner">
-              <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#f7f3eb' }}>{tr.ownerTitle}</div>
-                <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,.6)' }}>{tr.ownerBody}</div>
+        {/* ── How it works (first-time guests only) ── */}
+        {showHow && (
+          <section style={{ marginTop: 18 }} aria-label={tr.howTitle}>
+            <div className="pxh-how">
+              <div className="pxh-how-head">
+                <div className="pxh-sec" style={{ margin: 0 }}>{tr.howTitle}</div>
+                <button type="button" onClick={hideHow} aria-label={tr.hide} className="pxh-how-x">{tr.hide} <X size={11} /></button>
               </div>
-              <a className="pxh-btn pri" href={OWNER_CTA_URL} target="_blank" rel="noopener noreferrer">{tr.ownerBtn} <ChevronRight size={14} /></a>
+              <ol className="pxh-how-list">
+                {[[tr.how1t, tr.how1], [tr.how2t, tr.how2], [tr.how3t, tr.how3]].map(([h, d], i) => (
+                  <li key={i}><span className="n">0{i + 1}</span><div><b>{h}</b><p>{d}</p></div></li>
+                ))}
+              </ol>
             </div>
           </section>
         )}
+
+        {/* ── For owners: why being listed brings guests ── */}
+        {!loading && !loadError && <OwnerPitch stats={platformStats} href={`${window.location.origin}/landing#trial`} />}
 
         {!loading && !loadError && (
           <footer className="pxh-foot">
@@ -2199,7 +2319,7 @@ export default function CustomerHome() {
           <motion.div role="dialog" aria-modal="true" aria-label={`Map of ${sheetTenant.name}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSheetTenant(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(5,5,5,.82)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
             <motion.div initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} ref={sheetRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} style={{ outline: 'none', width: 'min(560px,100%)', maxHeight: '92dvh', overflowY: 'auto', borderRadius: '24px 24px 0 0', position: 'relative' }}>
               <button type="button" onClick={() => setSheetTenant(null)} aria-label="Close" style={{ ...iconBtn, position: 'absolute', top: 12, right: 12, zIndex: 3, width: 34, height: 34, background: 'rgba(12,12,12,.8)' }}><X size={16} color={GOLD} /></button>
-              <PlaceDetail t={sheetTenant} pos={pos} tr={tr} onOrder={(t) => { setSheetTenant(null); openTenant(t, 'map'); }} onService={(t, id) => { setSheetTenant(null); openTenant(t, 'map', id); }} />
+              <PlaceDetail t={sheetTenant} sf={sf} pos={pos} tr={tr} onOrder={(t) => { setSheetTenant(null); openTenant(t, 'map'); }} onService={(t, id) => { setSheetTenant(null); openTenant(t, 'map', id); }} />
             </motion.div>
           </motion.div>
         )}

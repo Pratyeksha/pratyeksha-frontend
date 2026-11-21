@@ -1591,6 +1591,57 @@ function NotFoundPage({ onHome }) {
     </div>
   );
 }
+function TrialSignup() {
+  const [f, setF] = useState({ restaurant: "", owner: "", phone: "", city: "", company: "" });
+  const [state, setState] = useState({ busy: false, done: false, error: "" });
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const submit = async (e) => {
+    e.preventDefault();
+    if (state.busy) return;
+    const phone = f.phone.replace(/\D/g, "").slice(-10);
+    if (!f.restaurant.trim() || !f.owner.trim()) return setState({ busy: false, done: false, error: "Add your restaurant and your name." });
+    if (phone.length !== 10) return setState({ busy: false, done: false, error: "Enter a 10-digit mobile number." });
+    setState({ busy: true, done: false, error: "" });
+    try {
+      const r = await fetch(`${API}/public/signup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, phone }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Could not send. Please try again.");
+      setState({ busy: false, done: true, error: "" });
+    } catch (err) {
+      setState({ busy: false, done: false, error: err.message || "Could not send. Please try again." });
+    }
+  };
+  return (
+    <section id="trial" className="nx-sec nx-trial" aria-labelledby="trial-h">
+      <div className="nx-wrap nx-trial-grid">
+        <div className="nx-trial-copy">
+          <span className="nx-kicker">START WITH YOUR OWN MENU</span>
+          <h2 id="trial-h">See it running in <em>your</em> restaurant.</h2>
+          <p>Tell us a little about your place. We call you back to set up your menu, tables and QR codes, so the first guest scan happens on your real data.</p>
+          <ul className="nx-trial-list">
+            <li><b>Menu, tables and QR</b> set up together with you</li>
+            <li><b>Billing with GST</b> and end-of-day cash close from day one</li>
+            <li><b>No commitment</b> to see how it fits your service</li>
+          </ul>
+        </div>
+        {state.done ? (
+          <div className="nx-trial-card is-done" role="status"><h3>Thank you, we have your details.</h3><p>Someone from our team will call you on the number you shared.</p></div>
+        ) : (
+          <form className="nx-trial-card" onSubmit={submit} noValidate>
+            <label>Restaurant name<input value={f.restaurant} onChange={set("restaurant")} maxLength={80} autoComplete="organization" required /></label>
+            <label>Your name<input value={f.owner} onChange={set("owner")} maxLength={60} autoComplete="name" required /></label>
+            <label>Mobile number<input value={f.phone} onChange={set("phone")} inputMode="numeric" maxLength={14} autoComplete="tel" required /></label>
+            <label>City<input value={f.city} onChange={set("city")} maxLength={60} autoComplete="address-level2" /></label>
+            <input className="nx-hp" tabIndex={-1} autoComplete="off" aria-hidden="true" value={f.company} onChange={set("company")} />
+            {state.error && <div className="nx-trial-err" role="alert">{state.error}</div>}
+            <button type="submit" className="nx-btn is-gold" disabled={state.busy}>{state.busy ? "Sending…" : "Request a callback"}</button>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ThankYouPage({ onHome, onDemo }) {
   useEffect(() => {
     document.title = PAGE_META.thankYou.title;
@@ -2937,6 +2988,8 @@ function App() {
             <div className="nx-board-foot"><span>ONE RESTAURANT / ONE CONNECTED FLOW</span><span>DESIGNED FOR CLARITY · BUILT FOR DAILY USE</span></div>
           </div>
         </section>
+
+        <TrialSignup />
 
         {/* ───────── FAQ ───────── */}
         <section id="faq" className="nx-sec nx-faq">

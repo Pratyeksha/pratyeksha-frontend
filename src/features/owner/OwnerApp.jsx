@@ -47,6 +47,7 @@ import { BkArea, BkLine, BkColumns, BkHBars, BkDonut, BkMiniBars, BkGauge, BkRin
 import { OwnerMotion, PageTransition } from './ownerMotion.jsx';
 import AlertsView from './OwnerAlerts.jsx';
 import KitchenView from './OwnerKitchen.jsx';
+import OwnerStorefront from './OwnerStorefront.jsx';
 import { motion as Motion, AnimatePresence } from 'motion/react'; // alias keeps this project's lint (which misses <Motion.x> JSX uses) clean
 
 /* ════════════════════════════════════════════════════════════
@@ -1306,6 +1307,7 @@ const NAV_ITEMS = [
   { key: 'kitchen', label: 'Kitchen Performance', icon: ChefHat, group: 'Operations', desc: 'Prep times, delays and live tickets' },
   { key: 'staff', label: 'Staff & Payroll', icon: Users, group: 'Operations', desc: 'Attendance, salaries and top performers' },
   { key: 'customers', label: 'Customers', icon: UserCircle2, group: 'Guests & growth', desc: 'Who comes back, and who is slipping away' },
+  { key: 'storefront', label: 'Storefront & Deals', icon: Store, group: 'Guests & growth', desc: 'How your place looks on the guest home page, and the guests it brings in' },
   { key: 'listing', label: 'Guest Discovery', icon: Eye, group: 'Guests & growth', desc: 'How guests find and see your restaurant' },
   { key: 'growth', label: 'Why Pratyeksha', icon: Rocket, badge: true, group: 'Guests & growth', desc: 'What Pratyeksha does for you, compared with doing it by hand' },
   { key: 'help', label: 'Help & feedback', icon: LifeBuoy, group: 'Account', desc: 'Contact support, suggest an idea, and rate Pratyeksha' },
@@ -1919,7 +1921,7 @@ const DashboardPage = () => {
       <Card className="pown-strip" style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '14px 20px' }}>
         <StripItem icon={ChefHat} label="Kitchen" value={`${data.orders.pendingInKDS} cooking`} tone={data.orders.pendingInKDS > 0 ? 'warning' : 'default'} />
         <Divider />
-        <StripItem icon={PackageCheck} label="Ready" value={`${data.orders.readyForPickup} for pickup`} tone={data.orders.readyForPickup > 0 ? 'warning' : 'default'} />
+        <StripItem icon={PackageCheck} label="Ready" value={`${data.orders.readyForPickup} to serve`} tone={data.orders.readyForPickup > 0 ? 'warning' : 'default'} />
         <Divider />
         <StripItem icon={Bell} label="Service" value={`${data.serviceRequests} requests`} tone={data.serviceRequests > 0 ? 'warning' : 'default'} />
         <Divider />
@@ -3371,6 +3373,128 @@ const CashCloseCard = () => {
   );
 };
 
+/* ── Growth cards: setup progress, food cost, GST + data export, guest reviews, birthdays, audit trail ── */
+const gcBtn = { padding: '8px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 12, fontWeight: 700 };
+const gcInp = { padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.25)', color: 'inherit', fontSize: 13, minWidth: 0 };
+const downloadCsv = async (url, params, name) => {
+  const res = await api.get(url, { params, responseType: 'blob' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+};
+const SetupChecklistCard = () => {
+  const { data } = useOwnerData('/api/owner/setup-checklist/:tenantId', { refreshMs: 600000 });
+  if (!data || data.done === data.total) return null;
+  return (
+    <ChartCard title={`Setup progress: ${data.done} of ${data.total}`} hint="Finish these to get the most out of Pratyeksha">
+      <div style={{ height: 6, borderRadius: 99, background: 'rgba(255,255,255,0.08)', marginBottom: 12, overflow: 'hidden' }}><div style={{ width: `${(data.done / data.total) * 100}%`, height: '100%', background: '#d3bfa2', borderRadius: 99 }} /></div>
+      {data.steps.map((st) => (
+        <div key={st.id} style={{ display: 'flex', gap: 10, padding: '6px 0', fontSize: 13, opacity: st.done ? 0.5 : 1 }}>
+          <span aria-hidden="true">{st.done ? '✓' : '○'}</span><span style={{ textDecoration: st.done ? 'line-through' : 'none' }}>{st.label}</span><span style={{ marginLeft: 'auto', opacity: 0.6 }}>{st.detail}</span>
+        </div>
+      ))}
+    </ChartCard>
+  );
+};
+const FoodCostCard = () => {
+  const { data } = useOwnerData('/api/owner/recipe-costing/:tenantId', { refreshMs: 600000 });
+  if (!data || !data.dishes?.length) return null;
+  const worst = data.dishes.slice(0, 6);
+  return (
+    <ChartCard title="Food cost by dish" hint="Cost of ingredients as a share of the selling price. Aim below 32%">
+      <div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 12 }}>
+        <StatBlock label="AVERAGE FOOD COST" value={`${data.avgFoodCostPct}%`} tone={data.avgFoodCostPct > 35 ? 'danger' : undefined} />
+        <StatBlock label="DISHES OVER 40%" value={data.highCount} tone={data.highCount ? 'danger' : undefined} />
+        <StatBlock label="NO RECIPE YET" value={data.uncostedMenu} />
+      </div>
+      {worst.map((r) => (
+        <div key={r.menuItemId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, padding: '7px 0', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: 13 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+          <span style={{ opacity: 0.7 }}>{r.suggestedPrice ? `try ${fmtINRc(r.suggestedPrice)}` : ''}</span>
+          <b style={{ color: r.status === 'high' ? '#e07a6a' : r.status === 'watch' ? '#e29a58' : 'inherit' }}>{r.foodCostPct}%</b>
+        </div>
+      ))}
+    </ChartCard>
+  );
+};
+const GstExportCard = () => {
+  const { tenantId } = useOwner();
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const [r, setR] = useState({ from: new Date(Date.now() + 330 * 60000 - 30 * 864e5).toISOString().slice(0, 10), to: today });
+  const [d, setD] = useState(null); const [err, setErr] = useState('');
+  const load = useCallback(async () => { setErr(''); try { setD((await api.get(`/api/owner/gst-invoices/${tenantId}`, { params: r })).data); } catch (e) { setErr(e?.response?.data?.error || 'Could not load'); } }, [tenantId, r]);
+  const dl = async (url, params, name) => { try { await downloadCsv(url, params, name); } catch { setErr('Download failed. Try again.'); } };
+  return (
+    <ChartCard title="GST register and data export" hint="Invoices with CGST and SGST split, credit notes for voids, and a CSV for your accountant">
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <input aria-label="From date" type="date" style={gcInp} value={r.from} onChange={(e) => setR({ ...r, from: e.target.value })} />
+        <input aria-label="To date" type="date" style={gcInp} value={r.to} onChange={(e) => setR({ ...r, to: e.target.value })} />
+        <button type="button" style={gcBtn} onClick={load}>Show totals</button>
+        <button type="button" style={gcBtn} onClick={() => dl(`/api/owner/gst-invoices/${tenantId}`, { ...r, format: 'csv' }, `gst-${r.from}-to-${r.to}.csv`)}>Download GST CSV</button>
+      </div>
+      {err && <div role="alert" style={{ color: '#e07a6a', fontSize: 12, marginBottom: 8 }}>{err}</div>}
+      {d && (<div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10, marginBottom: 12 }}>
+        <StatBlock label="INVOICES" value={d.totals.invoices} /><StatBlock label="CREDIT NOTES" value={d.totals.creditNotes} /><StatBlock label="TAXABLE" value={fmtINRc(d.totals.taxable)} />
+        <StatBlock label="CGST + SGST" value={fmtINRc(d.totals.cgst + d.totals.sgst)} /><StatBlock label="NET TOTAL" value={fmtINRc(d.totals.total)} />
+      </div>)}
+      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>Your data, any time:</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {['customers', 'menu', 'orders', 'inventory'].map((w) => <button key={w} type="button" style={gcBtn} onClick={() => dl(`/api/owner/export/${tenantId}`, { what: w }, `${w}.csv`)}>Export {w}</button>)}
+      </div>
+    </ChartCard>
+  );
+};
+const GuestReviewsCard = () => {
+  const { tenantId } = useOwner();
+  const { data, refetch } = useOwnerData('/api/owner/guest-reviews/:tenantId', { refreshMs: 300000 });
+  const [url, setUrl] = useState(''); const [msg, setMsg] = useState('');
+  const save = async () => { setMsg(''); try { await api.put(`/api/owner/google-review-url/${tenantId}`, { url }); setMsg('Saved. Happy guests will now be sent to Google.'); refetch(); } catch (e) { setMsg(e?.response?.data?.error || 'Could not save'); } };
+  return (
+    <ChartCard title="Guest reviews" hint="Guests rating 4 or 5 are invited to review on Google. Lower ratings reach only you, privately">
+      {data && (<div className="pown-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 12 }}>
+        <StatBlock label="AVERAGE" value={data.total ? `${data.avg} ★` : '–'} /><StatBlock label="REVIEWS" value={data.total} /><StatBlock label="NEED A REPLY" value={data.unhandled} tone={data.unhandled ? 'danger' : undefined} />
+      </div>)}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <input aria-label="Google review link" style={{ ...gcInp, flex: '1 1 220px' }} placeholder="Paste your Google review link (https://…)" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <button type="button" style={gcBtn} onClick={save}>Save link</button>
+      </div>
+      {msg && <div role="status" style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>{msg}</div>}
+      {(data?.reviews || []).filter((x) => x.routed === 'private').slice(0, 5).map((x) => (
+        <div key={x._id} style={{ padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: 13 }}>
+          <span style={{ color: '#e29a58' }}>{'★'.repeat(x.rating)}</span> <span style={{ opacity: 0.6 }}>{x.name || 'Guest'}</span>{x.comment ? <div style={{ opacity: 0.85, marginTop: 3 }}>{x.comment}</div> : null}
+        </div>
+      ))}
+    </ChartCard>
+  );
+};
+const BirthdaysCard = () => {
+  const { data } = useOwnerData('/api/owner/birthdays/:tenantId', { params: { days: 14 }, refreshMs: 900000 });
+  if (!data || !data.length) return null;
+  return (
+    <ChartCard title="Guest birthdays in the next 14 days" hint="A small gesture, like a free dessert, brings guests back">
+      {data.slice(0, 8).map((b) => (
+        <div key={b.phone} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: 13 }}>
+          <span>{b.name || `Guest ${b.phone.slice(-4)}`}</span><b>{b.daysLeft === 0 ? 'Today' : `in ${b.daysLeft} day${b.daysLeft > 1 ? 's' : ''}`}</b>
+        </div>
+      ))}
+    </ChartCard>
+  );
+};
+const AuditTrailCard = () => {
+  const { data } = useOwnerData('/api/owner/audit-log/:tenantId', { refreshMs: 600000 });
+  const [open, setOpen] = useState(false);
+  if (!data || !data.length) return null;
+  return (
+    <ChartCard title="Activity log" hint="Recent changes made by your team">
+      <button type="button" style={gcBtn} onClick={() => setOpen(!open)}>{open ? 'Hide' : `Show last ${Math.min(data.length, 25)} actions`}</button>
+      {open && data.slice(0, 25).map((a, i) => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 10, padding: '7px 0', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: 12 }}>
+          <span style={{ opacity: 0.6 }}>{new Date(a.at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+          <span>{[a.actor, a.action, typeof a.detail === 'string' ? a.detail : ''].filter(Boolean).join(' · ')}</span>
+        </div>
+      ))}
+    </ChartCard>
+  );
+};
+
 const BusinessInsightsPage = () => {
   const [days, setDays] = useState(30);
   const { liveOrderEvent } = useOwner();
@@ -3517,6 +3641,12 @@ const BusinessInsightsPage = () => {
         )}
       </DataBoundary>
       <CashCloseCard />
+      <SetupChecklistCard />
+      <FoodCostCard />
+      <GuestReviewsCard />
+      <BirthdaysCard />
+      <GstExportCard />
+      <AuditTrailCard />
     </div>
   );
 };
@@ -3525,6 +3655,11 @@ const BusinessInsightsPage = () => {
    GUEST DISCOVERY — customer-home activity + marketing performance for this outlet.
    The screen itself is shared with the Operator portal (DiscoveryAnalytics.jsx).
    ════════════════════════════════════════════════════════════ */
+const StorefrontPage = () => {
+  const { tenantId } = useOwner();
+  return <div className="pown-fade-in"><OwnerStorefront api={api} tenantId={tenantId} ChartCard={ChartCard} StatBlock={StatBlock} /></div>;
+};
+
 const ListingInsightsPage = () => {
   const { tenantId } = useOwner();
   const navigate = useNavigate();
@@ -4041,6 +4176,7 @@ const OwnerAppInner = () => {
       <Route path="kitchen" element={<KitchenPage />} />
       <Route path="staff" element={<StaffPage />} />
       <Route path="customers" element={<CustomersPage />} />
+      <Route path="storefront" element={<StorefrontPage />} />
       <Route path="listing" element={<ListingInsightsPage />} />
       <Route path="business" element={<BusinessInsightsPage />} />
       <Route path="insights" element={<ExecutiveInsightsPage />} />

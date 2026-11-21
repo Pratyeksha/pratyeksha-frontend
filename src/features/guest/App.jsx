@@ -1,4 +1,5 @@
 import AllergenFilter from './AllergenFilter.jsx';
+import { PerksButton, ReviewPrompt } from './GuestPerks.jsx';
 import { allergenLabel } from '../../shared/lib/allergens.js';
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import axios from 'axios';
@@ -5914,7 +5915,7 @@ if (qrCheck === 'unverified') {
           <button type="button" style={{...styles.langBtn, color: primaryColor, borderColor: borderColor}} onClick={() => setLanguage(language === 'en' ? 'mr' : 'en')}>
             <Globe2 size={12} style={{marginRight: '6px'}} /> {language === 'en' ? 'मराठी' : 'English'}
           </button>
-          <PrefsMenu lang={language} /><AllergenFilter avoid={avoidAllergens} onChange={setAvoidAllergens} lang={language} color={primaryColor} /><CustomerExtras lang={language} banner={false} />
+          <PrefsMenu lang={language} /><AllergenFilter avoid={avoidAllergens} onChange={setAvoidAllergens} lang={language} color={primaryColor} /><PerksButton tenantId={tenantId} lang={language} color={primaryColor} phone={customerPhone} avoid={avoidAllergens} /><CustomerExtras lang={language} banner={false} />
         </div>
         
 {hasNonVegInView && (
@@ -6926,6 +6927,7 @@ if (qrCheck === 'unverified') {
 
   return (
     <>
+      {allServed && <ReviewPrompt tenantId={tenantId} orderId={Object.keys(liveOrderStatuses)[0]} phone={customerPhone} lang={language} color={primaryColor} />}
       {modifyOrderStrip}
       {/* STICKY BANNER */}
       <motion.div

@@ -27,6 +27,8 @@ import { SubscriptionGate, installSubscriptionInterceptor } from './features/aut
 import { installRequestOptimizer } from './shared/lib/requestOptimizer.js'
 import PlatformNotice from './features/auth/PlatformNotice.jsx'
 import './shared/ui/premium-polish.css'
+import { installErrorReporter } from './shared/lib/errorReporter.js'
+installErrorReporter()
 
 installRequestOptimizer(); // de-duplicates identical in-flight GETs and caches a few public lists briefly
 installSubscriptionInterceptor();

@@ -17,6 +17,7 @@ const Bell = SpoonForkIcon;
 import NotifImagePicker from './NotifImagePicker.jsx';
 import BillRequestsPanel from './BillRequestsPanel.jsx';
 import DayCloseSaver from './DayCloseSaver.jsx';
+import OpsSuite from './OpsSuite.jsx';
 import { ALLERGENS } from '../../shared/lib/allergens.js';
 import ComboBuilder from './ComboBuilder.jsx';
 import { playAlertSound, callOut, speak, formatAlertTime } from '../../shared/lib/alertSounds.js';
@@ -2077,7 +2078,7 @@ const pendingOrders = orders.filter(o =>
     const sources = { direct: 0, zomato: 0, swiggy: 0, takeaway: 0 };
     currentMonthAnalytics.forEach(day => {
       const k = day.source ? day.source.toLowerCase() : 'direct';
-      if (sources.hasOwnProperty(k)) sources[k] += Number(day.revenue||0);
+      if (Object.hasOwn(sources, k)) sources[k] += Number(day.revenue||0);
       else sources.direct += Number(day.revenue||0);
     });
     return { sources };
@@ -2317,6 +2318,18 @@ const revenueColor = (tableNumber) => {
 // ── Table-level helpers for the floor map's deeper interactions ──
 const getTableOrders = (tableNumber) =>
   orders.filter(o => o.tableNumber?.toString() === tableNumber?.toString() && ['pending', 'ready', 'served'].includes(o.status));
+
+// Waiter hands the food over: ready -> served (nothing ever moved an order out of "ready" before, so tables stayed "ready" until billing).
+const markOrdersServed = async (list) => {
+  const ids = (list || []).map(o => o._id).filter(Boolean);
+  if (!ids.length) return;
+  setOrders(prev => prev.map(o => (ids.includes(o._id) ? { ...o, status: 'served' } : o)));   // instant feedback
+  try {
+    await Promise.all(ids.map(id => axios.patch(`${BASE_URL}/admin/orders/${id}`, { status: 'served', tenantId })));
+  } catch (e) {
+    window.alert(e?.response?.data?.error || 'Could not mark served. Try again.');
+  } finally { fetchInitialData({ skipMenu: true }); }
+};
 
 const getTableOrderStatus = (tableNumber) => {
   const tOrders = getTableOrders(tableNumber);
@@ -5163,6 +5176,7 @@ const renderMonthHeatmap = () => {
           {id:'pending',      label:'Live Kitchen',    icon:<CookingPot size={16}/>,   badge: orders.filter(o=>o.status==='pending').length},
           {id:'billing',      label:'Billing Hub',     icon:<ReceiptIndianRupee size={16}/>, badge: null},
           {id:'dayclose',      label:'Daily Close',     icon:<ClipboardList size={16}/>, badge: null},
+          {id:'opssuite',       label:'Ops Suite',       icon:<Layers size={16}/>, badge: null},
           {id:'payables',       label:'Payables',        icon:<Wallet size={16}/>, badge: (payables?.bills || []).filter(b => b.status === 'unpaid' && new Date(b.dueDate).getTime() < Date.now()).length || null},
           {id:'compliance',     label:'Compliance',      icon:<ShieldCheck size={16}/>, badge: (complianceItems || []).filter(i => new Date(i.expiresOn).getTime() - Date.now() <= 30 * 864e5).length || null},
           {id:'equipment',      label:'Equipment',       icon:<Wrench size={16}/>, badge: (equipmentData.items || []).filter(e => !e.lastServicedOn || new Date(e.lastServicedOn).getTime() + e.serviceEveryDays * 864e5 <= Date.now() + 14 * 864e5).length || null},
@@ -5938,6 +5952,7 @@ const renderMonthHeatmap = () => {
                       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <span style={{ width:6, height:6, borderRadius:'50%', background: ORDER_STATUS_RING[o.status] || '#555' }} />
                         <span style={{ fontSize:'0.7rem', fontWeight:800, color:'#ddd' }}>{it.name}</span>
+                        {['pending','ready','served'].includes(o.status) && <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'1px 6px', borderRadius:4, letterSpacing:'0.5px', background: o.status==='served' ? 'rgba(184,164,127,0.18)' : o.status==='ready' ? '#ecdcb9' : 'rgba(184,162,131,0.15)', color: o.status==='ready' ? '#111' : '#b8a47f' }}>{o.status==='ready' ? 'READY TO SERVE' : o.status==='served' ? 'SERVED' : 'COOKING'}</span>}
                         {it.portion && it.portion !== 'Single' && <span style={{ fontSize:'0.55rem', color:'#b4b4b4' }}>({it.portion})</span>}
                         {o.isModified && !it.isExtraItem && <span style={{ fontSize:'0.45rem', fontWeight:900, padding:'1px 5px', borderRadius:4, background:'#c9aa88', color:'#fff', letterSpacing:'0.4px' }}>{it.modChange === 'new' ? 'REPLACED · NEW' : it.modChange === 'qty' ? 'REPLACED · QTY' : 'REPLACED'}</span>}
                       </div>
@@ -5948,6 +5963,12 @@ const renderMonthHeatmap = () => {
               )}
 
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {groupOrders.some(o => o.status === 'ready') && (
+                  <button type="button" onClick={() => markOrdersServed(groupOrders.filter(o => o.status === 'ready'))}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'12px 0', borderRadius:10, border:'none', background:'linear-gradient(135deg,#e6d6b8,#c9aa88)', color:'#111', fontWeight:900, fontSize:'0.68rem', letterSpacing:'1px', cursor:'pointer' }}>
+                    <CheckCircle2 size={14}/> MARK SERVED
+                  </button>
+                )}
                 {t?.groupId && (
                   <button type="button" onClick={() => { unjoinTable(activeTableTicket); setActiveTableTicket(null); }}
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px 0', borderRadius:9, border:'1px solid rgba(211,191,162,0.15)', background:'transparent', color:'#888', fontSize:'0.62rem', fontWeight:900, cursor:'pointer' }}>
@@ -6517,6 +6538,12 @@ const renderMonthHeatmap = () => {
                           <BellRing size={9} /> RE-NOTIFY
                         </button>
                       )}
+                      {isReady && (
+                        <button type="button" onClick={async () => { try { await axios.post(`${API_BASE_URL}/admin/waitlist-collected/${encodeURIComponent(tenantId)}/${entry._id}`); fetchCounterQueue(); showNotif(`${entry.customerName} collected the order`); } catch (err) { showNotif(err.response?.data?.error || 'Could not mark collected', 'error'); } }}
+                          style={{ padding: '5px 12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.35)', color: '#34d399', borderRadius: '7px', fontSize: '0.5rem', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={9} /> COLLECTED
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -6861,6 +6888,8 @@ const renderMonthHeatmap = () => {
  
 
 {/* ── MENU ── */}
+{activeTab === 'opssuite' && <OpsSuite tenantId={tenantId} />}
+
 {activeTab === 'dayclose' && (() => {
   const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
   const dayLabel = (id) => {

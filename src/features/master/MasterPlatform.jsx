@@ -9,9 +9,11 @@ import { K, MONO, errMsg, fmtD, fmtDT, inr, toLocalInput, useLoad, Btn, Pill, Ti
 import { MaGrid, MaDonut, MaBars } from './masterCharts.jsx';
 
 const api = (path, opts = {}) => axios({ url: `${API_BASE_URL}/admin/master/ops${path}`, method: opts.method || 'GET', data: opts.body, params: opts.params });
-const TABS = [['health', 'Health'], ['realtime', 'Realtime & jobs'], ['payments', 'Payment failures'], ['incidents', 'Incidents'], ['backups', 'Backups'], ['usage', 'Storage'], ['push', 'Push'], ['apps', 'App versions'], ['maint', 'Maintenance']];
+const TABS = [['health', 'Health'], ['realtime', 'Realtime & jobs'], ['payments', 'Payment failures'], ['incidents', 'Incidents'], ['backups', 'Backups'], ['usage', 'Storage'], ['push', 'Push'], ['apps', 'App versions'], ['maint', 'Maintenance'], ['saas', 'SaaS analytics'], ['errors', 'App errors'], ['signups', 'Signups']];
 const dur = (s) => (s >= 86400 ? `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h` : s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`);
 const REASON = { limit: 'UPI limit reached', declined: 'Bank declined', noopen: 'UPI app did not open', other: 'Other' };
+
+const Block = ({ title, rows }) => <MaDonut title={title} size={120} rows={rows.slice(0, 8).map((r) => ({ label: r.key, value: r.count }))} />;
 
 function Health() {
   const { data, error, reload } = useLoad(() => api('/health').then((r) => r.data));
@@ -148,7 +150,6 @@ function Push() {
 function Apps() {
   const { data, error } = useLoad(() => api('/app-stats', { params: { days: 30 } }).then((r) => r.data));
   if (!data) return error ? <ErrorLine text={error} /> : <Empty text="Loading…" />;
-  const Block = ({ title, rows }) => <MaDonut title={title} size={120} rows={rows.slice(0, 8).map((r) => ({ label: r.key, value: r.count }))} />;
   return (<>
     <div className="k-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}><Tile label="App launches, 30 days" value={data.total.toLocaleString('en-IN')} /><Tile label="Opened as installed app" value={data.installRate == null ? '—' : `${data.installRate}%`} sub={`${data.installed} launches`} /></div>
     <div style={{ fontSize: 11.5, color: K.faint }}>{data.note}</div>
@@ -178,8 +179,51 @@ function Maintenance() {
   </>);
 }
 
+const gm = (path) => axios.get(`${API_BASE_URL}/admin/master/${path}`).then((r) => r.data);
+const RISK = { 'at-risk': 'warn', watch: 'dim', healthy: 'gold' };
+
+function Saas() {
+  const { data, error } = useLoad(() => gm('saas-analytics'));
+  if (!data) return error ? <ErrorLine text={error} /> : <Empty text="Loading…" />;
+  const s = data.states;
+  return (<>
+    <div className="k-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
+      <Tile label="Monthly recurring revenue" value={inr(data.mrr)} sub="from each client's last payment" /><Tile label="Annual run rate" value={inr(data.arr)} />
+      <Tile label="Clients" value={data.tenants} /><Tile label="Churned" value={`${data.churnPct}%`} tone={data.churnPct > 15 ? 'warn' : undefined} sub="expired or switched off" /><Tile label="Renewing soon" value={data.renewingSoon} />
+    </div>
+    <Section title="Plan status" hint="Where every client stands today">
+      <MaDonut size={130} rows={[{ label: 'Active', value: s.active }, { label: 'Expiring', value: s.expiring }, { label: 'Grace period', value: s.grace }, { label: 'Expired', value: s.expired }, { label: 'Disabled', value: s.disabled }].filter((r) => r.value > 0)} />
+    </Section>
+    <Section title="Client health" hint="Based on bills settled in the last 7 days and plan status. Reach out to at-risk clients first">
+      <Table rows={data.health.slice(0, 30)} cols={[
+        { key: 'client', label: 'Client', render: (x) => x.name || x.tenantId }, { key: 'plan', label: 'Plan', render: (x) => x.state }, { key: 'bills_7d', label: 'Bills 7d', render: (x) => x.bills7d }, { key: 'bills_30d', label: 'Bills 30d', render: (x) => x.bills30d },
+        { key: 'health', label: 'Health', render: (x) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Bar value={x.health} max={100} /> <Pill tone={RISK[x.risk]}>{x.risk}</Pill></span> },
+      ]} />
+    </Section>
+    <Section title="Cohorts" hint="Clients that joined each month and how many are still on a live plan">
+      <Table rows={data.cohorts} cols={[{ key: 'month', label: 'Month', render: (x) => x.month }, { key: 'joined', label: 'Joined', render: (x) => x.joined }, { key: 'still_active', label: 'Still active', render: (x) => x.stillActive }, { key: 'retention', label: 'Retention', render: (x) => `${x.joined ? Math.round((x.stillActive / x.joined) * 100) : 0}%` }]} />
+    </Section>
+  </>);
+}
+
+function AppErrors() {
+  const { data, error } = useLoad(() => gm('client-errors'));
+  if (!data) return error ? <ErrorLine text={error} /> : <Empty text="Loading…" />;
+  return (<Section title="Errors from guest, owner and operator screens" hint="Grouped by message, last 14 days. The most frequent ones are worth fixing first">
+    {data.groups.length === 0 ? <Empty text="No screen errors reported. Good news." /> : <Table rows={data.groups} cols={[{ key: 'message', label: 'Message', render: (x) => x.message }, { key: 'times', label: 'Times', render: (x) => x.count }, { key: 'last_seen', label: 'Last seen', render: (x) => fmtDT(x.last) }, { key: 'page', label: 'Page', render: (x) => x.url }]} />}
+  </Section>);
+}
+
+function Signups() {
+  const { data, error } = useLoad(() => gm('signups'));
+  if (!data) return error ? <ErrorLine text={error} /> : <Empty text="Loading…" />;
+  return (<Section title="Website trial signups" hint="Self-serve requests from the landing page. Call them within the hour">
+    {data.length === 0 ? <Empty text="No signups yet." /> : <Table rows={data} cols={[{ key: 'restaurant', label: 'Restaurant', render: (x) => x.restaurant }, { key: 'owner', label: 'Owner', render: (x) => x.owner }, { key: 'phone', label: 'Phone', render: (x) => x.phone }, { key: 'city', label: 'City', render: (x) => x.city || '–' }, { key: 'when', label: 'When', render: (x) => fmtDT(x.createdAt) }]} />}
+  </Section>);
+}
+
 export default function MasterPlatform() {
   const [tab, setTab] = useState('health');
-  const view = { health: <Health />, realtime: <Realtime />, payments: <Payments />, incidents: <Incidents />, backups: <Backups />, usage: <Usage />, push: <Push />, apps: <Apps />, maint: <Maintenance /> }[tab];
+  const view = { saas: <Saas />, errors: <AppErrors />, signups: <Signups />, health: <Health />, realtime: <Realtime />, payments: <Payments />, incidents: <Incidents />, backups: <Backups />, usage: <Usage />, push: <Push />, apps: <Apps />, maint: <Maintenance /> }[tab];
   return <Screen icon={Activity} title="Platform" subtitle="Server health, realtime, payments, incidents, backups, storage, push, app versions and maintenance" tabs={TABS} tab={tab} onTab={setTab}>{view}</Screen>;
 }
