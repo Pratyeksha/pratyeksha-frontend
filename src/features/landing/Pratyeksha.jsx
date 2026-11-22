@@ -6,8 +6,13 @@ import "../../shared/ui/premium-polish.css";
 // The landing stylesheet is injected through <style> (it carries page-level html/body rules that must not outlive this route),
 // but now lives in real .css files: Vite minifies them and the JS chunk no longer carries ~300 kB of template-string CSS.
 import CSS from "./landing.css?inline";
-import NX_CSS from "./landing-nx.css?inline";
-import { PageHero, CtaBand, ExploreRow, BookingFeatures, RoleBenefits, Outcomes, AboutSystem } from "./SitePages.jsx";
+import NX_CSS0 from "./landing-nx.css?inline";
+import CHROME_CSS from "./site-chrome.css?inline";
+import { PageHero, SiteFooter, DemoForm } from "./SiteChrome.jsx";
+import { LANDING_PAGES, FAQS, buildGraph, pageByKey } from "./seoData.js";
+import { LandingFX, Statement, VelocityMarquee } from "./FX.jsx";
+const NX_CSS = NX_CSS0 + CHROME_CSS;
+import { CtaBand, ExploreRow, BookingFeatures, RoleBenefits, Outcomes, AboutSystem } from "./SitePages.jsx";
 
 // Shared base: with VITE_API_URL unset this used "" and posted to /demo-request on the Vercel host (404), losing every lead.
 import API_BASE_URL from "../../shared/lib/apiBase.js";
@@ -20,26 +25,7 @@ const SITE_PATHS = ["/", "/landing", "/landing/features", "/landing/benefits", "
 const PAGE_OF_PATH = { "/landing/features": "features", "/landing/benefits": "benefits", "/landing/about": "about", "/landing/demo": "demo" };
 const SECTION_PAGE = { home: "/landing", system: "/landing", features: "/landing/features", experience: "/landing/features", operations: "/landing/features", billing: "/landing/features", inventory: "/landing/features", intelligence: "/landing/features", marketing: "/landing/features", discovery: "/landing/features", control: "/landing/features", benefits: "/landing/benefits", signature: "/landing/benefits", journey: "/landing/benefits", command: "/landing/benefits", about: "/landing/about", demo: "/landing/demo", faq: "/landing/demo" };
 const PAGE_META = {
-  home: {
-    title: "Pratyeksha | Restaurant Experience System",
-    description: "Pratyeksha connects customer experience, menu, kitchen, billing, inventory, intelligence and marketing workflows for cafés and restaurants.",
-  },
-  features: {
-    title: "Features | Pratyeksha",
-    description: "Every Pratyeksha feature: QR menu with 3D dishes, waitlist, reservation and pickup, kitchen display, GST billing, inventory, owner insights and guest discovery.",
-  },
-  benefits: {
-    title: "Benefits | Pratyeksha",
-    description: "What Pratyeksha changes for owners, managers, kitchens and guests: fewer missed orders, clearer margins, easier GST and guests who return.",
-  },
-  about: {
-    title: "About | Pratyeksha",
-    description: "Pratyeksha is a restaurant experience system for Indian cafés and restaurants, connecting guest, kitchen, counter and owner in one live system.",
-  },
-  demo: {
-    title: "Book a Private Demo | Pratyeksha",
-    description: "Book a private Pratyeksha walkthrough focused on how your café or restaurant works today.",
-  },
+  ...Object.fromEntries(LANDING_PAGES.map((p) => [p.key, { title: p.title, description: p.description }])),
   privacy: {
     title: "Privacy Policy | Pratyeksha",
     description: "Learn how Pratyeksha collects, uses, protects, retains and handles personal data across its website, enquiries and services.",
@@ -524,16 +510,7 @@ const useCases = [
     points: ["Central intelligence", "Outlet operations", "Menu control", "Reporting"],
   },
 ];
-const faqs = [
-  { q: "Is Pratyeksha a POS replacement?", a: "Pratyeksha is designed as a connected restaurant experience and intelligence layer, bringing customer experience, kitchen workflows, billing, inventory and marketing signals into one connected journey." },
-  { q: "Can customers order directly from a QR menu?", a: "Yes. The customer journey can connect QR discovery with menu browsing, dish information, ordering and configured order-status experiences." },
-  { q: "Can operators control menu visibility?", a: "Yes. Menu visibility and availability can be managed as part of the restaurant's operational workflow, while keeping the customer-facing menu connected." },
-  { q: "Does the platform support GST billing?", a: "The platform includes GST-oriented billing workflows with CGST and SGST calculations, invoice sequencing and configured payment methods." },
-  { q: "Can recipes connect with inventory?", a: "Yes. Recipe and ingredient relationships can connect dish availability, stock movement and operational inventory information." },
-  { q: "Can it support multiple outlets?", a: "Pratyeksha is designed with multi-outlet workflows in mind, allowing menu, operational and reporting structures to extend across locations." },
-  { q: "Does it support multilingual experiences?", a: "The customer experience can support English, Marathi and Hindi-oriented menu and voice experiences where configured." },
-  { q: "How can I see it for my restaurant?", a: "Use the private demonstration form and share the parts of your current restaurant setup you want to improve. The walkthrough can then focus on the relevant Pratyeksha workflows." },
-];
+const faqs = FAQS;
 const CHATBOT_KNOWLEDGE = {
   brand: "Pratyeksha",
   positioning: "Pratyeksha is a premium restaurant experience system for cafes and restaurants. It is a connected customer-experience and intelligence layer rather than a simple POS replacement.",
@@ -1923,6 +1900,7 @@ function App() {
         : currentPath === "/thank-you" || sent
           ? "thankYou"
           : SITE_PATHS.includes(currentPath) ? (PAGE_OF_PATH[currentPath] || "home") : "notFound";
+    const sp = pageByKey(pageKey);
     const title = PAGE_META[pageKey].title;
     const description = PAGE_META[pageKey].description;
     document.title = title;
@@ -1978,6 +1956,11 @@ function App() {
       if (!tag) { tag = document.createElement("meta"); tag.setAttribute("name", name); document.head.appendChild(tag); }
       tag.setAttribute("content", content);
     };
+    if (sp) setNamed("keywords", sp.keywords);
+    setNamed("author", "Pratyeksha");
+    let alt = document.querySelector('link[rel="alternate"][hreflang="en-IN"]');
+    if (!alt) { alt = document.createElement("link"); alt.rel = "alternate"; alt.hreflang = "en-IN"; document.head.appendChild(alt); }
+    alt.href = canonicalUrl;
     setNamed("twitter:card", "summary_large_image");
     setNamed("twitter:title", title);
     setNamed("twitter:description", description);
@@ -1990,36 +1973,8 @@ function App() {
       document.head.appendChild(structuredData);
     }
     const origin = window.location.origin;
-    const graph = [
-      {
-        "@type": "Organization",
-        "@id": `${origin}/#org`,
-        name: "Pratyeksha",
-        url: origin,
-        logo: `${origin}/pratyeksha-logo.png`,
-        email: "hello.pratyeksha@gmail.com",
-        telephone: "+91 87676 22654",
-        address: { "@type": "PostalAddress", addressLocality: "Kolhapur", addressRegion: "Maharashtra", addressCountry: "IN" },
-      },
-      { "@type": "WebSite", "@id": `${origin}/#website`, url: origin, name: "Pratyeksha", inLanguage: "en-IN", publisher: { "@id": `${origin}/#org` } },
-    ];
-    if (pageKey === "home") {
-      graph.push({
-        "@type": "SoftwareApplication",
-        name: "Pratyeksha",
-        applicationCategory: "BusinessApplication",
-        operatingSystem: "Web, Android, iOS",
-        description: PAGE_META.home.description,
-        url: `${origin}/landing`,
-        publisher: { "@id": `${origin}/#org` },
-        featureList: modules.flatMap((m) => m.features).slice(0, 24),
-      });
-      graph.push({
-        "@type": "FAQPage",
-        mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
-      });
-    }
-    structuredData.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
+    const graph = sp ? buildGraph(origin, sp, { faqs, features: modules.flatMap((m) => m.features).slice(0, 24) }) : { "@context": "https://schema.org", "@graph": [{ "@type": "WebSite", url: origin, name: "Pratyeksha" }] };
+    structuredData.textContent = JSON.stringify(graph);
   }, [legalPage, currentPath, sent]);
   useEffect(() => {
     const onScroll = () => {
@@ -2443,6 +2398,8 @@ function App() {
   }
   return (
     <div className="site">
+      <a className="nx-skip" href="#main-content" onClick={(e) => { e.preventDefault(); document.getElementById("main-content")?.focus(); document.getElementById("main-content")?.scrollIntoView(); }}>Skip to content</a>
+      <LandingFX page={page} />
       <style>{CSS}{NX_CSS}</style>
       {}
       <div
@@ -2481,12 +2438,14 @@ function App() {
         </div>
         <p className="nx-sheet-foot">Restaurant Experience System</p>
       </div>
-      <main className="nx-main">
+      <main className="nx-main" id="main-content" tabIndex={-1}>
         <ScrollProgress />
         {page === "home" && (<>
         {/* ───────── HERO ───────── */}
         <section id="home" className="nx-hero">
           <div className="nx-hero-bg" aria-hidden="true"><i className="glow" /></div>
+          <div className="sc-aurora sc-aurora-home" aria-hidden="true"><i className="o1" /><i className="o2" /><i className="o3" /></div>
+          <div className="sc-grid" aria-hidden="true" />
           <div className="nx-hero-copy">
             <div className="nx-kicker reveal"><span />FOR THE PEOPLE WHO RUN THE ROOM</div>
             <h1 className="nx-h1 reveal delay-1">
@@ -2576,6 +2535,8 @@ function App() {
         </>)}
         {page === "features" && (<>
           <PageHero I={I} go={go} eyebrow="EVERY FEATURE" title="One system for the whole" em="restaurant day." lead="From the guest's first scan to the owner's last report, here is everything Pratyeksha does today." />
+          <Statement eyebrow="ONE CONNECTED FLOW" text="Scan. Order. Cook. Bill. Restock. Understand." em="Every step, one system." />
+          <VelocityMarquee words={["Guest menu","Kitchen display","Waitlist","GST billing","Stock","Insights"]} />
         {/* ───────── MODULES ───────── */}
         {modules.map((module, index) => (
           <section id={module.id} className={`nx-mod ${module.color === "cream" ? "is-cream" : "is-dark"} ${index % 2 ? "is-flip" : ""}`} key={module.id}>
@@ -2647,6 +2608,7 @@ function App() {
         </>)}
         {page === "benefits" && (<>
           <PageHero I={I} go={go} eyebrow="WHAT CHANGES" title="Better service, clearer numbers," em="guests who return." lead="What owners, managers, kitchens and guests notice once the whole restaurant runs on one live system." />
+          <Statement eyebrow="WHAT YOU WILL NOTICE" text="Fewer missed orders. Clearer margins. Easier GST days." em="Guests who come back." />
           <Outcomes I={I} />
           <RoleBenefits I={I} />
         {/* ───────── PILLARS ───────── */}
@@ -2787,6 +2749,8 @@ function App() {
         </>)}
         {page === "about" && (<>
           <PageHero I={I} go={go} eyebrow="ABOUT PRATYEKSHA" title="Software that keeps up with" em="your service." lead="A restaurant experience system for Indian cafés and restaurants." />
+          <Statement eyebrow="MADE IN MAHARASHTRA" text="Built for the way Indian cafés and restaurants actually run:" em="GST, UPI, English and Marathi." />
+          <VelocityMarquee words={["Café","Restaurant","QSR","Bakery","Cloud kitchen","Multi-outlet"]} base={-0.8} />
           <AboutSystem I={I} go={go} contact={[["tel:+918767622654", "+91 87676 22654", "phone"], ["tel:+918605015294", "+91 86050 15294", "phone"], ["mailto:hello.pratyeksha@gmail.com", "hello.pratyeksha@gmail.com", "mail"]]} />
         {/* ───────── USE CASES ───────── */}
         <section className="nx-sec nx-use">
@@ -2814,7 +2778,8 @@ function App() {
         </>)}
         {page === "demo" && (<>
         {/* ───────── INSTAGRAM + DEMO (kept as built) ───────── */}
-        <section id="demo" className="demo-section">
+        <PageHero I={I} eyebrow="PRIVATE DEMONSTRATION" title="Make room for" em="better service." lead="Tell us what slows your team down, from order handoffs and stock visibility to billing or bringing guests back. We'll focus the walkthrough on your priorities and help you understand the right setup." cta={false} />
+        <section id="demo" className="demo-section sc-demo">
           <div className="demo-grid">
             <div className="demo-copy">
               <div className="eyebrow reveal">
@@ -2855,171 +2820,8 @@ function App() {
                 </a>
               </div>
             </div>
-            <div className="demo-form-wrap reveal">
-              {sent ? (
-                <div className="success-state">
-                  <div className="success-icon">
-                    <I name="check" size={28} />
-                  </div>
-                  <small>REQUEST RECEIVED</small>
-                  <h3>We'll be in touch.</h3>
-                  <p>
-                    Your demo request has been received. Our team
-                    will contact you shortly.
-                  </p>
-                  <button type="button"
-                    className="button primary"
-                    onClick={() => setSent(false)}
-                  >
-                    Send another request
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={submitDemo} aria-busy={sending}>
-                  <div className="form-top">
-                    <div className="form-heading-mark"><I name="sparkles" size={17} /></div>
-                    <div className="form-heading-copy"><small>YOUR PRIVATE WALKTHROUGH</small><strong>Let’s make it relevant.</strong><span>About a minute to get started</span></div>
-                    <span className="form-step">01 <i /> 01</span>
-                  </div>
-                  <div className="hp-field" aria-hidden="true">
-                    <label htmlFor="website">Website</label>
-                    <input
-                      id="website"
-                      name="website"
-                      type="text"
-                      tabIndex={-1}
-                      autoComplete="off"
-                      value={form.website}
-                      onChange={updateForm}
-                    />
-                  </div>
-                  <div className="form-grid">
-                    <label className={fieldErrors.name ? "has-error" : ""}>
-                      <span>Your Name *</span>
-                      <input
-                        name="name"
-                        aria-invalid={Boolean(fieldErrors.name)}
-                        aria-describedby={fieldErrors.name ? "name-error" : undefined}
-                        required
-                        autoComplete="name"
-                        maxLength={80}
-                        value={form.name}
-                        onChange={updateForm}
-                        placeholder="The person behind the business"
-                      />
-                      {fieldErrors.name && <span id="name-error" className="field-error">{fieldErrors.name}</span>}
-                    </label>
-                    <label className={fieldErrors.business ? "has-error" : ""}>
-                      <span>Café / Restaurant *</span>
-                      <input
-                        name="business"
-                        aria-invalid={Boolean(fieldErrors.business)}
-                        aria-describedby={fieldErrors.business ? "business-error" : undefined}
-                        required
-                        autoComplete="organization"
-                        maxLength={120}
-                        value={form.business}
-                        onChange={updateForm}
-                        placeholder="Your café or restaurant name"
-                      />
-                      {fieldErrors.business && <span id="business-error" className="field-error">{fieldErrors.business}</span>}
-                    </label>
-                    <label className={fieldErrors.phone ? "has-error" : ""}>
-                      <span>Phone *</span>
-                      <input
-                        name="phone"
-                        aria-invalid={Boolean(fieldErrors.phone)}
-                        aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
-                        required
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        pattern="[0-9+()\-\s]{8,20}"
-                        maxLength={20}
-                        value={form.phone}
-                        onChange={updateForm}
-                        placeholder="+91"
-                      />
-                      {fieldErrors.phone && <span id="phone-error" className="field-error">{fieldErrors.phone}</span>}
-                    </label>
-                    <label className={fieldErrors.email ? "has-error" : ""}>
-                      <span>Email</span>
-                      <input
-                        name="email"
-                        aria-invalid={Boolean(fieldErrors.email)}
-                        aria-describedby={fieldErrors.email ? "email-error" : undefined}
-                        type="email"
-                        inputMode="email"
-                        autoComplete="email"
-                        maxLength={160}
-                        value={form.email}
-                        onChange={updateForm}
-                        placeholder="you@example.com"
-                      />
-                      {fieldErrors.email && <span id="email-error" className="field-error">{fieldErrors.email}</span>}
-                    </label>
-                    <label className="full">
-                      <span>Business Type</span>
-                      <select
-                        name="type"
-                        aria-invalid={Boolean(fieldErrors.type)}
-                        aria-describedby={fieldErrors.type ? "type-error" : undefined}
-                        value={form.type}
-                        onChange={updateForm}
-                      >
-                        <option value="">Select type</option>
-                        <option>Café / Coffee Shop</option>
-                        <option>Restaurant</option>
-                        <option>QSR / Fast Food</option>
-                        <option>Bakery / Bistro</option>
-                        <option>Cloud Kitchen</option>
-                        <option>Multi-outlet Business</option>
-                      </select>
-                      {fieldErrors.type && <span id="type-error" className="field-error">{fieldErrors.type}</span>}
-                    </label>
-                    <label className="full">
-                      <span>What would you like to improve?</span>
-                      <textarea
-                        name="message"
-                        maxLength={1000}
-                        value={form.message}
-                        onChange={updateForm}
-                        placeholder="What takes too much time? Where do things get missed? What would you like to improve?"
-                        rows={4}
-                      />
-                    </label>
-                  </div>
-                  <p className="form-privacy-notice"><strong>How we use these details:</strong> We collect the information you provide here to respond to your demo request, arrange the walkthrough and communicate about that request. Required fields are marked *. Analytics consent is separate and optional.</p>
-                  <label className={`form-consent ${fieldErrors.privacyConsent ? "has-error" : ""}`}>
-                    <input
-                      name="privacyConsent"
-                      type="checkbox"
-                      checked={form.privacyConsent}
-                      onChange={updateForm}
-                      aria-invalid={Boolean(fieldErrors.privacyConsent)}
-                      aria-describedby="privacy-consent-note"
-                    />
-                    <span id="privacy-consent-note">I confirm that I have read the <button type="button" onClick={() => openLegal("privacy")}>Privacy Policy</button> and agree that Pratyeksha may use the details I submit to respond to my demo request.</span>
-                  </label>
-                  {fieldErrors.privacyConsent && <span className="field-error" role="alert">{fieldErrors.privacyConsent}</span>}
-                  {formError && (
-                    <p className="form-error" role="alert" aria-live="polite">
-                      {formError}
-                    </p>
-                  )}
-                  <button
-                    className="submit-button"
-                    type="submit"
-                    disabled={sending}
-                  >
-                    {sending ? "Sending securely…" : "See Your Restaurant, Connected"}
-                    <I name="arrow" size={17} />
-                  </button>
-                  <p className="form-note">
-                    <I name="lock-keyhole" size={13} /> Your details are used to respond to this request. No pressure—just a focused conversation about your operation.
-                  </p>
-                </form>
-              )}
+            <div className="demo-form-wrap">
+              <DemoForm I={I} form={form} updateForm={updateForm} fieldErrors={fieldErrors} formError={formError} sending={sending} onSubmit={submitDemo} sent={sent} onAgain={() => setSent(false)} openLegal={openLegal} />
             </div>
           </div>
         </section>
@@ -3058,48 +2860,8 @@ function App() {
       </main>
 
       {/* ───────── FOOTER ───────── */}
-      <footer className="nx-footer">
-        <div className="nx-wrap">
-          <div className="nx-foot-top">
-            <div className="nx-foot-brand">
-              <button type="button" onClick={() => scrollTo("home")} aria-label="Back to top"><BrandLogo className="nx-foot-logo" alt="Pratyeksha logo" /></button>
-              <p>The digital layer behind better café and restaurant experiences.</p>
-              <div className="nx-foot-tag">VISUALIZE <i /> ORDER <i /> RELISH</div>
-            </div>
-            <div className="nx-foot-col"><h4>Platform</h4>
-              <button type="button" onClick={() => scrollTo("experience")}>Customer Experience</button>
-              <button type="button" onClick={() => scrollTo("operations")}>Kitchen & Operations</button>
-              <button type="button" onClick={() => scrollTo("billing")}>Smart Billing</button>
-              <button type="button" onClick={() => scrollTo("inventory")}>Inventory</button>
-              <button type="button" onClick={() => scrollTo("intelligence")}>Intelligence</button>
-            </div>
-            <div className="nx-foot-col"><h4>For Business</h4>
-              <button type="button" onClick={() => scrollTo("about")}>Cafés</button>
-              <button type="button" onClick={() => scrollTo("about")}>Restaurants</button>
-              <button type="button" onClick={() => scrollTo("about")}>QSRs</button>
-              <button type="button" onClick={() => scrollTo("about")}>Multi-outlet</button>
-              <button type="button" onClick={() => scrollTo("demo")}>Book Demo</button>
-            </div>
-            <div className="nx-foot-col"><h4>Contact</h4>
-              <a href="tel:+918767622654">+91 87676 22654</a>
-              <a href="tel:+918605015294">+91 86050 15294</a>
-              <a href="mailto:hello.pratyeksha@gmail.com">hello.pratyeksha@gmail.com</a>
-              <span className="nx-foot-loc"><I name="map" size={13} />Maharashtra, India</span>
-            </div>
-          </div>
-          <div className="nx-wordmark" aria-hidden="true">PRATYEKSHA</div>
-          <div className="nx-foot-mid"><span>RESTAURANT EXPERIENCE SYSTEM</span><button type="button" onClick={() => scrollTo("home")}>Back to top <I name="arrow" size={14} /></button></div>
-          <div className="nx-foot-bot">
-            <span>© {new Date().getFullYear()} Pratyeksha. All rights reserved.</span>
-            <span>Built for cafés & restaurants.</span>
-            <div>
-              <button type="button" onClick={() => openLegal("privacy")}>Privacy Policy</button>
-              <button type="button" onClick={() => openLegal("terms")}>Terms of Use</button>
-              <button type="button" onClick={() => setShowConsentSettings(true)}>Privacy Settings</button>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter I={I} Logo={<BrandLogo className="nx-foot-logo" alt="Pratyeksha logo" />} go={go} scrollTo={scrollTo} openLegal={openLegal} onPrivacySettings={() => setShowConsentSettings(true)}
+        contact={[["tel:+918767622654", "+91 87676 22654", "phone"], ["tel:+918605015294", "+91 86050 15294", "phone"], ["mailto:hello.pratyeksha@gmail.com", "hello.pratyeksha@gmail.com", "mail"]]} />
       <PratyekshaChatbot />
       <div className="mobile-sticky-cta" aria-label="Book a private demo">
         <button type="button" onClick={() => scrollTo("demo")}><span>See Your Restaurant, Connected</span><I name="arrow" size={15} /></button>

@@ -2,24 +2,55 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath } from 'node:url'
+import fs from 'node:fs'
+import path from 'node:path'
+import { LANDING_PAGES, LEGAL_PAGES, FAQS, SITE_NAME, buildGraph } from './src/features/landing/seoData.js'
 
 // Single source of truth for absolute URLs used by SEO tags, robots.txt and sitemap.xml.
 // Set VITE_SITE_URL (for example https://www.yourdomain.com) in the production environment.
 // If it is not set, tags that need an absolute URL are left out instead of pointing at a wrong host.
-const PAGES = [
-  { path: '/landing', changefreq: 'weekly', priority: '1.0' },
-  { path: '/privacy', changefreq: 'yearly', priority: '0.3' },
-  { path: '/terms', changefreq: 'yearly', priority: '0.3' },
-]
+const PAGES = [...LANDING_PAGES, ...LEGAL_PAGES]
 
 function seo(siteUrl) {
-  const base = String(siteUrl || '').trim().replace(/\/+$/, '')
+  const base = String(siteUrl || '').trim().replace(/\/+$/, '').replace(/\/landing$/, '')
   return {
     name: 'pratyeksha-seo',
     transformIndexHtml(html) {
       if (base) return html.replaceAll('__SITE__', base)
       // No absolute URL known: drop every line that needs one.
       return html.split('\n').filter((l) => !l.includes('__SITE__')).join('\n')
+    },
+    // One real HTML file per landing page: title, description, canonical, Open Graph, JSON-LD and a crawlable <noscript> body,
+    // so link previews and crawlers that do not run JavaScript see each page's own content. The SPA still boots on top of it.
+    closeBundle() {
+      const dist = path.resolve(process.cwd(), 'dist'); const src = path.join(dist, 'index.html')
+      if (!fs.existsSync(src)) return
+      const html0 = fs.readFileSync(src, 'utf8')
+      const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      for (const pg of LANDING_PAGES) {
+        const url = `${base}${pg.path}`
+        let h = html0
+        h = h.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(pg.title)}</title>`)
+        h = h.replace(/<meta name="description"[^>]*>/, `<meta name="description" content="${esc(pg.description)}" />`)
+        if (base) h = h.replace(/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${url}" />`)
+        h = h.replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${esc(pg.title)}" />`)
+        h = h.replace(/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${esc(pg.description)}" />`)
+        if (base) h = h.replace(/<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${url}" />`)
+        h = h.replace(/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${esc(pg.title)}" />`)
+        h = h.replace(/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${esc(pg.description)}" />`)
+        const extra = [
+          `<meta name="keywords" content="${esc(pg.keywords)}" />`,
+          `<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />`,
+          ...(base ? [`<link rel="alternate" hreflang="en-IN" href="${url}" />`, `<link rel="alternate" hreflang="x-default" href="${url}" />`] : []),
+          `<script type="application/ld+json" id="pratyeksha-structured-data">${JSON.stringify(buildGraph(base, pg, { faqs: FAQS, features: LANDING_PAGES[0].points.concat(LANDING_PAGES[1].points) })).replace(/</g, '\\u003c')}</script>`,
+        ].join('\n    ')
+        h = h.replace('</head>', `    ${extra}\n  </head>`)
+        const nav = LANDING_PAGES.map((p) => `<li><a href="${p.path}">${esc(p.crumb)}</a></li>`).join('')
+        const body = `<noscript><header><nav aria-label="Primary"><ul>${nav}</ul></nav></header><main><h1>${esc(pg.h1)}</h1><p>${esc(pg.summary)}</p><ul>${pg.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${pg.key === 'home' ? `<h2>Frequently asked questions</h2>${FAQS.map((f) => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('')}` : ''}<p>Contact: <a href="mailto:hello.pratyeksha@gmail.com">hello.pratyeksha@gmail.com</a>, <a href="tel:+918767622654">+91 87676 22654</a>. ${esc(SITE_NAME)}, Maharashtra, India.</p></main></noscript>`
+        h = h.replace('<div id="root">', `${body}<div id="root">`)
+        const out = path.join(dist, pg.path.replace(/^\//, ''), 'index.html')
+        fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, h)
+      }
     },
     generateBundle() {
       const day = new Date().toISOString().slice(0, 10)
