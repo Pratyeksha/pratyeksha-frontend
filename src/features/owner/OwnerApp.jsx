@@ -314,6 +314,7 @@ function OwnerProvider({ tenantId, children }) {
   const [liveOrderEvent, setLiveOrderEvent] = useState(null);
   const [liveStockEvent, setLiveStockEvent] = useState(null);
   const [liveStaffEvent, setLiveStaffEvent] = useState(null);
+  const [dataTick, setDataTick] = useState(0); // bumped (debounced) on any write to this restaurant; every data hook refetches on it
   const [outlet, setOutlet] = useState(tenantId);
 
   // authStatus: 'checking' | 'needsSetup' | 'needsLogin' | 'authed' | 'error'
@@ -444,7 +445,11 @@ function OwnerProvider({ tenantId, children }) {
   useEffect(() => {
     if (authStatus !== 'authed') return;
     const s = io(API_BASE, { transports: ['websocket', 'polling'], auth: { token: authToken } });
-    s.on('connect', () => { setConnected(true); s.emit('join_owner_room', outlet); s.emit('join_restaurant', outlet); });
+    let tickTimer = null;
+    const bump = () => { if (tickTimer) clearTimeout(tickTimer); tickTimer = setTimeout(() => { tickTimer = null; setDataTick(t => t + 1); }, 400); };
+    let seenConnect = false;
+    s.on('connect', () => { setConnected(true); s.emit('join_owner_room', outlet); s.emit('join_restaurant', outlet); if (seenConnect) bump(); seenConnect = true; });
+    s.on('tenant_data_changed', (d) => { if (d && d.tenantId && String(d.tenantId) !== String(outlet)) return; bump(); });
     s.on('disconnect', () => setConnected(false));
     s.on('owner_alert', (payload) => setLiveAlert({ ...payload, _t: Date.now() }));
     s.on('admin_notification', (payload) => setLiveAdminNotification({ ...payload, _t: Date.now() }));
@@ -479,7 +484,7 @@ function OwnerProvider({ tenantId, children }) {
     s.on('staff_clocked_in', () => setLiveStaffEvent({ type: 'staff_clocked_in', _t: Date.now() }));
     s.on('staff_clocked_out', () => setLiveStaffEvent({ type: 'staff_clocked_out', _t: Date.now() }));
     setSocket(s);
-    return () => s.disconnect();
+    return () => { if (tickTimer) clearTimeout(tickTimer); s.disconnect(); };
   }, [outlet, authStatus, authToken]);
 
   // Remember the active outlet so relaunching the installed app (which opens
@@ -489,9 +494,9 @@ function OwnerProvider({ tenantId, children }) {
   }, [outlet, authStatus]);
 
   const value = useMemo(() => ({
-    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent,
+    tenantId: outlet, setOutlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, dataTick,
     authStatus, ownerName, supportView, completeAuth, logout, authErrorDetail, authBlocked, retryAuth: resolveAuth
-  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, authStatus, ownerName, supportView, completeAuth, logout, authErrorDetail, authBlocked, resolveAuth]);
+  }), [outlet, socket, connected, liveAlert, liveAdminNotification, liveOrderEvent, liveStockEvent, liveStaffEvent, dataTick, authStatus, ownerName, supportView, completeAuth, logout, authErrorDetail, authBlocked, resolveAuth]);
   return <OwnerCtx.Provider value={value}>{children}</OwnerCtx.Provider>;
 }
 
@@ -511,7 +516,7 @@ function AuthGate({ children }) {
 
 /** Generic fetch-with-loading hook, scoped to the active tenant, auto-refreshing. */
 function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
-  const { tenantId } = useOwner();
+  const { tenantId, dataTick } = useOwner();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -540,6 +545,7 @@ function useOwnerData(path, { refreshMs = 0, params = {} } = {}) {
   }, [path, tenantId, paramsKey]);
 
   useEffect(() => { fetchData(false); }, [fetchData]);
+  useEffect(() => { if (dataTick) fetchData(true); }, [dataTick]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!refreshMs) return;
     const id = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) fetchData(true); }, refreshMs);

@@ -1,16 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { motion, useScroll, useTransform, useSpring, useMotionValue, useReducedMotion, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform, useReducedMotion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 
 /* Motion-driven chrome for the multi-page landing site: page heroes, the footer and the demo form.
    `I` is the landing icon component; all copy describes current Pratyeksha features only. */
 
 const EASE = [0.22, 1, 0.36, 1];
-
-/* Cursor-following spotlight: writes --mx/--my on the element, CSS paints the glow. */
-function useSpotlight() {
-  return { onPointerMove: (e) => { const el = e.currentTarget; const r = el.getBoundingClientRect(); el.style.setProperty("--mx", `${e.clientX - r.left}px`); el.style.setProperty("--my", `${e.clientY - r.top}px`); } };
-}
 
 /* Word-by-word headline reveal. */
 function Words({ text, className = "", delay = 0 }) {
@@ -36,127 +31,80 @@ const CHIPS = {
 
 export function PageHero({ I, eyebrow, title, em, lead, go, cta = true, children }) {
   const reduce = useReducedMotion();
-  const spot = useSpotlight();
   const { scrollY } = useScroll();
-  const yBack = useTransform(scrollY, [0, 600], [0, reduce ? 0 : 120]);
-  const yChips = useTransform(scrollY, [0, 600], [0, reduce ? 0 : -60]);
-  const fade = useTransform(scrollY, [0, 520], [1, 0.25]);
-  const chips = CHIPS[eyebrow] || [];
+  const scale = useTransform(scrollY, [0, 520], [1, reduce ? 1 : 0.92]);
+  const y = useTransform(scrollY, [0, 520], [0, reduce ? 0 : 70]);
+  const fade = useTransform(scrollY, [0, 460], [1, 0.1]);
+  const meta = CHIPS[eyebrow] || [];
   return (
-    <section className="sc-hero" onPointerMove={spot.onPointerMove}>
-      <motion.div className="sc-aurora" style={{ y: yBack }} aria-hidden="true">
-        <i className="o1" /><i className="o2" /><i className="o3" />
-      </motion.div>
-      <div className="sc-grid" aria-hidden="true" />
-      <div className="sc-spot" aria-hidden="true" />
-      <div className="nx-wrap sc-hero-in">
-        <motion.div className="sc-hero-copy" style={{ opacity: fade }}>
-          <motion.span className="sc-eyebrow" initial={reduce ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE }}>
-            <b /> {eyebrow}
-          </motion.span>
-          <h1 aria-label={`${title} ${em}`}>
-            <Words text={title} delay={0.1} />
-            <Words text={em} className="sc-em" delay={0.1 + String(title).split(" ").length * 0.07} />
-          </h1>
-          <motion.p initial={reduce ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE, delay: 0.55 }}>{lead}</motion.p>
-          {cta && go && (
-            <motion.div className="sc-actions" initial={reduce ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE, delay: 0.7 }}>
-              <MagneticButton onClick={() => go("/landing/demo")}>Book a private demo <I name="arrow" size={16} /></MagneticButton>
-            </motion.div>
-          )}
-          {children}
-        </motion.div>
-        {chips.length > 0 && (
-          <motion.div className="sc-chips" style={{ y: yChips }} aria-hidden="true">
-            {chips.map(([ic, t, d], i) => (
-              <motion.div key={t} className={`sc-chip c${i + 1}`} initial={reduce ? false : { opacity: 0, scale: 0.8, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE, delay: 0.5 + i * 0.12 }}>
-                <span className="sc-float" style={{ animationDelay: `${i * -1.3}s` }}>
-                  <span className="sc-chip-ic"><I name={ic} size={17} /></span>
-                  <span><b>{t}</b><small>{d}</small></span>
-                </span>
-              </motion.div>
-            ))}
+    <section className="sc-hero">
+      <motion.div className="nx-wrap sc-hero-in" style={{ scale, y, opacity: fade }}>
+        <motion.span className="sc-eyebrow" initial={reduce ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE }}>{eyebrow}</motion.span>
+        <h1 aria-label={`${title} ${em}`}>
+          <Words text={title} delay={0.1} />
+          <Words text={em} className="sc-em" delay={0.1 + String(title).split(" ").length * 0.07} />
+        </h1>
+        <motion.p initial={reduce ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE, delay: 0.5 }}>{lead}</motion.p>
+        {cta && go && (
+          <motion.div className="sc-actions" initial={reduce ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE, delay: 0.62 }}>
+            <MagneticButton onClick={() => go("/landing/demo")}>Book a private demo <I name="arrow" size={16} /></MagneticButton>
           </motion.div>
         )}
-      </div>
-      <div className="sc-cue" aria-hidden="true"><span /></div>
+        {children}
+      </motion.div>
+      {meta.length > 0 && (
+        <motion.ul className="nx-wrap sc-meta" initial={reduce ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: EASE, delay: 0.75 }}>
+          {meta.map(([, t, d], i) => (<li key={t}><b>{String(i + 1).padStart(2, "0")}</b><strong>{t}</strong><span>{d}</span></li>))}
+        </motion.ul>
+      )}
     </section>
   );
 }
 
-/* A button that leans toward the pointer. */
+/* Primary button: plain hover states, no pointer tracking. */
 export function MagneticButton({ children, onClick, className = "", type = "button" }) {
-  const reduce = useReducedMotion();
-  const x = useMotionValue(0); const y = useMotionValue(0);
-  const sx = useSpring(x, { stiffness: 220, damping: 16 }); const sy = useSpring(y, { stiffness: 220, damping: 16 });
-  const move = (e) => {
-    if (reduce) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    x.set((e.clientX - (r.left + r.width / 2)) * 0.28); y.set((e.clientY - (r.top + r.height / 2)) * 0.34);
-  };
   return (
-    <motion.button type={type} className={`sc-btn ${className}`} style={{ x: sx, y: sy }} onPointerMove={move} onPointerLeave={() => { x.set(0); y.set(0); }} whileTap={{ scale: 0.96 }} onClick={onClick}>
-      <span className="sc-btn-shine" aria-hidden="true" />
+    <button type={type} className={`sc-btn ${className}`} onClick={onClick}>
       <span className="sc-btn-in">{children}</span>
-    </motion.button>
+    </button>
   );
 }
 
 /* ───────── Footer ───────── */
-const TICKER = ["Guest menu", "Kitchen display", "Operator portal", "Owner dashboard", "Waitlist", "Reservations", "Pickup", "GST billing", "UPI payments", "Stock control", "English + Marathi", "Day close"];
-
 export function SiteFooter({ I, Logo, go, scrollTo, contact, openLegal, onPrivacySettings }) {
   const reduce = useReducedMotion();
-  const spot = useSpotlight();
   const year = new Date().getFullYear();
-  const nav = [
-    ["Explore", [["Home", "/landing"], ["Features", "/landing/features"], ["Benefits", "/landing/benefits"], ["About", "/landing/about"], ["Book a demo", "/landing/demo"]]],
-  ];
+  const links = [["Home", "/landing"], ["Features", "/landing/features"], ["Benefits", "/landing/benefits"], ["About", "/landing/about"], ["Book a demo", "/landing/demo"]];
+  const rise = (d = 0) => (reduce ? {} : { initial: { opacity: 0, y: 28 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: "-60px" }, transition: { duration: 0.9, ease: EASE, delay: d } });
   return (
-    <footer className="sc-foot" onPointerMove={spot.onPointerMove}>
-      <div className="sc-foot-glow" aria-hidden="true"><i /><i /></div>
-      <div className="sc-foot-spot" aria-hidden="true" />
-
-      <div className="sc-ticker" aria-hidden="true">
-        <div className="sc-ticker-track">
-          {[...TICKER, ...TICKER].map((t, i) => (<span key={i}>{t}<i /></span>))}
-        </div>
-      </div>
-
+    <footer className="sc-foot">
       <div className="nx-wrap">
-        <motion.div className="sc-cta" initial={reduce ? false : { opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.9, ease: EASE }}>
-          <span className="sc-eyebrow"><b /> READY WHEN YOU ARE</span>
+        <motion.div className="sc-cta" {...rise()}>
+          <span className="sc-eyebrow">Ready when you are</span>
           <h2>See your restaurant, <em>connected.</em></h2>
-          <p>A private walkthrough focused on how your café or restaurant works today.</p>
           <MagneticButton onClick={() => go("/landing/demo")}>Book a private demo <I name="arrow" size={17} /></MagneticButton>
         </motion.div>
-
         <div className="sc-cols">
-          <motion.div className="sc-brand" initial={reduce ? false : { opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8, ease: EASE }}>
+          <motion.div className="sc-brand" {...rise(0.05)}>
             <button type="button" onClick={() => scrollTo("home")} aria-label="Back to top">{Logo}</button>
             <p>The digital layer behind better café and restaurant experiences.</p>
-            <div className="sc-tag">VISUALIZE <i /> ORDER <i /> RELISH</div>
           </motion.div>
-          {nav.map(([h, links]) => (
-            <motion.nav className="sc-col" key={h} aria-label={h} initial={reduce ? false : { opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8, ease: EASE, delay: 0.08 }}>
-              <h4>{h}</h4>
-              {links.map(([t, p]) => (<button type="button" key={p} className="sc-link" onClick={() => go(p)}><span>{t}</span><I name="arrow" size={13} /></button>))}
-            </motion.nav>
-          ))}
-          <motion.div className="sc-col" initial={reduce ? false : { opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8, ease: EASE, delay: 0.16 }}>
+          <motion.nav className="sc-col" aria-label="Explore" {...rise(0.1)}>
+            <h4>Explore</h4>
+            {links.map(([t, p]) => (<button type="button" key={p} className="sc-link" onClick={() => go(p)}>{t}</button>))}
+          </motion.nav>
+          <motion.div className="sc-col" {...rise(0.15)}>
             <h4>Talk to us</h4>
-            {contact.map(([href, label, ic]) => (<a key={href} className="sc-link" href={href}><span><I name={ic} size={13} /> {label}</span></a>))}
-            <span className="sc-loc"><I name="map" size={13} /> Maharashtra, India</span>
+            {contact.map(([href, label]) => (<a key={href} className="sc-link" href={href}>{label}</a>))}
+            <span className="sc-loc">Maharashtra, India</span>
           </motion.div>
         </div>
       </div>
-
       <div className="sc-word" aria-hidden="true">
-        {"PRATYEKSHA".split("").map((c, i) => (
-          <motion.span key={i} initial={reduce ? false : { y: "70%", opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 1, ease: EASE, delay: i * 0.05 }}>{c}</motion.span>
+        {"PRATYEKSHA".split("").map((ch, i) => (
+          <motion.span key={i} initial={reduce ? false : { y: "60%", opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 1.1, ease: EASE, delay: i * 0.05 }}>{ch}</motion.span>
         ))}
       </div>
-
       <div className="nx-wrap sc-bot">
         <span>© {year} Pratyeksha. All rights reserved.</span>
         <div>
@@ -288,8 +236,7 @@ export function DemoForm({ I, form, updateForm, fieldErrors, formError, sending,
             {formError && <p className="form-error" role="alert" aria-live="polite">{formError}</p>}
             <div className="sc-row">
               <button type="button" className="sc-back" onClick={() => setStep(1)}>Back</button>
-              <motion.button type="submit" className="sc-submit" disabled={sending} whileTap={{ scale: 0.97 }}>
-                <span className="sc-btn-shine" aria-hidden="true" />
+              <motion.button type="submit" className="sc-submit" disabled={sending} whileTap={{ scale: 0.98 }}>
                 <span className="sc-btn-in">{sending ? "Sending securely…" : "See Your Restaurant, Connected"} <I name="arrow" size={16} /></span>
               </motion.button>
             </div>

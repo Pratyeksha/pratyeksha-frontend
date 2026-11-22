@@ -2182,6 +2182,7 @@ useEffect(() => {
   const [sessionClosedLocal, setSessionClosedLocal] = useState(false);
   const [lastBill, setLastBill] = useState(null);
   const [payInfo, setPayInfo] = useState(null);
+  const [billSending, setBillSending] = useState(false);                              // the bill request is in flight
   const [billSeed, setBillSeed] = useState(null);                                   // set when the guest taps Generate bill
   const { request: liveBill } = useBillStatus({ tenantId, tableNumber, enabled: !!billSeed, seed: billSeed });
   const billFlow = liveBill || billSeed;                                            // { id, status: requested | sent | settled | cancelled, bill }
@@ -4034,8 +4035,8 @@ useEffect(() => {
 const billRequestLockRef = useRef(false);
 const requestFinalBill = async () => {
   if (billRequestLockRef.current) return;
-  billRequestLockRef.current = true;
-  try { await requestFinalBillOnce(); } finally { billRequestLockRef.current = false; }
+  billRequestLockRef.current = true; setBillSending(true);
+  try { await requestFinalBillOnce(); } finally { billRequestLockRef.current = false; setBillSending(false); }
 };
 const requestFinalBillOnce = async () => {
   if (!customerInfo.name || !customerInfo.phone) { triggerAlert("detailsReq", "error"); return; }
@@ -4044,12 +4045,18 @@ const requestFinalBillOnce = async () => {
   try {
     // Persistent bill request (database + real-time alert to the operator). The operator reviews, applies offers / discounts and
     // sends the final bill; until then the guest sees a waiting screen and NO amount.
-    const br = await axios.post(`${BASE_URL}/bill-requests`, { tenantId, tableNumber, guestName: customerInfo.name.trim(), guestPhone: customerInfo.phone.replace(/\D/g, '') })
+    const br = await axios.post(`${BASE_URL}/bill-requests`, { tenantId, tableNumber, guestName: customerInfo.name.trim(), guestPhone: customerInfo.phone.replace(/\D/g, '') }, { timeout: 15000 })
       .then((r) => r.data).catch((e) => ({ error: e?.response?.data?.error || (language === 'mr' ? 'बिल विनंती पाठवता आली नाही. कृपया पुन्हा प्रयत्न करा.' : 'Could not send your bill request. Please check your connection and try again.') }));
     if (br.error) { triggerAlert(br.error, 'error'); return; }
     billCreated = true;
     setBillSeed({ id: br.request.id, status: br.request.status, sentAt: br.request.sentAt, requestedAt: br.request.requestedAt, bill: br.request.bill || null });
 
+    // The request exists on the server now: move the guest to the next step (the waiting screen, then the approved bill) at once.
+    // Saving the guest record and asking for push permission used to be awaited before this, and a permission prompt that is never
+    // answered kept the button stuck forever. They run in the background instead.
+    markBillGenerated();
+    setBillRequested(true);
+    const afterBill = async () => {
     const visitItems = finalBillItems
       .filter(i => !i.isExtraItem)
       .map(i => ({
@@ -4110,6 +4117,9 @@ const requestFinalBillOnce = async () => {
           .catch(() => {});
       }, 800);
     }
+
+    };
+    afterBill().catch(() => {});
 
     // ── CLEAR everything after checkout ──
     try {
@@ -7419,10 +7429,10 @@ if (qrCheck === 'unverified') {
     {(() => {
       const ready = customerInfo.name.trim() && customerInfo.phone.length === 10 && guestConsent;
       return (
-        <button type="button" className="px-gold" disabled={!ready} onClick={requestFinalBill}
+        <button type="button" className="px-gold" disabled={!ready || billSending} onClick={requestFinalBill}
           style={{ width: '100%', padding: '18px', borderRadius: 20, fontWeight: 900, fontSize: '0.88rem', letterSpacing: '0.6px', textTransform: 'uppercase', cursor: ready ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'Poppins, sans-serif' }}>
           <ReceiptText size={17} strokeWidth={2.2} />
-          {t[language].generateBill}
+          {billSending ? (language === 'mr' ? 'पाठवत आहे…' : 'Sending…') : t[language].generateBill}
           <ChevronRight size={16} />
         </button>
       );

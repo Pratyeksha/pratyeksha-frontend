@@ -1,5 +1,5 @@
 /* ═══════════════ NX — Pratyeksha landing, ink / gold / cream ═══════════════ */
-.site{--nx-ink:#0d0b08;--nx-ink2:#14110c;--nx-panel:#1a160f;--nx-line:rgba(223,193,141,.16);--nx-line2:rgba(223,193,141,.3);--nx-cream:#f4ecdc;--nx-cream2:#ebe0ca;--nx-gold:#c7a269;--nx-gold2:#dfc18d;--nx-gold3:#a98248;--nx-text:#efe6d3;--nx-mute:#a99d86;--nx-dark:#201d17;--nx-gut:clamp(18px,5vw,56px);--nx-serif:'DM Serif Display',Georgia,serif;--nx-sans:'DM Sans',system-ui,sans-serif;--nx-mono:'DM Mono',ui-monospace,monospace;background:var(--nx-ink)!important;color:var(--nx-text)}
+.site{--nx-ink:#0d0b08;--nx-ink2:#14110c;--nx-panel:#1a160f;--nx-line:rgba(223,193,141,.16);--nx-line2:rgba(223,193,141,.3);--nx-cream:#f4ecdc;--nx-cream2:#ebe0ca;--nx-gold:#c7a269;--nx-gold2:#dfc18d;--nx-gold3:#a98248;--nx-text:#efe6d3;--nx-mute:#a99d86;--nx-dark:#201d17;--nx-gut:clamp(18px,5vw,56px);--nx-serif:'Instrument Serif',Georgia,serif;--nx-sans:'Geist',system-ui,sans-serif;--nx-mono:'Geist Mono',ui-monospace,monospace;background:var(--nx-ink)!important;color:var(--nx-text)}
 .site .nx-main{background:var(--nx-ink);overflow:clip}
 .site .nx-main *,.site .nx-nav *,.site .nx-sheet *,.site .nx-footer *{max-width:none}
 .site .nx-main img,.site .nx-nav img,.site .nx-footer img{max-width:100%}

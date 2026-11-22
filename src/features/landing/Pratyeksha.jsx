@@ -1777,7 +1777,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [openFaq, setOpenFaq] = useState(-1);
   const [activeProduct, setActiveProduct] = useState("experience");
-  const [cursorActive, setCursorActive] = useState(false);
+  const [, setCursorActive] = useState(false);
   const [legalPage, setLegalPage] = useState(() => {
     const path = getPath();
     return path === "/privacy" ? "privacy" : path === "/terms" ? "terms" : null;
@@ -2402,14 +2402,6 @@ function App() {
       <LandingFX page={page} />
       <style>{CSS}{NX_CSS}</style>
       {}
-      <div
-        ref={dotRef}
-        className={`cursor-dot ${cursorActive ? "active" : ""}`}
-      />
-      <div
-        ref={ringRef}
-        className={`cursor-ring ${cursorActive ? "active" : ""}`}
-      />
       {}
       <div
         className="scroll-progress"
@@ -2444,8 +2436,6 @@ function App() {
         {/* ───────── HERO ───────── */}
         <section id="home" className="nx-hero">
           <div className="nx-hero-bg" aria-hidden="true"><i className="glow" /></div>
-          <div className="sc-aurora sc-aurora-home" aria-hidden="true"><i className="o1" /><i className="o2" /><i className="o3" /></div>
-          <div className="sc-grid" aria-hidden="true" />
           <div className="nx-hero-copy">
             <div className="nx-kicker reveal"><span />FOR THE PEOPLE WHO RUN THE ROOM</div>
             <h1 className="nx-h1 reveal delay-1">

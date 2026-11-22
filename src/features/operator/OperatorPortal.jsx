@@ -1017,6 +1017,7 @@ useEffect(() => {
     // inventory_updated / low_stock_alert fire once per ingredient touched by an order; each one re-downloaded inventory, staff,
     // menu, categories, tenant and salary. Coalesce a burst into one refresh.
     let mgmtRefreshTimer = null;
+    let liveSyncTimer = null;
     const refreshManagementSoon = () => {
       if (mgmtRefreshTimer) clearTimeout(mgmtRefreshTimer);
       mgmtRefreshTimer = setTimeout(() => { mgmtRefreshTimer = null; fetchManagementData(); }, 700);
@@ -1024,7 +1025,7 @@ useEffect(() => {
     // Events emitted while the socket was down are never replayed: refetch on every RE-connect.
     let hasConnectedOnce = socket.connected;
     const resyncOnReconnect = () => {
-      if (hasConnectedOnce) { fetchInitialData(); fetchCounterQueue(); }
+      if (hasConnectedOnce) { fetchInitialData(); fetchCounterQueue(); fetchManagementData(); fetchAnalytics(); }
       hasConnectedOnce = true;
     };
 
@@ -1039,6 +1040,16 @@ useEffect(() => {
       fetchTableRevenueDataRef.current();
       fetchReservationNoShowDataRef.current();
 
+      // Generic live sync: any write to this restaurant (from any device or module) refreshes every tab here without a manual reload.
+      socket.on('tenant_data_changed', (d) => {
+        if (d && d.tenantId && String(d.tenantId) !== String(tenantId)) return;
+        if (liveSyncTimer) clearTimeout(liveSyncTimer);
+        liveSyncTimer = setTimeout(() => {
+          liveSyncTimer = null;
+          fetchInitialData({ skipMenu: true }); fetchCounterQueue(); fetchManagementData(); fetchAnalytics();
+          try { window.dispatchEvent(new CustomEvent('px:data-changed', { detail: d || {} })); } catch { /* ignore */ }
+        }, 400);
+      });
       socket.on("new_order", (order) => { 
         playAlertSound('order'); 
         showNotif(`Order Update: Table ${order?.tableNumber ?? ''}`); 
@@ -1308,12 +1319,13 @@ socket.on('aggregator_session_restored', (data) => {
         'waitlist_assigned', 'waitlist_updated', 'pickup_ready', 'bill_requested',
         'order_voided', 'order_status_updated', 'order_modification_detected', 'aggregator_order_incoming',
         'aggregator_order_decided', 'aggregator_session_expired', 'aggregator_session_restored',
-        'push_stats_updated', 'campaign_sent'
+        'push_stats_updated', 'campaign_sent', 'tenant_data_changed'
       ].forEach(event => socket.off(event));
       ingredientAlertTimers.forEach(clearTimeout);
       ingredientAlertTimers.clear();
       ingredientAlertByName.clear();
       if (mgmtRefreshTimer) clearTimeout(mgmtRefreshTimer);
+      if (liveSyncTimer) clearTimeout(liveSyncTimer);
       socket.disconnect();
     };
 }, [isAuthenticated, tenantId, socket, fetchInitialData, fetchAnalytics, fetchManagementData, fetchCounterQueue]);

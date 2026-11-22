@@ -1202,6 +1202,8 @@ const KitchenViewInner = () => {
       if (data.status === 'pending') { dispatchedRef.current.delete(String(orderId)); scheduleReconcile(); return; } // recalled on another device: show it again
       if (data.status && data.status !== 'pending') removeAndNotify(orderId, ['cancelled', 'rejected', 'voided'].includes(String(data.status).toLowerCase()));
     });
+    // Any write for this restaurant (stock, menu, a table cleared, an order edited on another device): refetch the board by itself.
+    socket.on('tenant_data_changed', d => { if (!d || (d.tenantId && d.tenantId !== tenantId)) return; scheduleReconcile(); });
     socket.on('order_voided', data => {
       if (!data) return;
       const orderId = data.orderId || data._id;
@@ -1239,7 +1241,7 @@ const KitchenViewInner = () => {
       clearInterval(safetyPoll);
       clearTimeout(reconcileRef.current);
       abortRef.current?.abort(); // stop downloads that nobody is waiting for any more
-      ['new_order', 'kds_item_cross_sync', 'kds_item_timing_updated', 'order_modification_detected', 'order_status_updated', 'order_voided', 'menu_updated', 'menu_item_deleted', 'menu_item_restored', 'menu_bulk_updated']
+      ['tenant_data_changed', 'new_order', 'kds_item_cross_sync', 'kds_item_timing_updated', 'order_modification_detected', 'order_status_updated', 'order_voided', 'menu_updated', 'menu_item_deleted', 'menu_item_restored', 'menu_bulk_updated']
         .forEach(ev => socket.off(ev));
       socket.off('connect', joinRestaurant);
       socket.disconnect();
@@ -1281,10 +1283,12 @@ const KitchenViewInner = () => {
     // longer be tapped again while the save is still in flight. Restore it on failure.
     setOrders(prev => prev.filter(o => o._id !== orderId));
     try {
-      const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'ready', tenantId });
+      // The kitchen marks a ticket SERVED in one step. The server applies everything the old 'ready' step did (prep time, dish completion,
+      // aggregator sync) plus the stock deduction, and the guest / operator / owner screens move to served together.
+      const readyRes = await axios.patch(`${BASE_URL}/admin/orders/${orderId}`, { status: 'served', tenantId });
       later(() => dispatchedRef.current.delete(idKey), 90000);
       // a mis-tap is the most common KDS mistake: for a few seconds the call-out carries an UNDO button (the full list is under Recall)
-      pushToast({ kind: 'done', title: `DISPATCHED · ${shortLabel(order)}`, body: 'Mistake? Undo it.', action: { label: 'UNDO', id: idKey }, ttl: 8000 });
+      pushToast({ kind: 'done', title: `SERVED · ${shortLabel(order)}`, body: 'Mistake? Undo it.', action: { label: 'UNDO', id: idKey }, ttl: 8000 });
       try { localStorage.removeItem(`kds_note_${orderId}`); } catch { /* ignore */ } // the private ticket note is no longer needed
       fetchHealth({ summary: true }); // refresh the database-backed dispatched/avg figures
       const authoritativeSeconds = Number(readyRes.data?.order?.prepTimeSeconds);
@@ -2766,7 +2770,7 @@ const KDSOrderCard = React.memo(React.forwardRef(({
           <button type="button" className="kx-sq" aria-label="Read this ticket aloud" title="Read aloud" onClick={() => onSpeak?.(order)}><Volume2 size={17} /></button>
           <button type="button" className={`kx-go${urgency === 'high' ? ' late' : ''}`} onClick={() => onReady(order._id)} style={isMobile ? { minHeight: 46 } : undefined}>
             {urgency === 'high' && <Flame size={15} strokeWidth={2.5} />}
-            {urgency === 'high' ? 'Dispatch now' : allDone ? <><CheckCircle2 size={15} /> All ready — dispatch</> : <>Complete ticket <ArrowRight size={14} /></>}
+            {urgency === 'high' ? 'Mark served now' : allDone ? <><CheckCircle2 size={15} /> All done — mark served</> : <>Mark served <ArrowRight size={14} /></>}
           </button>
         </div>
       </div>
