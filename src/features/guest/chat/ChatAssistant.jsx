@@ -2,7 +2,7 @@
  * The conversation is answered on-device by chatEngine.js from the live restaurant data the home screen already holds. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Mic, RotateCcw, MapPin, Phone, Navigation, ChevronRight, Copy, Check, Clock, Sparkles, CalendarCheck, ShoppingBag, Armchair, Tag, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { X, Send, Mic, RotateCcw, MapPin, Phone, Navigation, ChevronRight, Copy, Check, Clock, Sparkles, CalendarCheck, ShoppingBag, Armchair, Tag, ThumbsUp, ThumbsDown, UtensilsCrossed } from 'lucide-react';
 import { createEngine } from './chatEngine.js';
 import { ArtTile, Orb, PlaceBanner } from './chatArt.jsx';
 import { fx } from '../customerFx.jsx';
@@ -173,6 +173,33 @@ function OfferTicket({ item, t, kit, tr, ui, onOpen }) {
   );
 }
 
+
+function Facts({ rows, tone }) {
+  return (
+    <dl className={`pxc-facts ${tone || ''}`}>
+      {rows.map(([k, v, hi], i) => <div key={i} className={hi ? 'hi' : ''}><dt>{k}</dt><dd>{v}</dd></div>)}
+    </dl>
+  );
+}
+
+function Actions({ t, items, kit, ui, onOpen }) {
+  const phone = String(t.contact || t.phone || '').trim();
+  const call = phone.replace(/\D/g, '').length >= 7 ? `tel:${phone.replace(/[^\d+]/g, '')}` : '';
+  const list = items.filter(Boolean);
+  return (
+    <div className="pxc-acts">
+      {list.map((k) => {
+        if (k === 'menu') return <button key={k} type="button" className="pxc-btn primary" onClick={() => onOpen(t)}><UtensilsCrossed size={14} />{ui.openMenu}</button>;
+        if (k === 'maps') return <a key={k} className="pxc-btn ghost" href={kit.directionsUrl(t)} target="_blank" rel="noopener noreferrer"><Navigation size={14} />{ui.directions}</a>;
+        if (k === 'call' && call) return <a key={k} className="pxc-btn ghost" href={call}><Phone size={14} />{ui.call}</a>;
+        if (k === 'reserve') return <button key={k} type="button" className="pxc-btn ghost" onClick={() => onOpen(t, 'reservation')}><CalendarCheck size={14} />{ui.reserve}</button>;
+        if (k === 'pickup') return <button key={k} type="button" className="pxc-btn ghost" onClick={() => onOpen(t, 'pickup')}><ShoppingBag size={14} />{ui.pickup}</button>;
+        return null;
+      })}
+    </div>
+  );
+}
+
 function Steps({ title, steps }) {
   return (
     <div className="pxc-steps">
@@ -232,6 +259,9 @@ export default function ChatAssistant({ tenants, menu, pos: posProp, lang, kit, 
     const el = scrollRef.current;
     if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
   }, []);
+  const tickRaf = useRef(0);
+  const tickBottom = useCallback(() => { if (tickRaf.current) return; tickRaf.current = requestAnimationFrame(() => { tickRaf.current = 0; toBottom(false); }); }, [toBottom]);
+  useEffect(() => () => { if (tickRaf.current) cancelAnimationFrame(tickRaf.current); }, []);
   useEffect(() => { toBottom(true); }, [msgs.length, typing, toBottom]);
   useEffect(() => { toBottom(false); }, [toBottom]);
   useEffect(() => { writeStore(msgs, memory); }, [msgs, memory]);
@@ -285,7 +315,6 @@ export default function ChatAssistant({ tenants, menu, pos: posProp, lang, kit, 
     setText('');
     stick.current = true;
     push({ role: 'user', text: q });
-    setSuggest(null);
     setTyping(true);
     const delay = 380 + Math.min(q.length * 9, 520);
     const id = setTimeout(async () => {
@@ -349,8 +378,10 @@ export default function ChatAssistant({ tenants, menu, pos: posProp, lang, kit, 
   const open = (t, service) => { onOpenTenant(t, 'chat', service); };
 
   const renderBlock = (b, i, m) => {
-    if (b.t === 'text') return <p key={i} className="pxc-text"><Reveal text={b.text} run={m.fresh && m.id === lastBotId} onTick={toBottom} /></p>;
+    if (b.t === 'text') return <p key={i} className="pxc-text"><Reveal text={b.text} run={m.fresh && m.id === lastBotId} onTick={tickBottom} /></p>;
     if (b.t === 'steps') return <Steps key={i} title={b.title} steps={b.steps} />;
+    if (b.t === 'facts') return <Facts key={i} rows={b.rows} tone={b.tone} />;
+    if (b.t === 'actions') { const t = byId.get(b.id); return t ? <Actions key={i} t={t} items={b.items} kit={kit} ui={ui} onOpen={open} /> : null; }
     if (b.t === 'place') { const t = byId.get(b.id); return t ? <PlaceDetail key={i} t={t} kit={kit} tr={tr} ui={ui} pos={pos} now={now} onOpen={open} /> : null; }
     if (b.t === 'places') {
       const list = b.ids.map((id) => byId.get(id)).filter(Boolean);
@@ -458,15 +489,13 @@ export default function ChatAssistant({ tenants, menu, pos: posProp, lang, kit, 
       </AnimatePresence>
 
       <footer className="pxc-foot">
-        <AnimatePresence>
-          {!typing && (suggest?.length || empty === false) && (suggest || []).length > 0 && (
-            <motion.div key="chips" className="pxc-chips" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}>
-              {suggest.map((s, i) => (
-                <motion.button type="button" key={s.label} className="pxc-chip" onClick={() => send(s.send)} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.04 }}>{s.label}</motion.button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {!empty && (suggest || []).length > 0 && (
+          <div className={`pxc-chips${typing ? ' idle' : ''}`} aria-hidden={typing}>
+            {suggest.map((s) => (
+              <button type="button" key={s.label} className="pxc-chip" tabIndex={typing ? -1 : 0} onClick={() => send(s.send)}>{s.label}</button>
+            ))}
+          </div>
+        )}
         <form className="pxc-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
           {!text && !listening && <span className="pxc-ph" aria-hidden="true"><span key={phIdx % (ui.examples.length + 1)}>{(phIdx % (ui.examples.length + 1)) === 0 ? ui.placeholder : ui.examples[(phIdx % (ui.examples.length + 1)) - 1]}</span></span>}
           <textarea ref={inputRef} rows={1} value={text} maxLength={300} placeholder={listening ? ui.listening : (text ? '' : ' ')} aria-label={ui.placeholder}

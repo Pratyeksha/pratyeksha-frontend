@@ -35,7 +35,7 @@
 @keyframes pxcSpin { to { transform: rotate(360deg); } }
 
 /* scroll area */
-.pxc-scroll { position: relative; z-index: 1; flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; padding: 16px 14px 8px; scrollbar-width: thin; scrollbar-color: rgba(211,191,162,.25) transparent; }
+.pxc-scroll { position: relative; z-index: 1; flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-behavior: auto; padding: 16px 14px 8px; scrollbar-width: thin; scrollbar-color: rgba(211,191,162,.25) transparent; }
 .pxc-col { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 
 /* welcome hero */
@@ -242,3 +242,20 @@
 .pxc-composer:focus-within{animation:pxcGlow 2.4s ease-in-out infinite}
 @keyframes pxcGlow{0%,100%{box-shadow:0 0 0 4px rgba(211,191,162,.1),0 10px 30px rgba(0,0,0,.4)}50%{box-shadow:0 0 0 7px rgba(211,191,162,.05),0 10px 36px rgba(211,191,162,.18)}}
 @media(prefers-reduced-motion:reduce){.pxc-banner-art,.pxc-banner::after,.pxc-hero-orb,.pxc-composer:focus-within,.pxc-actions button.on{animation:none!important}}
+
+/* Answers: compact fact sheet + action buttons (menu, timings, map, call) */
+.pxc-facts { margin: 8px 0 0; padding: 4px 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,.04); display: grid; }
+.pxc-facts > div { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06); font-size: 12.5px; line-height: 1.45; }
+.pxc-facts > div:first-child { border-top: 0; }
+.pxc-facts dt { margin: 0; color: rgba(247,243,235,.55); flex: 0 0 auto; }
+.pxc-facts dd { margin: 0; text-align: right; color: #f7f3eb; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.pxc-facts > div.hi dd { color: #f1e3c6; }
+.pxc-facts.open > div.hi dd { color: #7fdc98; } .pxc-facts.closed > div.hi dd { color: #f0907f; } .pxc-facts.soon > div.hi dd { color: #f0c36f; }
+.pxc-acts { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+.pxc-acts .pxc-btn { width: auto; flex: 0 0 auto; padding: 0 14px; }
+.pxc-acts .pxc-btn.primary { flex: 1 1 auto; }
+/* Suggestion chips keep their row while the answer is being prepared, so nothing below or above shifts */
+.pxc-chips { min-height: 40px; transition: opacity .18s ease; }
+.pxc-chips.idle { opacity: .45; pointer-events: none; }
+.pxc-scroll { overflow-anchor: none; overscroll-behavior: contain; }
+.pxc-aurora { contain: strict; transform: translateZ(0); }

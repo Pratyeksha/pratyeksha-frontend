@@ -136,7 +136,7 @@ createRoot(document.getElementById('root')).render(
       <Suspense fallback={<BrandLoader message={loaderMessageFor(window.location.pathname)} />}>
       <Routes>
         {/* 1. 🌐 Pratyeksha Landing Page */}
-        <Route path="/landing" element={<Pratyeksha />} />
+        <Route path="/landing/*" element={<Pratyeksha />} />
 
         {/* 2. Master Admin (SaaS Control) */}
         <Route path="/master-admin" element={<PratyekshaMasterAdmin />} />

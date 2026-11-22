@@ -46,6 +46,8 @@ FileX2, UserRoundCog, WalletCards, CalendarCog, Target, GitCompareArrows, Minus,
   PackageX, ShieldAlert, Wrench
 , ScanLine, IndianRupee} from 'lucide-react';
 
+/* Shown on a waitlist / pickup / reservation card when the guest changed it after booking, so staff re-check the details before confirming. */
+const EditedTag = ({ e }) => (e?.guestEditCount > 0 ? <span title={e.guestEditedAt ? `Changed ${new Date(e.guestEditedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}` : 'Changed by guest'} style={{ marginLeft: 8, padding: '2px 7px', borderRadius: 6, fontSize: '0.5rem', fontWeight: 900, letterSpacing: '0.1em', background: 'rgba(251,191,36,0.16)', color: '#fbbf24', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>EDITED BY GUEST</span> : null);
 const BASE_URL = API_BASE_URL;
 const asArr = (v) => (Array.isArray(v) ? v : []);
 
@@ -6345,7 +6347,7 @@ const renderMonthHeatmap = () => {
                         <span style={{ fontSize: '0.6rem', fontWeight: '900', color: accentText, fontFamily: 'monospace' }}>#{entry.waitlistPosition}</span>
                       </div>
                       <div>
-                        <div style={{ fontWeight: '900', fontSize: '0.95rem', color: '#ECDCB9', letterSpacing: '0.2px' }}>{entry.customerName}</div>
+                        <div style={{ fontWeight: '900', fontSize: '0.95rem', color: '#ECDCB9', letterSpacing: '0.2px' }}>{entry.customerName}<EditedTag e={entry} /></div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
                           <Users size={9} color="#969696" />
                           <span style={{ fontSize: '0.64rem', color: '#a6a6a6', fontWeight: '700', fontFamily: 'monospace' }}>{entry.partySize} pax</span>
@@ -6444,7 +6446,7 @@ const renderMonthHeatmap = () => {
                         <div style={{ width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(211,191,162,0.04)', border: '1px solid rgba(211,191,162,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <ShoppingBag size={11} color="#8a704d" />
                         </div>
-                        <span style={{ fontWeight: '900', fontSize: '0.95rem', color: '#ECDCB9' }}>{entry.customerName}</span>
+                        <span style={{ fontWeight: '900', fontSize: '0.95rem', color: '#ECDCB9' }}>{entry.customerName}<EditedTag e={entry} /></span>
                         {entry.customerPhone && <span style={{ fontSize: '0.64rem', color: '#969696', fontFamily: 'monospace' }}>{entry.customerPhone}</span>}
                       </div>
 
@@ -6779,7 +6781,7 @@ const renderMonthHeatmap = () => {
 
                           {/* Guest details */}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#ECDCB9', marginBottom: '4px' }}>{entry.customerName}</div>
+                            <div style={{ fontWeight: '900', fontSize: '0.85rem', color: '#ECDCB9', marginBottom: '4px' }}>{entry.customerName}<EditedTag e={entry} /></div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Users size={9} color="#969696" />
@@ -15230,7 +15232,7 @@ try { await axios.delete(`${BASE_URL}/staff/remove/${m._id}`, { data: { tenantId
                       borderRadius:'10px'
                     }}>
                       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                        <div style={{fontWeight:'900',fontSize:'0.82rem',color:'#fff'}}>{entry.customerName}</div>
+                        <div style={{fontWeight:'900',fontSize:'0.82rem',color:'#fff'}}>{entry.customerName}<EditedTag e={entry} /></div>
                         <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
                           <Users size={10} color="#a6a6a6"/>
                           <span style={{fontSize:'0.6rem',color:'#a6a6a6',fontWeight:'700'}}>{entry.partySize}p</span>

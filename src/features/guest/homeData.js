@@ -42,3 +42,6 @@ export function trackSF(tenantId, type, sec) {
   if (q.length >= 20) flush(); else if (!timer) timer = setTimeout(flush, 4000);
 }
 
+
+/* True when at least one listed place has a special or an event to show (same rule as the Happening section). */
+export const hasHappening = (tenants, stores) => (tenants || []).some((t) => { const s = stores?.[t.tenantId]; return !!s && (!!s.special || (s.events || []).length > 0); });

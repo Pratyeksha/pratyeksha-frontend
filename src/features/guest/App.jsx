@@ -25,6 +25,7 @@ import API_BASE_URL, { SOCKET_BASE_URL } from '../../shared/lib/apiBase.js';
 
 import { ensureModelViewer } from './modelViewer.js';
 import { startInvoicePdf } from './invoicePdf.js';
+import EditBooking from './EditBooking.jsx';
 
 import SpoonForkIcon from '../../shared/ui/SpoonForkIcon.jsx';
 import UpiPay from './UpiPay.jsx';
@@ -3396,7 +3397,7 @@ setPrepPct(0);
  
     
     setPlacedOrders(prev => [...prev, ...orderItems.map(i => ({ ...i, orderId: placedOrderId || undefined }))]);
-    if (placedOrderId) setModifiable({ orderId: placedOrderId, deadline: Date.now() + (Number(orderRes.data?.modifyWindowMsLeft) || 120000), items: orderItems });
+    if (placedOrderId) setModifiable({ orderId: placedOrderId, untilConfirmed: !!isCounterScan, deadline: Date.now() + (isCounterScan ? 12 * 3600 * 1000 : (Number(orderRes.data?.modifyWindowMsLeft) || 120000)), items: orderItems });
  
     // ── Customer upsert — single declaration, no duplicate ──
     let storedPhone = null;
@@ -4292,7 +4293,7 @@ const modifyOrderStrip = canModifyOrder && !modifyingOrderId ? (
   <div style={{ margin: '0 16px 10px', padding: '10px 14px', borderRadius: '14px', border: '1px solid rgba(211,191,162,0.25)', background: 'rgba(211,191,162,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
     <div style={{ fontSize: '0.62rem', color: 'rgba(211,191,162,0.8)', fontWeight: 700, lineHeight: 1.35 }}>
       {language === 'mr' ? 'ऑर्डर बदलायचा आहे?' : 'Changed your mind?'}
-      <div style={{ fontSize: '0.55rem', opacity: 0.6, fontFamily: 'monospace' }}>{modifyClock} {language === 'mr' ? 'शिल्लक' : 'left to change'}</div>
+      <div style={{ fontSize: '0.55rem', opacity: 0.6, fontFamily: 'monospace' }}>{modifiable?.untilConfirmed ? (language === 'mr' ? 'रेस्टॉरंट निश्चित करेपर्यंत बदल करता येईल' : 'You can change it until the restaurant confirms') : `${modifyClock} ${language === 'mr' ? 'शिल्लक' : 'left to change'}`}</div>
     </div>
     <button type="button" onClick={(e) => { e.stopPropagation(); startModifyOrder(); }}
       style={{ background: '#d3bfa2', color: '#0c0c0c', border: 'none', borderRadius: '10px', padding: '9px 14px', fontSize: '0.62rem', fontWeight: 900, letterSpacing: '0.4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -4342,11 +4343,12 @@ useEffect(() => {
           if (oldestPending?.createdAt) setOrderPlacedAt(new Date(oldestPending.createdAt).getTime());
           // Page reloaded inside the 2-minute change window: keep the Modify button available.
           const newestPending = pending.length ? pending[pending.length - 1] : null;
-          if (newestPending?.createdAt && newestPending.source !== 'counter-pickup' && (!newestPending.source || newestPending.source === 'direct')) {
-            const left = 120000 - (Date.now() - new Date(newestPending.createdAt).getTime());
+          if (newestPending?.createdAt && (newestPending.source === 'counter-pickup' || !newestPending.source || newestPending.source === 'direct')) {
+            const untilConfirmed = newestPending.source === 'counter-pickup';
+            const left = untilConfirmed ? 12 * 3600 * 1000 : 120000 - (Date.now() - new Date(newestPending.createdAt).getTime());
             if (left > 2000) {
               setModifiable(prev => prev || {
-                orderId: String(newestPending._id), deadline: Date.now() + left,
+                orderId: String(newestPending._id), untilConfirmed, deadline: Date.now() + left,
                 items: (newestPending.items || []).filter(i => !i.isExtraItem).map(i => ({ ...i, menuItemId: i.menuItemId ? String(i.menuItemId) : null }))
               });
             }
@@ -4594,6 +4596,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             </p>
           </div>
 
+          <EditBooking entry={waitlistEntry} kind="reservation" tenantId={tenantId} sessionId={sessionId} menuItems={allMenuItems} language={language} baseUrl={BASE_URL} onSaved={(e) => setWaitlistEntry((prev) => ({ ...prev, ...e, mode: 'reservation' }))} />
+
           {/* ── DOWNLOAD PDF — always shown ── */}
           <button type="button" onClick={downloadReservationPDF} style={{
             width: '100%', padding: '17px',
@@ -4797,6 +4801,8 @@ if (registrationStep === 'confirm' && waitlistEntry) {
             {language === 'mr' ? 'टेबल / ऑर्डर तयार झाल्यावर सूचना मिळेल — पेज बंद केले तरीही.' : "You'll be notified when ready — even if you close this page."}
           </p>
         </div>
+
+<EditBooking entry={waitlistEntry} kind={isDineIn ? 'dine-in' : 'pickup'} tenantId={tenantId} sessionId={sessionId} menuItems={allMenuItems} language={language} baseUrl={BASE_URL} onSaved={(e) => setWaitlistEntry((prev) => ({ ...prev, ...e }))} />
 
 <button type="button" onClick={isDineIn ? downloadWaitlistToken : downloadPickupToken} style={{
   width: '100%', padding: '17px',

@@ -7,6 +7,7 @@ import "../../shared/ui/premium-polish.css";
 // but now lives in real .css files: Vite minifies them and the JS chunk no longer carries ~300 kB of template-string CSS.
 import CSS from "./landing.css?inline";
 import NX_CSS from "./landing-nx.css?inline";
+import { PageHero, CtaBand, ExploreRow, BookingFeatures, RoleBenefits, Outcomes, AboutSystem } from "./SitePages.jsx";
 
 // Shared base: with VITE_API_URL unset this used "" and posted to /demo-request on the Vercel host (404), losing every lead.
 import API_BASE_URL from "../../shared/lib/apiBase.js";
@@ -15,11 +16,29 @@ const GA_MEASUREMENT_ID = (typeof import.meta !== "undefined" && import.meta.env
 const LOGO_SRC = "/pratyeksha-logo.png";
 const CONSENT_STORAGE_KEY = "pratyeksha-consent-v2";
 const CONSENT_VERSION = "2026-09-24";
-const SITE_PATHS = ["/", "/landing", "/thank-you"];
+const SITE_PATHS = ["/", "/landing", "/landing/features", "/landing/benefits", "/landing/about", "/landing/demo", "/thank-you"];
+const PAGE_OF_PATH = { "/landing/features": "features", "/landing/benefits": "benefits", "/landing/about": "about", "/landing/demo": "demo" };
+const SECTION_PAGE = { home: "/landing", system: "/landing", features: "/landing/features", experience: "/landing/features", operations: "/landing/features", billing: "/landing/features", inventory: "/landing/features", intelligence: "/landing/features", marketing: "/landing/features", discovery: "/landing/features", control: "/landing/features", benefits: "/landing/benefits", signature: "/landing/benefits", journey: "/landing/benefits", command: "/landing/benefits", about: "/landing/about", demo: "/landing/demo", faq: "/landing/demo" };
 const PAGE_META = {
   home: {
     title: "Pratyeksha | Restaurant Experience System",
     description: "Pratyeksha connects customer experience, menu, kitchen, billing, inventory, intelligence and marketing workflows for cafés and restaurants.",
+  },
+  features: {
+    title: "Features | Pratyeksha",
+    description: "Every Pratyeksha feature: QR menu with 3D dishes, waitlist, reservation and pickup, kitchen display, GST billing, inventory, owner insights and guest discovery.",
+  },
+  benefits: {
+    title: "Benefits | Pratyeksha",
+    description: "What Pratyeksha changes for owners, managers, kitchens and guests: fewer missed orders, clearer margins, easier GST and guests who return.",
+  },
+  about: {
+    title: "About | Pratyeksha",
+    description: "Pratyeksha is a restaurant experience system for Indian cafés and restaurants, connecting guest, kitchen, counter and owner in one live system.",
+  },
+  demo: {
+    title: "Book a Private Demo | Pratyeksha",
+    description: "Book a private Pratyeksha walkthrough focused on how your café or restaurant works today.",
   },
   privacy: {
     title: "Privacy Policy | Pratyeksha",
@@ -313,6 +332,8 @@ const MODULE_MINI = {
   inventory: { kpis: [["Low stock", "3 items"], ["Wastage", "−18%"]], bars: [82, 74, 66, 58, 49, 41, 36], rows: ["Paneer · 1.2 kg left", "Milk · reorder"] },
   intelligence: { kpis: [["Repeat guests", "42%"], ["Peak hour", "8–9 pm"]], bars: [28, 36, 50, 47, 76, 90, 64], rows: ["Best seller · Masala Dosa", "Slow mover · Soup"] },
   marketing: { kpis: [["Campaign reach", "2.4k"], ["Redeemed", "186"]], bars: [20, 34, 41, 63, 57, 78, 88], rows: ["Weekend offer · live", "Win-back · scheduled"] },
+  discovery: { kpis: [["Place views", "1,120"], ["Deals claimed", "64"]], bars: [22, 30, 44, 41, 66, 72, 90], rows: ["Cold coffee ₹99 · live", "Quiz night · Friday"] },
+  control: { kpis: [["Net sales", "₹48,260"], ["Open alerts", "2"]], bars: [34, 46, 52, 61, 58, 77, 84], rows: ["Day close · matched", "GST export · ready"] },
 };
 const modules = [
   {
@@ -331,6 +352,8 @@ const modules = [
       "Bestseller and Chef Special badges",
       "Live order status",
       "Waitlist, reservation and pickup",
+      "Change a booking until you confirm it",
+      "Allergen and veg filters",
       "Service requests from table",
       "Remembered dishes and reorder",
     ],
@@ -433,6 +456,46 @@ const modules = [
       "Customer segmentation",
       "Campaign insights",
       "Marketing intelligence",
+    ],
+  },
+  {
+    id: "discovery",
+    number: "07",
+    eyebrow: "GUEST DISCOVERY + DEALS",
+    title: "Be the place guests choose first.",
+    text:
+      "Your café or restaurant appears on the Pratyeksha guest home, with a map, opening hours, highlights and today's specials. Guests can claim your deals, and you see what each one brings in.",
+    icon: "map",
+    color: "cream",
+    features: [
+      "Directory with map and distance",
+      "Open-now and hours at a glance",
+      "Storefront: tagline, highlights, price for two",
+      "Today's special and upcoming events",
+      "Deals guests claim with a one-time code",
+      "Redeem codes at the counter",
+      "Concierge chat for menu, timings and directions",
+      "Views, calls, directions and claims per place",
+    ],
+  },
+  {
+    id: "control",
+    number: "08",
+    eyebrow: "OWNER CONTROL ROOM",
+    title: "Run the business from your phone.",
+    text:
+      "The owner dashboard turns every order, bill, stock movement and shift into one clear picture, with alerts when something needs a decision.",
+    icon: "trending",
+    color: "dark",
+    features: [
+      "Executive insights and alerts",
+      "Revenue, sales and P&L",
+      "GST compliance and exports",
+      "Menu intelligence: stars and slow movers",
+      "Kitchen performance",
+      "Staff, attendance and payroll",
+      "Day close with cash reconciliation",
+      "Audit trail of sensitive actions",
     ],
   },
 ];
@@ -905,50 +968,6 @@ function TypewriterWords({ words = HERO_ROTATING_WORDS, typeSpeed = 76, deleteSp
   return <span className="typewriter-word" aria-label={words[wordIndex % words.length]}><span aria-hidden="true">{displayed}</span><i className="typewriter-caret" aria-hidden="true" /></span>;
 }
 
-function InstagramProfileSection() {
-  return (
-    <section className="ig-showcase-section" id="instagram" aria-labelledby="ig-showcase-title">
-      <div className="ig-showcase-inner">
-        <div className="ig-showcase-heading">
-          <span className="eyebrow">CONNECT WITH Pratyeksha</span>
-          <p className="ig-overline">OUR WORLD, BEHIND THE EXPERIENCE <span> / </span> @pratyeksha.io</p>
-          <h2 id="ig-showcase-title">Get to know <em>Pratyeksha.</em></h2>
-          <p className="ig-heading-copy">Product updates, practical ideas and a closer look at how Pratyeksha helps cafés and restaurants deliver better experiences.</p>
-        </div>
-        <div className="ig-profile-card">
-          <div className="ig-profile-topline"><span className="ig-live-dot" /> <span>OFFICIAL INSTAGRAM PROFILE</span><a href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">VISIT INSTAGRAM <I name="arrowUpRight" size={13} /></a></div>
-          <div className="ig-profile-main">
-            <a className="ig-avatar-ring" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer" aria-label="Open Pratyeksha on Instagram">
-              <span className="ig-avatar-inner"><BrandLogo className="ig-profile-logo" alt="Pratyeksha crossed spoon-and-fork brand logo" /></span>
-            </a>
-            <div className="ig-profile-info">
-              <div className="ig-username-row"><h3>pratyeksha.io</h3><span className="ig-profile-label">OFFICIAL PROFILE</span></div>
-              <div className="ig-value-line"><span>Digital guest experience</span><i /> <span>Connected operations</span><i /> <span>Smarter decisions</span></div>
-              <div className="ig-bio-block">
-                <p className="ig-bio-name">Pratyeksha <span>· Restaurant technology platform</span></p>
-                <p className="ig-bio">Run your café or restaurant with more clarity.<br />Digital menus · QR ordering · Kitchen · Operations · Insights<br /><strong>One connected platform. Better guest experiences.</strong></p>
-              </div>
-              <a className="ig-bio-link" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer"><I name="globe" size={14} /> instagram.com/pratyeksha.io</a>
-              <a className="ig-profile-cta" href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">Discover Pratyeksha on Instagram <I name="arrowUpRight" size={15} /></a>
-            </div>
-          </div>
-          <div className="ig-divider"><span>EXPLORE OUR HIGHLIGHTS</span><span>SEVEN WAYS INTO THE Pratyeksha WORLD</span></div>
-          <div className="ig-highlights-grid">
-            {INSTAGRAM_HIGHLIGHTS.map((highlight, index) => (
-              <a key={highlight.title} className={`ig-highlight ig-tone-${highlight.tone}`} href={highlight.url} target="_blank" rel="noreferrer" aria-label={`Open Instagram highlight: ${highlight.title}`}>
-                <span className="ig-highlight-orbit"><span className="ig-highlight-icon"><I name={highlight.icon} size={23} stroke={1.45} /></span><span className="ig-highlight-index">{String(index + 1).padStart(2, "0")}</span></span>
-                <strong>{highlight.title}</strong>
-                <small>{highlight.note}</small>
-              </a>
-            ))}
-          </div>
-          <div className="ig-card-bottom"><span>VISUALIZE. ORDER. RELISH.</span><a href={INSTAGRAM_PROFILE_URL} target="_blank" rel="noreferrer">FOLLOW @pratyeksha.io <I name="arrowUpRight" size={13} /></a></div>
-        </div>
-        <p className="ig-section-footnote">Follow Pratyeksha for product stories, hospitality insights and updates from our connected restaurant platform.</p>
-      </div>
-    </section>
-  );
-}
 
 function PratyekshaChatbot() {
   const [open, setOpen] = useState(false);
@@ -967,7 +986,8 @@ function PratyekshaChatbot() {
   const openDemo = () => {
     setOpen(false);
     window.setTimeout(() => {
-      document.getElementById("demo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (window.location.pathname.replace(/\/+$/, "") !== "/landing/demo") { window.history.pushState({}, "", "/landing/demo"); window.dispatchEvent(new PopStateEvent("popstate")); }
+      window.setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: "smooth" }), 90);
     }, 80);
   };
   const fallbackAnswer = (question) => {
@@ -1779,7 +1799,6 @@ function App() {
   const [scrolled, setScrolled] = useState(false);
   const [progress, setProgress] = useState(0);
   const [openFaq, setOpenFaq] = useState(-1);
-  const [activeSection, setActiveSection] = useState("home");
   const [activeProduct, setActiveProduct] = useState("experience");
   const [cursorActive, setCursorActive] = useState(false);
   const [legalPage, setLegalPage] = useState(() => {
@@ -1792,6 +1811,7 @@ function App() {
   });
   const [cookieConsent, setCookieConsent] = useState(() => readConsent());
   const [showConsentSettings, setShowConsentSettings] = useState(false);
+  const page = PAGE_OF_PATH[currentPath] || "home";
   const activeProductIndex = Object.keys(PRODUCTS).indexOf(activeProduct);
   const activeProductData = PRODUCTS[activeProduct];
   const dotRef = useRef(null);
@@ -1902,7 +1922,7 @@ function App() {
         ? "terms"
         : currentPath === "/thank-you" || sent
           ? "thankYou"
-          : SITE_PATHS.includes(currentPath) ? "home" : "notFound";
+          : SITE_PATHS.includes(currentPath) ? (PAGE_OF_PATH[currentPath] || "home") : "notFound";
     const title = PAGE_META[pageKey].title;
     const description = PAGE_META[pageKey].description;
     document.title = title;
@@ -2002,21 +2022,12 @@ function App() {
     structuredData.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
   }, [legalPage, currentPath, sent]);
   useEffect(() => {
-    const sectionIds = ["home", "system", "experience", "operations", "intelligence", "marketing", "signature", "journey", "command", "fusion", "faq", "demo"];
     const onScroll = () => {
       const y = window.scrollY;
       setScrolled(y > 40);
       const doc = document.documentElement;
       const total = Math.max(0, doc.scrollHeight - window.innerHeight);
       setProgress(total > 0 ? Math.min(100, (y / total) * 100) : 0);
-      let current = "home";
-      for (const id of sectionIds) {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top <= window.innerHeight * 0.34) {
-          current = id;
-        }
-      }
-      setActiveSection(current);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
@@ -2051,7 +2062,7 @@ function App() {
     );
     elements.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [loading, legalPage]);
+  }, [loading, legalPage, page]);
   // Page motion: pointer spotlight on the feature grid + gentle parallax on the hero stage. Reveals are handled by the .reveal observer above.
   useEffect(() => {
     if (loading || legalPage) return undefined;
@@ -2169,9 +2180,9 @@ function App() {
   };
   const goDemoAgain = () => {
     setSent(false);
-    setCurrentPath("/landing");
-    pushPath("/landing");
-    window.setTimeout(() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+    setCurrentPath("/landing/demo");
+    pushPath("/landing/demo");
+    window.setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: "smooth" }), 40);
   };
   const updateConsent = (analytics) => {
     const next = saveConsent(analytics);
@@ -2181,18 +2192,21 @@ function App() {
       window.gtag("consent", "update", { analytics_storage: analytics ? "granted" : "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
     }
   };
+  // Section ids map to site pages: navigating to another page, then scrolling to the section (or the top when it has no anchor).
   const scrollTo = (id) => {
     setMobileOpen(false);
-    requestAnimationFrame(() => {
+    const path = SECTION_PAGE[id];
+    const finish = () => requestAnimationFrame(() => {
       const target = document.getElementById(id);
-      if (!target) return;
-      target.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-        inline: "nearest",
-      });
+      if (target && id !== "home") target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      else window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
     });
+    if (path && path !== currentPath && !(path === "/landing" && currentPath === "/")) {
+      setSent(false); setLegalPage(null); pushPath(path);
+      window.setTimeout(finish, 90);
+    } else finish();
   };
+  const go = (path) => { const id = Object.keys(SECTION_PAGE).find((k) => SECTION_PAGE[k] === path && !["system"].includes(k)); scrollTo(path === "/landing" ? "home" : id); };
   const updateForm = (e) => {
     const { name, value, type, checked } = e.target;
     if (name === "type" && value && !ALLOWED_BUSINESS_TYPES.has(value)) return;
@@ -2450,8 +2464,8 @@ function App() {
           <BrandLogo className="nx-brand-img" alt="Pratyeksha logo" />
         </button>
         <nav className="nx-links" aria-label="Primary">
-          {[["system", "System"], ["experience", "Experience"], ["operations", "Operations"], ["intelligence", "Intelligence"]].map(([id, label]) => (
-            <button type="button" key={id} className={activeSection === id ? "is-on" : ""} onClick={() => scrollTo(id)}>{label}</button>
+          {[["features", "Features"], ["benefits", "Benefits"], ["about", "About"]].map(([id, label]) => (
+            <button type="button" key={id} className={page === id ? "is-on" : ""} onClick={() => scrollTo(id)}>{label}</button>
           ))}
         </nav>
         <button type="button" className="nx-cta" onClick={() => scrollTo("demo")}>Book Demo <I name="arrow" size={15} /></button>
@@ -2461,15 +2475,16 @@ function App() {
         <button type="button" className="nx-sheet-x" onClick={() => setMobileOpen(false)} aria-label="Close menu"><I name="close" size={22} /></button>
         <BrandLogo className="nx-sheet-logo" alt="Pratyeksha logo" />
         <div className="nx-sheet-list">
-          {[["home", "Home"], ["system", "System"], ["experience", "Experience"], ["operations", "Operations"], ["intelligence", "Intelligence"], ["marketing", "Marketing"], ["demo", "Book a Demo"]].map(([id, label], i) => (
+          {[["home", "Home"], ["features", "Features"], ["benefits", "Benefits"], ["about", "About"], ["demo", "Book a Demo"]].map(([id, label], i) => (
             <button type="button" key={id} style={{ "--i": i }} onClick={() => scrollTo(id)}><span>{String(i + 1).padStart(2, "0")}</span>{label}<I name="arrow" size={16} /></button>
           ))}
         </div>
         <p className="nx-sheet-foot">Restaurant Experience System</p>
       </div>
       <main className="nx-main">
-        {/* ───────── HERO ───────── */}
         <ScrollProgress />
+        {page === "home" && (<>
+        {/* ───────── HERO ───────── */}
         <section id="home" className="nx-hero">
           <div className="nx-hero-bg" aria-hidden="true"><i className="glow" /></div>
           <div className="nx-hero-copy">
@@ -2480,7 +2495,7 @@ function App() {
             </h1>
             <p className="nx-lead reveal delay-2">Orders, kitchen flow, stock and guest relationships should work together—not compete for your attention. Pratyeksha brings the moving parts into one connected view, helping you spend less time chasing updates and more time shaping the business you want to build.</p>
             <div className="nx-actions reveal delay-3">
-              <button type="button" className="nx-btn is-gold" onClick={() => scrollTo("demo")}>Explore Pratyeksha <I name="arrow" size={16} /></button>
+              <button type="button" className="nx-btn is-gold" onClick={() => scrollTo("features")}>Explore Pratyeksha <I name="arrow" size={16} /></button>
               <button type="button" className="nx-btn is-ghost" onClick={() => scrollTo("system")}>Explore the Difference</button>
             </div>
             <div className="nx-note reveal delay-3"><I name="spark" size={13} /> Built around the pressure of a real service, not a software checklist</div>
@@ -2542,28 +2557,25 @@ function App() {
           </div>
         </section>
 
-        {/* ───────── USE CASES ───────── */}
-        <section className="nx-sec nx-use">
+        {/* ───────── BRAND MOMENT ───────── */}
+        <section className="nx-moment">
+          <div className="nx-moment-glow" aria-hidden="true" />
           <div className="nx-wrap">
-            <header className="nx-head is-center">
-              <span className="nx-eyebrow reveal">ONE PLATFORM / MANY FORMATS</span>
-              <h2 className="reveal delay-1">Built around the pressure <em>you deal with every day.</em></h2>
-              <p className="reveal delay-2">From the first customer scan to the final bill, your team needs fewer hand-offs and clearer information. Pratyeksha is designed for cafés, restaurants and growing multi-outlet businesses.</p>
-            </header>
-            <div className="nx-use-grid">
-              {useCases.map((item, index) => (
-                <article className="nx-use reveal" key={item.title} style={{ "--i": index }}>
-                  <span className="nx-use-n">0{index + 1}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.desc}</p>
-                  <ul>{item.points.map((p) => <li key={p}><I name="check" size={12} />{p}</li>)}</ul>
-                  <span className="nx-use-go"><I name="arrow" size={18} /></span>
-                </article>
-              ))}
+            <span className="nx-eyebrow reveal">RESTAURANT EXPERIENCE SYSTEM</span>
+            <h2 className="reveal delay-1">Make every part of the <em>experience feel connected.</em></h2>
+            <p className="reveal delay-2">Better menus. Faster operations. Smarter decisions. Stronger customer relationships.</p>
+            <div className="nx-stats reveal delay-3">
+              <div><strong><CountUp to={6} suffix="+" /></strong><span>Connected layers</span></div>
+              <div><strong><CountUp to={24} suffix="/7" /></strong><span>Digital availability</span></div>
+              <div><strong><CountUp to={1} /></strong><span>Unified system</span></div>
             </div>
           </div>
         </section>
 
+          <ExploreRow I={I} go={go} />
+        </>)}
+        {page === "features" && (<>
+          <PageHero I={I} go={go} eyebrow="EVERY FEATURE" title="One system for the whole" em="restaurant day." lead="From the guest's first scan to the owner's last report, here is everything Pratyeksha does today." />
         {/* ───────── MODULES ───────── */}
         {modules.map((module, index) => (
           <section id={module.id} className={`nx-mod ${module.color === "cream" ? "is-cream" : "is-dark"} ${index % 2 ? "is-flip" : ""}`} key={module.id}>
@@ -2596,6 +2608,7 @@ function App() {
           </section>
         ))}
 
+          <BookingFeatures I={I} />
         {/* ───────── BENTO ───────── */}
         <section className="nx-sec nx-bento-sec">
           <div className="nx-wrap">
@@ -2630,6 +2643,39 @@ function App() {
           </div>
         </section>
 
+          <CtaBand I={I} go={go} />
+        </>)}
+        {page === "benefits" && (<>
+          <PageHero I={I} go={go} eyebrow="WHAT CHANGES" title="Better service, clearer numbers," em="guests who return." lead="What owners, managers, kitchens and guests notice once the whole restaurant runs on one live system." />
+          <Outcomes I={I} />
+          <RoleBenefits I={I} />
+        {/* ───────── PILLARS ───────── */}
+        <section id="signature" className="nx-sec nx-pillars">
+          <div className="nx-wrap">
+            <header className="nx-head">
+              <span className="nx-eyebrow reveal">THE Pratyeksha DIFFERENCE</span>
+              <h2 className="reveal delay-1">One experience. <em>Many intelligent layers.</em></h2>
+              <p className="reveal delay-2">Four ideas run through every screen, from the guest's first scan to the owner's last report of the night.</p>
+            </header>
+            <div className="nx-pillar-grid">
+              {[
+                ["01", "spark", "Discovery", "A menu should feel like an experience before it becomes an order.", "MENU / CUSTOMER EXPERIENCE"],
+                ["02", "layers", "Connection", "Guest, kitchen, billing and inventory signals stay connected.", "OPERATIONS / ONE SYSTEM"],
+                ["03", "kitchen", "Control", "Operators get a clearer view of what is happening across the restaurant.", "OPERATOR / LIVE VIEW"],
+                ["04", "users", "Memory", "Useful customer signals can continue beyond a single table visit.", "INTELLIGENCE / RETENTION"],
+              ].map(([n, ic, t, p, tag], i) => (
+                <article className="nx-pillar reveal" key={n} style={{ "--i": i }}>
+                  <span className="nx-pillar-n">{n}</span>
+                  <I name={ic} size={22} />
+                  <h3>{t}</h3>
+                  <p>{p}</p>
+                  <small>{tag}</small>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ───────── FLOW ───────── */}
         <section className="nx-sec nx-flow">
           <div className="nx-wrap">
@@ -2650,23 +2696,124 @@ function App() {
           </div>
         </section>
 
-        {/* ───────── BRAND MOMENT ───────── */}
-        <section className="nx-moment">
-          <div className="nx-moment-glow" aria-hidden="true" />
-          <div className="nx-wrap">
-            <span className="nx-eyebrow reveal">RESTAURANT EXPERIENCE SYSTEM</span>
-            <h2 className="reveal delay-1">Make every part of the <em>experience feel connected.</em></h2>
-            <p className="reveal delay-2">Better menus. Faster operations. Smarter decisions. Stronger customer relationships.</p>
-            <div className="nx-stats reveal delay-3">
-              <div><strong><CountUp to={6} suffix="+" /></strong><span>Connected layers</span></div>
-              <div><strong><CountUp to={24} suffix="/7" /></strong><span>Digital availability</span></div>
-              <div><strong><CountUp to={1} /></strong><span>Unified system</span></div>
+        {/* ───────── JOURNEY (guest phone) ───────── */}
+        <section id="journey" className="nx-sec nx-journey">
+          <div className="nx-wrap nx-journey-grid">
+            <div className="nx-journey-copy">
+              <span className="nx-eyebrow reveal">DESIGNED AROUND THE GUEST</span>
+              <h2 className="reveal delay-1">From the first <em>scan</em> to the last impression.</h2>
+              <p className="reveal delay-2">A premium restaurant experience is made from small moments. Pratyeksha connects those moments without making the customer feel like they are navigating software.</p>
+              <div className="nx-quiet reveal delay-3"><i />QUIET TECHNOLOGY / VISIBLE EXPERIENCE</div>
+              <ol className="nx-moments">
+                {[["01", "Scan", "A clean QR entry point starts the experience."], ["02", "Explore", "Visual menu, categories and dish context help discovery."], ["03", "Order", "A direct digital journey keeps the interaction simple."], ["04", "Remember", "Signals from the visit can become future customer intelligence."]].map(([n, t, p]) => (
+                  <li className="reveal" key={n}><span>{n}</span><div><h3>{t}</h3><p>{p}</p></div></li>
+                ))}
+              </ol>
+            </div>
+            <div className="nx-journey-visual reveal delay-1">
+              <div className="nx-ph back"><div className="nx-ph-notch" /><small>TABLE 12</small><strong>Discover</strong><i className="nx-ph-dish" /><i className="nx-ph-line" /><i className="nx-ph-line s" /></div>
+              <div className="nx-ph front">
+                <div className="nx-ph-notch" />
+                <small>TABLE 12 / MENU</small><strong>Tonight's menu</strong><p>Find something you will remember.</p>
+                <div className="nx-ph-item"><span /><div><b>Paneer Special</b><small>Chef selection</small></div></div>
+                <div className="nx-ph-item"><span className="alt" /><div><b>Fresh Fruit Shake</b><small>Made to order</small></div></div>
+                <button type="button" tabIndex={-1}>Explore menu <I name="arrow" size={13} /></button>
+              </div>
+              <div className="nx-ph-signal"><I name="spark" size={15} /><span><small>SMART SIGNAL</small><b>Returning guest</b></span></div>
             </div>
           </div>
         </section>
 
+        {/* ───────── OPERATOR VIEW ───────── */}
+        <section id="command" className="nx-sec nx-command">
+          <div className="nx-wrap">
+            <header className="nx-head nx-split">
+              <div>
+                <span className="nx-eyebrow reveal">THE OPERATOR VIEW</span>
+                <h2 className="reveal delay-1">See the restaurant <em>as one system.</em></h2>
+              </div>
+              <span className="nx-pill reveal"><i />LIVE OPERATIONS / CONNECTED</span>
+            </header>
+            <div className="nx-board reveal delay-1">
+              <div className="nx-board-top"><span>Pratyeksha</span><span>OPERATOR / TODAY</span><span>10:42 PM</span></div>
+              <div className="nx-board-body">
+                <aside>
+                  {[["spark", "Overview", true], ["receipt", "Orders"], ["layers", "Menu"], ["inventory", "Inventory"], ["chart", "Intelligence"]].map(([ic, l, on]) => <div key={l} className={on ? "is-on" : ""}><I name={ic} size={14} />{l}</div>)}
+                </aside>
+                <div className="nx-board-main">
+                  <div className="nx-board-hello"><div><small>GOOD EVENING</small><b>Restaurant overview</b></div><button type="button" tabIndex={-1}>View live floor <I name="arrow" size={12} /></button></div>
+                  <div className="nx-metrics">
+                    <div><small>TODAY'S SALES</small><strong><AnimatedNumber value={48260} prefix="₹ " /></strong><em>+12.8%</em><div className="nx-m-spark"><Sparkline data={[30, 36, 33, 45, 41, 58, 52, 66]} height={26} ariaLabel="Sample sales trend" /></div></div>
+                    <div><small>ORDERS</small><strong><AnimatedNumber value={126} /></strong><em>+18</em><div className="nx-m-spark"><Sparkline data={[12, 15, 14, 19, 17, 24, 21, 27]} height={26} color="var(--chart-3)" ariaLabel="Sample orders trend" /></div></div>
+                    <div><small>ACTIVE TABLES</small><strong><AnimatedNumber value={18} /></strong><div className="nx-m-ring"><RingGauge value={75} size={34} stroke={5} ariaLabel="Table occupancy (sample)" /><em style={{ marginTop: 0 }}>06 OPEN</em></div></div>
+                    <div><small>KITCHEN FLOW</small><strong><AnimatedNumber value={94} suffix="%" /></strong><em>STABLE</em></div>
+                  </div>
+                  <div className="nx-board-low">
+                    <div className="nx-panel">
+                      <header><span>Revenue rhythm</span><small>LAST 7 DAYS · SAMPLE</small></header>
+                      <BarChart height={138} highlight={5} ariaLabel="Revenue rhythm, last 7 days (sample data)" format={(v) => `₹ ${v}k`}
+                        data={[["Mon", 42], ["Tue", 55], ["Wed", 48], ["Thu", 72], ["Fri", 61], ["Sat", 88], ["Sun", 76]].map(([label, value]) => ({ label, value }))} />
+                    </div>
+                    <div className="nx-panel nx-activity">
+                      <header><span>Live activity</span><small>NOW</small></header>
+                      {[["Table 12", "Order accepted", "2 min"], ["Table 04", "Kitchen preparing", "4 min"], ["Table 18", "Bill requested", "1 min"], ["Table 07", "Feedback received", "6 min"]].map(([a, b, c]) => <div key={a}><i /><b>{a}</b><small>{b}</small><em>{c}</em></div>)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="nx-kds reveal delay-2">
+              <div className="nx-kds-head"><span>KITCHEN DISPLAY</span><span className="nx-live"><i />LIVE</span></div>
+              <div className="nx-kds-cols">
+                {[
+                  ["NEW", [["#1048", "Paneer Tikka", "Table 12 · 2 items", "00:48"], ["#1049", "Veg Momos", "Takeaway · 1 item", "01:12"]]],
+                  ["PREPARING", [["#1045", "Special Combo", "Table 08 · 4 items", "04:28", "hot"], ["#1046", "Fresh Fruit Shake", "Table 03 · 2 items", "02:06"]]],
+                  ["READY", [["#1041", "Masala Maggi", "Table 05 · 1 item", "READY", "done"]]],
+                ].map(([col, tix]) => (
+                  <div key={col}><small>{col}</small>
+                    {tix.map(([id, name, meta, time, st]) => <div className={`nx-tk ${st || ""}`} key={id}><b>{id}</b><strong>{name}</strong><span>{meta}</span><i>{time}</i></div>)}
+                  </div>
+                ))}
+              </div>
+              <p><strong>Order state stays visible.</strong> FIFO tickets · timers · live sync</p>
+            </div>
+            <div className="nx-board-foot"><span>ONE RESTAURANT / ONE CONNECTED FLOW</span><span>DESIGNED FOR CLARITY · BUILT FOR DAILY USE</span></div>
+          </div>
+        </section>
+
+        <TrialSignup />
+
+          <CtaBand I={I} go={go} />
+        </>)}
+        {page === "about" && (<>
+          <PageHero I={I} go={go} eyebrow="ABOUT PRATYEKSHA" title="Software that keeps up with" em="your service." lead="A restaurant experience system for Indian cafés and restaurants." />
+          <AboutSystem I={I} go={go} contact={[["tel:+918767622654", "+91 87676 22654", "phone"], ["tel:+918605015294", "+91 86050 15294", "phone"], ["mailto:hello.pratyeksha@gmail.com", "hello.pratyeksha@gmail.com", "mail"]]} />
+        {/* ───────── USE CASES ───────── */}
+        <section className="nx-sec nx-use">
+          <div className="nx-wrap">
+            <header className="nx-head is-center">
+              <span className="nx-eyebrow reveal">ONE PLATFORM / MANY FORMATS</span>
+              <h2 className="reveal delay-1">Built around the pressure <em>you deal with every day.</em></h2>
+              <p className="reveal delay-2">From the first customer scan to the final bill, your team needs fewer hand-offs and clearer information. Pratyeksha is designed for cafés, restaurants and growing multi-outlet businesses.</p>
+            </header>
+            <div className="nx-use-grid">
+              {useCases.map((item, index) => (
+                <article className="nx-use reveal" key={item.title} style={{ "--i": index }}>
+                  <span className="nx-use-n">0{index + 1}</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.desc}</p>
+                  <ul>{item.points.map((p) => <li key={p}><I name="check" size={12} />{p}</li>)}</ul>
+                  <span className="nx-use-go"><I name="arrow" size={18} /></span>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+          <CtaBand I={I} go={go} />
+        </>)}
+        {page === "demo" && (<>
         {/* ───────── INSTAGRAM + DEMO (kept as built) ───────── */}
-        <InstagramProfileSection />
         <section id="demo" className="demo-section">
           <div className="demo-grid">
             <div className="demo-copy">
@@ -2877,120 +3024,6 @@ function App() {
           </div>
         </section>
 
-        {/* ───────── PILLARS ───────── */}
-        <section id="signature" className="nx-sec nx-pillars">
-          <div className="nx-wrap">
-            <header className="nx-head">
-              <span className="nx-eyebrow reveal">THE Pratyeksha DIFFERENCE</span>
-              <h2 className="reveal delay-1">One experience. <em>Many intelligent layers.</em></h2>
-              <p className="reveal delay-2">Four ideas run through every screen, from the guest's first scan to the owner's last report of the night.</p>
-            </header>
-            <div className="nx-pillar-grid">
-              {[
-                ["01", "spark", "Discovery", "A menu should feel like an experience before it becomes an order.", "MENU / CUSTOMER EXPERIENCE"],
-                ["02", "layers", "Connection", "Guest, kitchen, billing and inventory signals stay connected.", "OPERATIONS / ONE SYSTEM"],
-                ["03", "kitchen", "Control", "Operators get a clearer view of what is happening across the restaurant.", "OPERATOR / LIVE VIEW"],
-                ["04", "users", "Memory", "Useful customer signals can continue beyond a single table visit.", "INTELLIGENCE / RETENTION"],
-              ].map(([n, ic, t, p, tag], i) => (
-                <article className="nx-pillar reveal" key={n} style={{ "--i": i }}>
-                  <span className="nx-pillar-n">{n}</span>
-                  <I name={ic} size={22} />
-                  <h3>{t}</h3>
-                  <p>{p}</p>
-                  <small>{tag}</small>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ───────── JOURNEY (guest phone) ───────── */}
-        <section id="journey" className="nx-sec nx-journey">
-          <div className="nx-wrap nx-journey-grid">
-            <div className="nx-journey-copy">
-              <span className="nx-eyebrow reveal">DESIGNED AROUND THE GUEST</span>
-              <h2 className="reveal delay-1">From the first <em>scan</em> to the last impression.</h2>
-              <p className="reveal delay-2">A premium restaurant experience is made from small moments. Pratyeksha connects those moments without making the customer feel like they are navigating software.</p>
-              <div className="nx-quiet reveal delay-3"><i />QUIET TECHNOLOGY / VISIBLE EXPERIENCE</div>
-              <ol className="nx-moments">
-                {[["01", "Scan", "A clean QR entry point starts the experience."], ["02", "Explore", "Visual menu, categories and dish context help discovery."], ["03", "Order", "A direct digital journey keeps the interaction simple."], ["04", "Remember", "Signals from the visit can become future customer intelligence."]].map(([n, t, p]) => (
-                  <li className="reveal" key={n}><span>{n}</span><div><h3>{t}</h3><p>{p}</p></div></li>
-                ))}
-              </ol>
-            </div>
-            <div className="nx-journey-visual reveal delay-1">
-              <div className="nx-ph back"><div className="nx-ph-notch" /><small>TABLE 12</small><strong>Discover</strong><i className="nx-ph-dish" /><i className="nx-ph-line" /><i className="nx-ph-line s" /></div>
-              <div className="nx-ph front">
-                <div className="nx-ph-notch" />
-                <small>TABLE 12 / MENU</small><strong>Tonight's menu</strong><p>Find something you will remember.</p>
-                <div className="nx-ph-item"><span /><div><b>Paneer Special</b><small>Chef selection</small></div></div>
-                <div className="nx-ph-item"><span className="alt" /><div><b>Fresh Fruit Shake</b><small>Made to order</small></div></div>
-                <button type="button" tabIndex={-1}>Explore menu <I name="arrow" size={13} /></button>
-              </div>
-              <div className="nx-ph-signal"><I name="spark" size={15} /><span><small>SMART SIGNAL</small><b>Returning guest</b></span></div>
-            </div>
-          </div>
-        </section>
-
-        {/* ───────── OPERATOR VIEW ───────── */}
-        <section id="command" className="nx-sec nx-command">
-          <div className="nx-wrap">
-            <header className="nx-head nx-split">
-              <div>
-                <span className="nx-eyebrow reveal">THE OPERATOR VIEW</span>
-                <h2 className="reveal delay-1">See the restaurant <em>as one system.</em></h2>
-              </div>
-              <span className="nx-pill reveal"><i />LIVE OPERATIONS / CONNECTED</span>
-            </header>
-            <div className="nx-board reveal delay-1">
-              <div className="nx-board-top"><span>Pratyeksha</span><span>OPERATOR / TODAY</span><span>10:42 PM</span></div>
-              <div className="nx-board-body">
-                <aside>
-                  {[["spark", "Overview", true], ["receipt", "Orders"], ["layers", "Menu"], ["inventory", "Inventory"], ["chart", "Intelligence"]].map(([ic, l, on]) => <div key={l} className={on ? "is-on" : ""}><I name={ic} size={14} />{l}</div>)}
-                </aside>
-                <div className="nx-board-main">
-                  <div className="nx-board-hello"><div><small>GOOD EVENING</small><b>Restaurant overview</b></div><button type="button" tabIndex={-1}>View live floor <I name="arrow" size={12} /></button></div>
-                  <div className="nx-metrics">
-                    <div><small>TODAY'S SALES</small><strong><AnimatedNumber value={48260} prefix="₹ " /></strong><em>+12.8%</em><div className="nx-m-spark"><Sparkline data={[30, 36, 33, 45, 41, 58, 52, 66]} height={26} ariaLabel="Sample sales trend" /></div></div>
-                    <div><small>ORDERS</small><strong><AnimatedNumber value={126} /></strong><em>+18</em><div className="nx-m-spark"><Sparkline data={[12, 15, 14, 19, 17, 24, 21, 27]} height={26} color="var(--chart-3)" ariaLabel="Sample orders trend" /></div></div>
-                    <div><small>ACTIVE TABLES</small><strong><AnimatedNumber value={18} /></strong><div className="nx-m-ring"><RingGauge value={75} size={34} stroke={5} ariaLabel="Table occupancy (sample)" /><em style={{ marginTop: 0 }}>06 OPEN</em></div></div>
-                    <div><small>KITCHEN FLOW</small><strong><AnimatedNumber value={94} suffix="%" /></strong><em>STABLE</em></div>
-                  </div>
-                  <div className="nx-board-low">
-                    <div className="nx-panel">
-                      <header><span>Revenue rhythm</span><small>LAST 7 DAYS · SAMPLE</small></header>
-                      <BarChart height={138} highlight={5} ariaLabel="Revenue rhythm, last 7 days (sample data)" format={(v) => `₹ ${v}k`}
-                        data={[["Mon", 42], ["Tue", 55], ["Wed", 48], ["Thu", 72], ["Fri", 61], ["Sat", 88], ["Sun", 76]].map(([label, value]) => ({ label, value }))} />
-                    </div>
-                    <div className="nx-panel nx-activity">
-                      <header><span>Live activity</span><small>NOW</small></header>
-                      {[["Table 12", "Order accepted", "2 min"], ["Table 04", "Kitchen preparing", "4 min"], ["Table 18", "Bill requested", "1 min"], ["Table 07", "Feedback received", "6 min"]].map(([a, b, c]) => <div key={a}><i /><b>{a}</b><small>{b}</small><em>{c}</em></div>)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="nx-kds reveal delay-2">
-              <div className="nx-kds-head"><span>KITCHEN DISPLAY</span><span className="nx-live"><i />LIVE</span></div>
-              <div className="nx-kds-cols">
-                {[
-                  ["NEW", [["#1048", "Paneer Tikka", "Table 12 · 2 items", "00:48"], ["#1049", "Veg Momos", "Takeaway · 1 item", "01:12"]]],
-                  ["PREPARING", [["#1045", "Special Combo", "Table 08 · 4 items", "04:28", "hot"], ["#1046", "Fresh Fruit Shake", "Table 03 · 2 items", "02:06"]]],
-                  ["READY", [["#1041", "Masala Maggi", "Table 05 · 1 item", "READY", "done"]]],
-                ].map(([col, tix]) => (
-                  <div key={col}><small>{col}</small>
-                    {tix.map(([id, name, meta, time, st]) => <div className={`nx-tk ${st || ""}`} key={id}><b>{id}</b><strong>{name}</strong><span>{meta}</span><i>{time}</i></div>)}
-                  </div>
-                ))}
-              </div>
-              <p><strong>Order state stays visible.</strong> FIFO tickets · timers · live sync</p>
-            </div>
-            <div className="nx-board-foot"><span>ONE RESTAURANT / ONE CONNECTED FLOW</span><span>DESIGNED FOR CLARITY · BUILT FOR DAILY USE</span></div>
-          </div>
-        </section>
-
-        <TrialSignup />
-
         {/* ───────── FAQ ───────── */}
         <section id="faq" className="nx-sec nx-faq">
           <div className="nx-wrap nx-faq-grid">
@@ -3021,6 +3054,7 @@ function App() {
             </div>
           </div>
         </section>
+        </>)}
       </main>
 
       {/* ───────── FOOTER ───────── */}
@@ -3040,10 +3074,10 @@ function App() {
               <button type="button" onClick={() => scrollTo("intelligence")}>Intelligence</button>
             </div>
             <div className="nx-foot-col"><h4>For Business</h4>
-              <button type="button" onClick={() => scrollTo("system")}>Cafés</button>
-              <button type="button" onClick={() => scrollTo("system")}>Restaurants</button>
-              <button type="button" onClick={() => scrollTo("system")}>QSRs</button>
-              <button type="button" onClick={() => scrollTo("system")}>Multi-outlet</button>
+              <button type="button" onClick={() => scrollTo("about")}>Cafés</button>
+              <button type="button" onClick={() => scrollTo("about")}>Restaurants</button>
+              <button type="button" onClick={() => scrollTo("about")}>QSRs</button>
+              <button type="button" onClick={() => scrollTo("about")}>Multi-outlet</button>
               <button type="button" onClick={() => scrollTo("demo")}>Book Demo</button>
             </div>
             <div className="nx-foot-col"><h4>Contact</h4>

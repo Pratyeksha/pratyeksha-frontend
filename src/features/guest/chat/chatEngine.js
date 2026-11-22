@@ -110,6 +110,7 @@ const DICT = {
     placeOffers: (name, list) => `${name} has: ${list}.`,
     placeNoOffers: (name) => `${name} has no live offers right now.`,
     askWhich: 'Which one did you mean?',
+    pickPlace: { hours: 'Which place’s timings do you want? Pick one, or type a name.', address: 'Which place do you want directions to? Pick one, or type a name.', phone: 'Which place’s number do you want? Pick one, or type a name.', menu: 'Which place’s menu do you want to see? Pick one, or type a name.', reserve: 'Where would you like to reserve a table? Pick one, or type a name.', pickup: 'Where would you like to order pickup from? Pick one, or type a name.' },
     fav: (n) => `You have ${n} saved ${n === 1 ? 'place' : 'places'}. Here they are:`,
     favNone: "You haven't saved any places yet. Tap the heart on a place to keep it handy.",
     howOrderTitle: 'Ordering is simple:',
@@ -123,6 +124,12 @@ const DICT = {
     fallbackHead: "I didn't quite catch that, but I can help with:",
     chips: { surprise: 'Surprise me', offers: 'Live offers', open: 'Open now', near: 'Near me', cafes: 'Cafés', veg: 'Pure veg', how: 'How to order', more: 'Show more', menu: 'Menu', hours: 'Timings', dir: 'Directions', call: 'Call', cheaper: 'With offers' },
     weekdays: 'Mon–Fri', closedDay: 'closed',
+    hoursLine2: (name, status, day, range) => `${name}${status ? ` is ${status.charAt(0).toLowerCase()}${status.slice(1)}` : ''}. Today${day ? ` (${day})` : ''}: ${range}.`,
+    tempClosed: (name) => `${name} is temporarily closed right now.`,
+    addrPin: (name) => `${name} has a map pin but no written address yet. Directions will use the pin.`,
+    reserveAt: (name) => `You can reserve a table at ${name}. Open the place and tap “Reserve”.`,
+    pickupAt: (name) => `You can order pickup from ${name}. Open the place and tap “Pickup”.`,
+    f: { today: (day) => (day ? `Today · ${day}` : 'Today'), closed: 'Closed', weekend: 'Sat–Sun', closedOn: 'Closed on', address: 'Address', area: 'Area', distance: 'From you', categories: 'Categories', dishes: 'Popular dishes' },
   },
   mr: {
     greet: (n, part) => `${part}${n ? `, ${n}` : ''}! मी तुमचा Pratyeksha कन्सिअर्ज आहे. काय खावेसे वाटते ते सांगा — डिश, कॅफे, ऑफर, कोण उघडे आहे, कोणते जवळ आहे ते शोधून देतो.`,
@@ -164,6 +171,7 @@ const DICT = {
     placeOffers: (name, list) => `${name} येथे: ${list}.`,
     placeNoOffers: (name) => `${name} येथे सध्या ऑफर नाही.`,
     askWhich: 'तुम्हाला कोणते म्हणायचे आहे?',
+    pickPlace: { hours: 'कोणत्या ठिकाणाच्या वेळा हव्या आहेत? एक निवडा किंवा नाव टाइप करा.', address: 'कोणत्या ठिकाणी जायचे आहे? एक निवडा किंवा नाव टाइप करा.', phone: 'कोणत्या ठिकाणाचा नंबर हवा आहे? एक निवडा किंवा नाव टाइप करा.', menu: 'कोणत्या ठिकाणाचा मेनू पाहायचा आहे? एक निवडा किंवा नाव टाइप करा.', reserve: 'कुठे टेबल आरक्षित करायचे आहे? एक निवडा किंवा नाव टाइप करा.', pickup: 'कुठून पिकअप ऑर्डर करायची आहे? एक निवडा किंवा नाव टाइप करा.' },
     fav: (n) => `तुम्ही ${n} ठिकाणे जतन केली आहेत:`,
     favNone: 'अजून काहीही जतन केलेले नाही. आवडत्या ठिकाणावर हृदय दाबा.',
     howOrderTitle: 'ऑर्डर करणे सोपे आहे:',
@@ -177,6 +185,12 @@ const DICT = {
     fallbackHead: 'मला नीट समजले नाही, पण मी हे करू शकतो:',
     chips: { surprise: 'सरप्राईज', offers: 'ऑफर', open: 'आत्ता उघडे', near: 'जवळचे', cafes: 'कॅफे', veg: 'शुद्ध शाकाहारी', how: 'ऑर्डर कसे', more: 'आणखी', menu: 'मेनू', hours: 'वेळा', dir: 'दिशा', call: 'कॉल', cheaper: 'ऑफरसह' },
     weekdays: 'सोम–शुक्र', closedDay: 'बंद',
+    hoursLine2: (name, status, day, range) => `${name}${status ? `: ${status}` : ''}. आज${day ? ` (${day})` : ''}: ${range}.`,
+    tempClosed: (name) => `${name} सध्या तात्पुरते बंद आहे.`,
+    addrPin: (name) => `${name} चा मॅप पिन आहे पण लिखित पत्ता नाही. दिशा पिननुसार मिळतील.`,
+    reserveAt: (name) => `${name} येथे टेबल आरक्षित करता येते. ठिकाण उघडून “आरक्षण” दाबा.`,
+    pickupAt: (name) => `${name} येथून पिकअप ऑर्डर करता येते. ठिकाण उघडून “पिकअप” दाबा.`,
+    f: { today: (day) => (day ? `आज · ${day}` : 'आज'), closed: 'बंद', weekend: 'शनि–रवि', closedOn: 'बंद दिवस', address: 'पत्ता', area: 'परिसर', distance: 'तुमच्यापासून', categories: 'विभाग', dishes: 'लोकप्रिय डिश' },
   },
 };
 
@@ -390,6 +404,15 @@ export function createEngine(kit) {
     const pronoun = /\b(it|its|this|that|there|here|this place|that place)\b|हे|ते|तिथे|इथे/.test(q);
     const placeAttr = attr.hours || attr.address || attr.phone || attr.menu || (attr.offers && pronoun) || attr.reserve || attr.pickup;
     if (!target && mem.place && placeAttr && !findTerm(q, e.tenants, e.menu) && !R.near.test(q) && !R.openNow.test(q) && !(attr.offers && !pronoun)) target = byId(mem.place);
+    if (!target && !mem.place) {
+      const kind = ['hours', 'address', 'phone', 'menu', 'reserve', 'pickup'].find((k) => attr[k]);
+      if (kind && !findTerm(q, e.tenants, e.menu) && !R.near.test(q) && !R.openNow.test(q)) {
+        const rank = (t) => (openStatus(t.hours, now)?.state === 'open' ? 0 : 1) * 1e6 + (e.pos ? (distanceKm(e.pos, t) ?? 9999) : 0);
+        const cand = [...e.tenants].sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name))).slice(0, 4);
+        if (cand.length) return out([txt(d.pickPlace[kind]), places(cand, '')], { memory: { ...keepList(cand, cand.length), pendingAttr: kind } });
+      }
+    }
+    if (target && !placeAttr && mem.pendingAttr && attr[mem.pendingAttr] !== undefined) attr[mem.pendingAttr] = true;
     if (target && ambiguous) {
       const cand = e.tenants.filter((t) => { const m = findPlace(q, [t]); return !!m; }).slice(0, 4);
       return out([txt(d.askWhich), places(cand, '')], { memory: keepList(cand, cand.length) });
@@ -399,22 +422,48 @@ export function createEngine(kit) {
       const blocks = [];
       const km = e.pos ? distanceKm(e.pos, t) : null;
       const mem2 = { ...mem, place: t.tenantId };
+      const acts = (...k) => ({ t: 'actions', id: t.tenantId, items: k });
+      const hasMap = !!kit.hasPlace?.(t);
+      const phone = String(t.contact || t.phone || '').trim();
+      const hasPhone = phone.replace(/\D/g, '').length >= 7;
+      let compact = true;
       if (attr.hours) {
-        const s = statusLabel(openStatus(t.hours, now), tr);
-        blocks.push(txt(t.hours ? d.hoursLine(t.name, s?.text || '—', hoursRange(t.hours?.weekday), hoursRange(t.hours?.weekend)) : d.hoursUnknown(t.name)));
+        const st = openStatus(t.hours, now);
+        const s = statusLabel(st, tr);
+        const th = kit.todayHours ? kit.todayHours(t.hours, now, lang) : (t.hours ? { day: '', range: hoursRange(t.hours.weekday), off: [], temp: false } : null);
+        if (!t.hours || !th) blocks.push(txt(d.hoursUnknown(t.name)), acts('menu'));
+        else {
+          blocks.push(txt(th.temp ? d.tempClosed(t.name) : d.hoursLine2(t.name, s?.text || '', th.today, th.range)));
+          const rows = [[d.f.today(th.day), th.temp ? d.f.closed : th.range, 1], [d.weekdays, hoursRange(t.hours.weekday)], [d.f.weekend, hoursRange(t.hours.weekend)]];
+          if (th.off.length) rows.push([d.f.closedOn, th.off.join(', ')]);
+          blocks.push({ t: 'facts', rows, tone: s?.tone || '' }, acts('menu', hasMap ? 'maps' : null, hasPhone ? 'call' : null));
+        }
       } else if (attr.address) {
         const a = addressLine(t);
-        blocks.push(txt(a ? d.addr(t.name, a, km != null ? fmtKm(km) : '') : d.addrUnknown(t.name)));
+        if (!a && !hasMap) blocks.push(txt(d.addrUnknown(t.name)));
+        else {
+          blocks.push(txt(a ? d.addr(t.name, a, km != null ? fmtKm(km) : '') : d.addrPin(t.name)));
+          const rows = []; if (a) rows.push([d.f.address, a]); const ar = areaOf(t); if (ar && !String(a).includes(ar)) rows.push([d.f.area, ar]); if (km != null) rows.push([d.f.distance, fmtKm(km)]);
+          if (rows.length) blocks.push({ t: 'facts', rows });
+          blocks.push(acts('maps', 'menu', hasPhone ? 'call' : null));
+        }
       } else if (attr.phone) {
-        const p = String(t.contact || t.phone || '').trim();
-        blocks.push(txt(p ? d.phoneLine(t.name, p) : d.phoneUnknown(t.name)));
+        blocks.push(txt(hasPhone ? d.phoneLine(t.name, phone) : d.phoneUnknown(t.name)), acts(hasPhone ? 'call' : null, hasMap ? 'maps' : null, 'menu'));
       } else if (attr.offers) {
-        blocks.push(txt((t.activeOffers || []).length ? d.placeOffers(t.name, offerLine(t, tr)) : d.placeNoOffers(t.name)));
+        blocks.push(txt((t.activeOffers || []).length ? d.placeOffers(t.name, offerLine(t, tr)) : d.placeNoOffers(t.name)), acts('menu'));
       } else if (attr.menu) {
         const m = e.menu?.map.get(t.tenantId);
-        blocks.push(txt(m && (m.dishes.length || m.cats.length) ? d.menuLine(t.name, m.cats.slice(0, 4).map((x) => x.raw), m.dishes.slice(0, 4).map((x) => x.raw)) : d.menuNone(t.name)));
-      } else blocks.push(txt(d.placeIntro(t.name)));
-      blocks.push({ t: 'place', id: t.tenantId });
+        const cats = (m?.cats || []).slice(0, 6).map((x) => x.raw);
+        const dishes = (m?.dishes || []).slice(0, 8).map((x) => x.raw);
+        if (cats.length || dishes.length) {
+          blocks.push(txt(d.menuLine(t.name, cats.slice(0, 4), dishes.slice(0, 4))));
+          const rows = []; if (cats.length) rows.push([d.f.categories, cats.join(' · ')]); if (dishes.length) rows.push([d.f.dishes, dishes.join(' · ')]);
+          blocks.push({ t: 'facts', rows }, acts('menu', t.config?.customerFeatures?.pickup !== false ? 'pickup' : null, t.config?.customerFeatures?.reservation !== false ? 'reserve' : null));
+        } else blocks.push(txt(d.menuNone(t.name)), acts('menu'));
+      } else if (attr.reserve || attr.pickup) {
+        blocks.push(txt(attr.reserve ? d.reserveAt(t.name) : d.pickupAt(t.name)), acts(attr.reserve ? 'reserve' : 'pickup', 'menu'));
+      } else { blocks.push(txt(d.placeIntro(t.name))); compact = false; }
+      if (!compact) blocks.push({ t: 'place', id: t.tenantId });
       return out(blocks, { memory: mem2, ctx: { place: true } });
     }
 

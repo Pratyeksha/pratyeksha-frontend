@@ -4,7 +4,7 @@ import {
   Coffee, UtensilsCrossed, Search,  ChevronRight, MapPin, Wifi, Sparkles, X, Tag,
   Heart, ScanLine, Shuffle, ShoppingBag, CalendarCheck, Clock, LayoutGrid, RotateCcw,
   Navigation, Map as MapIcon, List as ListIcon, Copy, Share2, Crosshair, ExternalLink, Check, ArrowUp, ArrowUpDown, History, Phone, WifiOff, Leaf, Star,
-  CalendarClock, Armchair, Mic, TrendingUp }  from 'lucide-react';
+  CalendarClock, Armchair, Mic, Square, TrendingUp }  from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -19,7 +19,7 @@ import { DonutRing, RingGauge, ChartLegend, TimelineStrip } from '../../shared/u
 import '../../shared/ui/premium-polish.css';
 import ChatLauncher from './chat/ChatLauncher.jsx';
 import { useStorefronts, usePlatformStats } from './homeData.js';
-import { TileExtras, DealsSection, TonightSection, HeroPanel, DetailExtras, HighlightFilter, OwnerPitch } from './HomeGrowth.jsx';
+import { TileExtras, DealsSection, TonightSection, HeroPanel, DetailExtras, HighlightFilter, JoinSheet } from './HomeGrowth.jsx';
 
 import API_BASE_URL from '../../shared/lib/apiBase.js';
 import { ensureModelViewer } from './modelViewer.js';
@@ -73,7 +73,7 @@ const L = {
     ownerTitle: 'Own a café or restaurant?', ownerBody: 'Get your own QR menu, table ordering, reservations and live offers — listed here for every guest.', ownerBtn: 'Get listed',
     hoursTitle: 'Opening hours', sortRec: 'Recommended', sortAz: 'A – Z', sortOffers: 'Most offers', sortSaved: 'Saved first', sort: 'Sort',
     updated: 'Updated', justNow: 'just now', minAgo: 'min ago', hrAgo: 'h ago', dayAgo: 'd ago', refresh: 'Refresh', refreshing: 'Refreshing…',
-    pullHint: 'Pull to refresh', releaseHint: 'Release to refresh', suggestions: 'Suggestions', sugArea: 'Area',
+    pullHint: 'Pull to refresh', releaseHint: 'Release to refresh', suggestions: 'Suggestions', sugArea: 'Area', sugPlaces: 'Places', sugDishes: 'Dishes', sugClose: 'Closest matches', hearing: 'Hearing you…', stopListening: 'Stop listening',
     openNow: 'Open now', closesAt: 'closes', closingSoon: 'Closing soon', closedNow: 'Closed', opensAt: 'opens', tomorrow: 'tomorrow', tempClosed: 'Temporarily closed',
     opensSoon: 'Opens in {n} min', statOpen: 'open now', loadingList: 'Finding good food near you…',
     searchPh: 'Search places, areas, dishes…', searchPhShort: 'Search…', browseMenu: 'Browse by menu', serves: 'Serves', menuCategory: 'Category', tryMenu: 'Try a menu category', sugCategory: 'Category', sugDish: 'Dish',
@@ -99,7 +99,7 @@ const L = {
     ownerTitle: 'तुमचे कॅफे किंवा रेस्टॉरंट आहे का?', ownerBody: 'स्वतःचा QR मेनू, टेबल ऑर्डरिंग, आरक्षण आणि लाइव्ह ऑफर्स मिळवा — प्रत्येक पाहुण्यासाठी येथे सूचीबद्ध.', ownerBtn: 'सूचीत या',
     hoursTitle: 'वेळ', sortRec: 'शिफारस केलेले', sortAz: 'अ – ज्ञ', sortOffers: 'सर्वाधिक ऑफर्स', sortSaved: 'आवडते आधी', sort: 'क्रमवारी',
     updated: 'अपडेट', justNow: 'आत्ताच', minAgo: 'मि. पूर्वी', hrAgo: 'तासांपूर्वी', dayAgo: 'दिवसांपूर्वी', refresh: 'रिफ्रेश', refreshing: 'रिफ्रेश होत आहे…',
-    pullHint: 'रिफ्रेश करण्यासाठी खाली ओढा', releaseHint: 'रिफ्रेश करण्यासाठी सोडा', suggestions: 'सूचना', sugArea: 'भाग',
+    pullHint: 'रिफ्रेश करण्यासाठी खाली ओढा', releaseHint: 'रिफ्रेश करण्यासाठी सोडा', sugPlaces: 'ठिकाणे', sugDishes: 'पदार्थ', sugClose: 'जवळचे जुळणारे', hearing: 'ऐकतोय…', stopListening: 'ऐकणे थांबवा', suggestions: 'सूचना', sugArea: 'भाग',
     openNow: 'आता उघडे', closesAt: 'बंद होईल', closingSoon: 'लवकरच बंद', closedNow: 'बंद', opensAt: 'उघडेल', tomorrow: 'उद्या', tempClosed: 'तात्पुरते बंद',
     opensSoon: '{n} मि. मध्ये उघडेल', statOpen: 'आता उघडे', loadingList: 'जवळचे चविष्ट ठिकाण शोधत आहे…',
     searchPh: 'ठिकाण, भाग, पदार्थ शोधा…', searchPhShort: 'शोधा…', browseMenu: 'मेनूनुसार शोधा', serves: 'उपलब्ध', menuCategory: 'श्रेणी', tryMenu: 'मेनू श्रेणी वापरून पहा', sugCategory: 'श्रेणी', sugDish: 'पदार्थ',
@@ -170,6 +170,19 @@ const MENU_CACHE_KEY = 'px_home_menu_v1';
 
 /* ── Menu search: the server publishes each outlet's categories and top dishes (GET /tenants/menu-index) so the search bar can answer
    "biryani", "cold coffee" or a Marathi dish name with the outlets that serve it. ── */
+const levDist = (a, b) => {
+  if (Math.abs(a.length - b.length) > 3) return 9;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) { const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+  return prev[b.length];
+};
+// Bold the part of a suggestion that the guest typed.
+function Hl({ text, q }) {
+  const t = String(text || '');
+  const k = q ? t.toLowerCase().indexOf(q) : -1;
+  if (k < 0) return t;
+  return <>{t.slice(0, k)}<mark className="pxs-mk">{t.slice(k, k + q.length)}</mark>{t.slice(k + q.length)}</>;
+}
 const normQ = (v) => String(v || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 function buildMenuLookup(raw) {
   const map = new Map();
@@ -385,6 +398,17 @@ const todaySegments = (hours, nowMs = Date.now()) => {
 const PULSE = {
   en: { title: 'Around you right now', open: (n, k) => `${n} of ${k} open now`, mix: 'Café vs dine-in', openLbl: 'open' },
   mr: { title: 'सध्याची स्थिती', open: (n, k) => `${k} पैकी ${n} आता सुरू`, mix: 'कॅफे / डाइन-इन', openLbl: 'सुरू' },
+};
+/* Today's hours in plain words for the Concierge: {day, today (day index), range, off (closed weekday names), temp}. Null when there is nothing to say. */
+const todayHours = (hours, nowMs = Date.now(), lang = 'en') => {
+  if (!hours || typeof hours !== 'object') return null;
+  const days = L[lang === 'mr' ? 'mr' : 'en'].days;
+  const d = new Date(nowMs + 330 * 60000).getUTCDay();
+  const w = hoursWindow(hours, d);
+  const off = (Array.isArray(hours.closedDays) ? hours.closedDays : []).filter((x) => x >= 0 && x <= 6).map((x) => days[x]);
+  if (hours.temporarilyClosed === true) return { day: days[d], today: d, range: '—', off, temp: true };
+  if (!w && !off.length && hoursRange(hours.weekday) === '—' && hoursRange(hours.weekend) === '—') return null;
+  return { day: days[d], today: d, range: w ? (w.o === w.c ? '24 h' : `${fmtClock(w.o)} – ${fmtClock(w.c)}`) : (L[lang === 'mr' ? 'mr' : 'en'].closedNow || 'Closed'), off, temp: false };
 };
 const hoursRange = (blk) => {
   const o = toMin(blk?.open);
@@ -1191,7 +1215,7 @@ function PlaceDetail({ t, pos, onOrder, onService, tr, noMap = false, sf = { sto
 }
 
 /* Everything the Concierge needs from this file's helpers, so the chat chunk stays decoupled from the home screen's internals. */
-const CHAT_KIT = { L, openStatus, statusLabel, bestOffer, offerValue, offerTerms, offerRank, distanceKm, fmtKm, areaOf, isCafe, addressLine, hoursRange, matchWhy, isFeatured, directionsUrl, hasPlace };
+const CHAT_KIT = { L, todayHours, openStatus, statusLabel, bestOffer, offerValue, offerTerms, offerRank, distanceKm, fmtKm, areaOf, isCafe, addressLine, hoursRange, matchWhy, isFeatured, directionsUrl, hasPlace };
 
 export default function CustomerHome() {
   const navigate = useNavigate();
@@ -1308,6 +1332,7 @@ export default function CustomerHome() {
   const [mapId, setMapId] = useState(null);
   const [sheetTenant, setSheetTenant] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
   const warmChat = useCallback(() => { loadChat().catch(() => { /* offline: retried on open */ }); }, []);
   // Fetch the chat code when the browser is idle (skipped on Data Saver / 2G); the button also warms it on hover or touch.
   useEffect(() => {
@@ -1322,7 +1347,7 @@ export default function CustomerHome() {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, [chatOpen]);
-  useBackClose([[!!sheetTenant, () => setSheetTenant(null)], [showAllOffers, () => setShowAllOffers(false)], [scanning, () => setScanning(false)], [chatOpen, () => setChatOpen(false)]]);
+  useBackClose([[!!sheetTenant, () => setSheetTenant(null)], [showAllOffers, () => setShowAllOffers(false)], [scanning, () => setScanning(false)], [chatOpen, () => setChatOpen(false)], [joinOpen, () => setJoinOpen(false)]]);
   const [sharedDish, setSharedDish] = useState(null); // { tenant, item|null, loading }
   const sharedHandled = useRef(false);
   const [howHidden, setHowHidden] = useState(() => { try { return localStorage.getItem(HOW_KEY) === '1'; } catch { return false; } });
@@ -1634,12 +1659,12 @@ export default function CustomerHome() {
     const areas = new Map();
     const cats = new Map();
     const dishes = new Map();
-    const bump = (map, lc, raw, seen, tname) => {
+    const bump = (map, lc, raw, seen, tname, tn) => {
       if (seen.has(lc)) return;
       seen.add(lc);
       const cur = map.get(lc) || { kind: '', text: raw, n: 0, names: [], rank: lc.startsWith(q) ? 0 : 1 };
       cur.n += 1;
-      if (tname && cur.names.length < 3) cur.names.push(tname);
+      if (tname && cur.names.length < 3) { cur.names.push(tname); (cur.ts || (cur.ts = [])).push(tn); }
       map.set(lc, cur);
     };
     for (const t of tenants) {
@@ -1653,18 +1678,37 @@ export default function CustomerHome() {
       if (m) {
         const seenC = new Set();
         const seenD = new Set();
-        for (const c of m.cats) if (c.lc.includes(q)) bump(cats, c.lc, c.raw, seenC, t.name);
-        for (const d of m.dishes) if (d.lc.includes(q)) bump(dishes, d.lc, d.raw, seenD, t.name);
+        for (const c of m.cats) if (c.lc.includes(q)) bump(cats, c.lc, c.raw, seenC, t.name, t);
+        for (const d of m.dishes) if (d.lc.includes(q)) bump(dishes, d.lc, d.raw, seenD, t.name, t);
       }
     }
     const byRank = (x, y) => x.rank - y.rank || (y.n || 0) - (x.n || 0) || x.text.localeCompare(y.text);
-    const count = (n) => `${n} ${n === 1 ? tr.place : tr.places}`;
-    return [
-      ...places.sort(byRank).slice(0, 4),
-      ...[...cats.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'category', sub: `${tr.sugCategory} · ${c.n === 1 ? c.names[0] : `${count(c.n)}: ${c.names.slice(0, 2).join(', ')}${c.n > 2 ? ` +${c.n - 2}` : ''}`}` })),
-      ...[...dishes.values()].sort(byRank).slice(0, 3).map((c) => ({ ...c, kind: 'dish', sub: `${tr.sugDish} · ${c.n === 1 ? `${tr.servedAt} ${c.names[0]}` : `${count(c.n)}: ${c.names.slice(0, 2).join(', ')}${c.n > 2 ? ` +${c.n - 2}` : ''}`}` })),
+    const out = [
+      ...places.sort(byRank).slice(0, 3),
+      ...[...dishes.values()].sort(byRank).slice(0, 4).map((c) => ({ ...c, kind: 'dish' })),
+      ...[...cats.values()].sort(byRank).slice(0, 2).map((c) => ({ ...c, kind: 'category' })),
       ...[...areas.values()].sort(byRank).slice(0, 2),
     ];
+    // Typo tolerance: with few exact hits, add the closest dishes / categories by edit distance, each with the places that serve it.
+    if (q.length >= 3 && out.filter((x) => x.kind !== 'area').length < 2) {
+      const max = q.length <= 4 ? 1 : 2;
+      const fz = new Map();
+      for (const t of tenants) {
+        const m = menuLookup?.map.get(t.tenantId);
+        if (!m) continue;
+        for (const d of [...m.dishes, ...m.cats]) {
+          if (d.lc.includes(q) || fz.has(d.lc) && fz.get(d.lc).ts.some((x) => x.tenantId === t.tenantId)) continue;
+          const words = [d.lc, ...d.lc.split(' ').filter((w) => w.length >= 3)];
+          const dist = Math.min(...words.map((w) => levDist(q, w)));
+          if (dist > max) continue;
+          const cur = fz.get(d.lc) || { kind: 'fuzzy', text: d.raw, n: 0, ts: [], d: dist };
+          cur.n += 1; if (cur.ts.length < 3) cur.ts.push(t);
+          fz.set(d.lc, cur);
+        }
+      }
+      out.push(...[...fz.values()].sort((x, y) => x.d - y.d || y.n - x.n).slice(0, 4));
+    }
+    return out;
   }, [tenants, qNorm, menuLookup, tr]);
   const showSug = searchOpen && query.trim().length > 0 && suggestions.length > 0;
 
@@ -1678,7 +1722,7 @@ export default function CustomerHome() {
       for (let i = 1; i <= a.length; i++) { const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
       return prev[b.length];
     };
-    const max = q.length <= 5 ? 1 : 2;
+    const max = q.length <= 4 ? 1 : 2;
     let best = null;
     const consider = (raw) => {
       const text = String(raw || '').trim(); if (!text) return;
@@ -1695,17 +1739,33 @@ export default function CustomerHome() {
   }, [tenants, qNorm, menuLookup, filtered.length]);
 
   const [listening, setListening] = useState(false);
+  const [hearing, setHearing] = useState(false);       // the browser has detected speech (bars get livelier)
+  const [interim, setInterim] = useState('');          // what has been heard so far, shown live in the bar
+  const recRef = useRef(null);
   const speechCtor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const endVoice = () => { setListening(false); setHearing(false); setInterim(''); recRef.current = null; };
+  const stopVoice = () => { try { recRef.current?.stop(); } catch { /* ignore */ } endVoice(); };
   const startVoice = () => {
     if (!speechCtor || listening) return;
     try {
       const rec = new speechCtor();
-      rec.lang = lang === 'mr' ? 'mr-IN' : 'en-IN'; rec.interimResults = false; rec.maxAlternatives = 1;
-      rec.onresult = (e) => { const text = e.results?.[0]?.[0]?.transcript; if (text) { setQuery(text.replace(/[.!?]+$/, '')); setSearchOpen(true); } };
-      rec.onend = () => setListening(false); rec.onerror = () => setListening(false);
+      rec.lang = lang === 'mr' ? 'mr-IN' : 'en-IN'; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
+      rec.onspeechstart = () => setHearing(true);
+      rec.onspeechend = () => setHearing(false);
+      rec.onresult = (e) => {
+        let text = '';
+        for (let i = 0; i < e.results.length; i++) text += e.results[i][0]?.transcript || '';
+        const fin = e.results[e.results.length - 1]?.isFinal;
+        text = text.replace(/[.!?]+$/, '').trim();
+        if (fin && text) { setQuery(text); setSearchOpen(true); setInterim(''); } else setInterim(text);
+      };
+      rec.onend = endVoice; rec.onerror = endVoice;
+      recRef.current = rec;
       setListening(true); rec.start();
-    } catch { setListening(false); }
+      try { navigator.vibrate?.(12); } catch { /* ignore */ }
+    } catch { endVoice(); }
   };
+  useEffect(() => () => { try { recRef.current?.abort(); } catch { /* ignore */ } }, []);
   // The search that the current results answer: sent once the guest stops typing (and straight away when they open a result).
   const sendSearchNow = () => {
     if (qNorm.length < 2) return;
@@ -1933,14 +1993,6 @@ export default function CustomerHome() {
           {!guestName && <div style={{ margin: '2px 0 6px' }}><TimeGreeting lang={lang} /></div>}
           <HeroLine lang={lang} />
           {!loading && tenants.length > 0 && <HeroPanel deals={dealCards.length} stores={sf.stores} tenants={tenants} />}
-          {!loading && tenants.length > 0 && (
-            <nav className="pxg-jump" aria-label="Jump to">
-              {[['pxg-deals', 'Deals'], ['pxg-happening', 'Happening'], ['pxg-places', 'All places']].map(([id, l]) => (
-                <button type="button" key={id} onClick={() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{l}</button>
-              ))}
-              {tenants.some(hasPlace) && <button type="button" onClick={() => { setView('map'); try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* ignore */ } }}>Map</button>}
-            </nav>
-          )}
           {init.audit && !loading && tenants.length > 0 && (
             <div role="region" aria-label="Listing audit" style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(211,191,162,.4)', background: 'rgba(211,191,162,.08)', borderRadius: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>
               <b style={{ color: '#d3bfa2' }}>Audit mode</b>
@@ -1951,9 +2003,9 @@ export default function CustomerHome() {
               {auditMsg && <span role="status" style={{ color: '#d3bfa2' }}>{auditMsg}</span>}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <Search size={16} color="rgba(211,191,162,.55)" style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)' }} />
+          <div className={`pxs${listening ? ' is-listening' : ''}${hearing ? ' is-hearing' : ''}`}>
+            <div className="pxs-box">
+              <Search size={17} className="pxs-ic" aria-hidden="true" />
               <input value={query} onFocus={() => { setSearchOpen(true); ensureMenu(); }} onBlur={() => { rememberSearch(query); setTimeout(() => setSearchOpen(false), 150); }} onKeyDown={(e) => {
                 if (e.key === 'ArrowDown' && showSug) { e.preventDefault(); setSugIdx((i) => (i + 1) % suggestions.length); }
                 else if (e.key === 'ArrowUp' && showSug) { e.preventDefault(); setSugIdx((i) => (i <= 0 ? suggestions.length - 1 : i - 1)); }
@@ -1962,23 +2014,46 @@ export default function CustomerHome() {
                   if (showSug && sugIdx >= 0 && suggestions[sugIdx]) { e.preventDefault(); pickSuggestion(suggestions[sugIdx].text); } else rememberSearch(query);
                   e.currentTarget.blur();
                 }
-              }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={typeof window !== 'undefined' && window.innerWidth < 360 ? tr.searchPhShort : tr.searchPh} aria-label={tr.search}
-                role="combobox" aria-expanded={showSug} aria-controls="pxh-sug" aria-autocomplete="list" aria-activedescendant={showSug && sugIdx >= 0 ? `pxh-sug-${sugIdx}` : undefined} style={{ width: '100%', boxSizing: 'border-box', textOverflow: 'ellipsis', padding: '13px 40px 13px 42px', borderRadius: 16, border: '1px solid rgba(211,191,162,.16)', background: 'rgba(255,255,255,.04)', color: '#fff', outline: 'none', fontSize: 14, fontFamily: 'inherit' }} />
-              {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,.4)', cursor: 'pointer', display: 'flex', padding: 4 }}><X size={15} /></button>}
+              }} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); setSugIdx(-1); }} placeholder={listening ? '' : (typeof window !== 'undefined' && window.innerWidth < 360 ? tr.searchPhShort : tr.searchPh)} aria-label={tr.search}
+                role="combobox" aria-expanded={showSug} aria-controls="pxh-sug" aria-autocomplete="list" aria-activedescendant={showSug && sugIdx >= 0 ? `pxh-sug-${sugIdx}` : undefined} />
+              {listening && (
+                <div className="pxs-live" role="status" aria-live="polite">
+                  <span className="pxs-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span>
+                  <span className="pxs-say">{interim || (hearing ? tr.hearing : tr.listening)}</span>
+                </div>
+              )}
+              {query && !listening && <button type="button" className="pxs-x" onClick={() => setQuery('')} aria-label="Clear search"><X size={15} /></button>}
+              {speechCtor && (
+                <button type="button" className={`pxs-mic${listening ? ' on' : ''}`} onClick={listening ? stopVoice : startVoice} aria-pressed={listening} aria-label={listening ? tr.stopListening : tr.voice} title={listening ? tr.stopListening : tr.voice}>
+                  <span className="pxs-ring" aria-hidden="true" /><span className="pxs-ring r2" aria-hidden="true" />
+                  {listening ? <Square size={13} fill="currentColor" /> : <Mic size={18} />}
+                </button>
+              )}
               {showSug && (
-                <div id="pxh-sug" role="listbox" aria-label={tr.suggestions} style={{ position: 'absolute', left: 0, right: 0, top: 'calc(100% + 6px)', zIndex: 30, borderRadius: 16, border: '1px solid rgba(211,191,162,.22)', background: '#141414', boxShadow: '0 18px 40px rgba(0,0,0,.55)', overflow: 'hidden' }}>
+                <div id="pxh-sug" role="listbox" aria-label={tr.suggestions} className="pxs-sug">
                   {suggestions.map((sg, i) => (
-                    <button type="button" role="option" id={`pxh-sug-${i}`} key={`${sg.kind}-${sg.text}`} aria-selected={i === sugIdx} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setSugIdx(i)} onClick={() => pickSuggestion(sg.text)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px', border: 0, background: i === sugIdx ? 'rgba(211,191,162,.12)' : 'transparent', color: '#f7f3eb', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {sg.kind === 'area' ? <MapPin size={14} color={GOLD} /> : sg.kind === 'category' ? <LayoutGrid size={14} color={GOLD} /> : sg.kind === 'dish' ? <Sparkles size={14} color={GOLD} /> : sg.cafe ? <Coffee size={14} color={GOLD} /> : <UtensilsCrossed size={14} color={GOLD} />}
-                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sg.text}</span>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', flex: '0 0 auto' }}>{sg.kind === 'area' ? tr.sugArea : sg.sub}</span>
-                    </button>
+                    <div role="option" id={`pxh-sug-${i}`} key={`${sg.kind}-${sg.text}`} aria-selected={i === sugIdx} className={`pxs-row${i === sugIdx ? ' on' : ''}`} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setSugIdx(i)}>
+                      {(i === 0 || suggestions[i - 1].kind !== sg.kind) && <div className="pxs-grp">{{ place: tr.sugPlaces, category: tr.sugCategory, dish: tr.sugDishes, area: tr.sugArea, fuzzy: tr.sugClose }[sg.kind]}</div>}
+                      <div className="pxs-line">
+                        <button type="button" className="pxs-main" onClick={() => pickSuggestion(sg.text)}>
+                          <span className="pxs-ico">{sg.kind === 'area' ? <MapPin size={14} /> : sg.kind === 'category' ? <LayoutGrid size={14} /> : (sg.kind === 'dish' || sg.kind === 'fuzzy') ? <Sparkles size={14} /> : sg.cafe ? <Coffee size={14} /> : <UtensilsCrossed size={14} />}</span>
+                          <span className="pxs-t"><Hl text={sg.text} q={qNorm} /></span>
+                          <span className="pxs-sub">{sg.kind === 'place' || sg.kind === 'area' ? sg.sub : (sg.n > 1 ? `${sg.n} ${tr.places}` : '')}</span>
+                        </button>
+                        {(sg.kind === 'dish' || sg.kind === 'category' || sg.kind === 'fuzzy') && sg.ts?.length > 0 && (
+                          <div className="pxs-at">
+                            <span>{tr.servedAt}</span>
+                            {sg.ts.map((t) => <button type="button" key={t.tenantId} onClick={() => { setSearchOpen(false); rememberSearch(sg.text); openTenant(t, 'search'); }}>{t.name}</button>)}
+                            {sg.n > sg.ts.length && <button type="button" className="more" onClick={() => pickSuggestion(sg.text)}>+{sg.n - sg.ts.length}</button>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
-            {speechCtor && <button type="button" onClick={startVoice} aria-label={listening ? tr.listening : tr.voice} title={listening ? tr.listening : tr.voice} style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, background: listening ? 'rgba(211,191,162,.25)' : undefined }}><Mic size={18} color={GOLD} /></button>}
-            <button type="button" onClick={surprise} disabled={!filtered.length} aria-label={tr.surprise} title={tr.surprise} style={{ ...iconBtn, width: 48, height: 48, borderRadius: 16, opacity: filtered.length ? 1 : .4 }}><Shuffle size={18} color={GOLD} /></button>
+            <button type="button" className="pxs-sur" onClick={surprise} disabled={!filtered.length} aria-label={tr.surprise} title={tr.surprise}><Shuffle size={18} /></button>
           </div>
         </section>
 
@@ -2291,14 +2366,13 @@ export default function CustomerHome() {
           </section>
         )}
 
-        {/* ── For owners: why being listed brings guests ── */}
-        {!loading && !loadError && <OwnerPitch stats={platformStats} href={`${window.location.origin}/landing#trial`} />}
 
         {!loading && !loadError && (
           <footer className="pxh-foot">
             <span className="pxh-foot-rule" aria-hidden="true"><i /></span>
             <p className="pxh-foot-hl">{lang === 'mr' ? <>छान जेवा.<br /><em>पुन्हा भेटूया.</em></> : <>Eat well.<br /><em>See you at the table.</em></>}</p>
             <p className="pxh-foot-sub">{lang === 'mr' ? 'कोल्हापुरात, खवय्यांसाठी प्रेमाने बनवले' : 'Crafted in Kolhapur, for people who love good food'} <i className="pxh-beat" aria-label="love">♥</i></p>
+            <button type="button" className="pxh-joinbtn" onClick={() => setJoinOpen(true)}>Own a café or restaurant? Join with us</button>
             <span className="pxh-foot-mark">PRATYEKSHA</span>
           </footer>
         )}
@@ -2351,14 +2425,15 @@ export default function CustomerHome() {
       </AnimatePresence>
 
       {scanning && <QrScanner onClose={() => setScanning(false)} onPath={(path) => { setScanning(false); try { if (/[?&]table=/.test(path)) sessionStorage.setItem('pratyeksha_fresh_scan', '1'); } catch { /* ignore */ } navigate(path); }} />}
+      {joinOpen && createPortal(<JoinSheet stats={platformStats} href={`${window.location.origin}/landing/demo`} onClose={() => setJoinOpen(false)} />, document.body)}
       {/* Portalled to <body>: <main> is transformed during pull-to-refresh, which would turn position:fixed into position:relative-to-main. */}
       {!chatOpen && !loading && tenants.length > 0 && createPortal(
-        <ChatLauncher label={lang === 'mr' ? 'विचारा' : 'Ask'} lifted={showTop} onOpen={() => { fx.tap?.(); setChatOpen(true); }} onWarm={warmChat} />,
+        <ChatLauncher label={lang === 'mr' ? 'विचारा' : 'Ask'} lifted={showTop} onOpen={() => { fx.tap?.(); loadChat().then(() => setChatOpen(true), () => setChatOpen(true)); }} onWarm={warmChat} />,
         document.body
       )}
       {createPortal(<AnimatePresence>
         {chatOpen && (
-          <Suspense fallback={<div className="pxl-loading" role="status" aria-label="Loading chat" style={{ position: 'fixed', inset: 0, zIndex: 1200, background: '#0b0b0c', display: 'grid', placeItems: 'center', color: '#d3bfa2', fontSize: 12, letterSpacing: '.25em' }}>…</div>}>
+          <Suspense fallback={null}>
             <ChatAssistant
               tenants={tenants} menu={menuLookup} pos={pos} lang={lang} kit={CHAT_KIT} favs={favs} guestName={readGuestFirstName()} online={online}
               onClose={() => setChatOpen(false)} onLang={chooseLang} onPos={setPos}

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Tag, X, Check, Copy, MessageCircle, AtSign, CalendarDays, Sparkles, ChevronRight, Loader2, Ticket, TrendingUp, Users, BarChart3, Zap } from 'lucide-react';
+import { Tag, X, Check, Copy, MessageCircle, AtSign, CalendarDays, Sparkles, ChevronRight, Loader2, Ticket, Zap } from 'lucide-react';
 import API_BASE_URL from '../../shared/lib/apiBase.js';
 import { trackSF } from './homeData.js';
 import './home-v3.css';
@@ -202,31 +202,30 @@ export function HighlightFilter({ labels, stores, tenants, value, onChange }) {
   );
 }
 
-/* ── for owners: why being listed brings guests ── */
-export function OwnerPitch({ stats, href, ctaLabel = 'Get my place listed' }) {
+/* ── "Join with us": a quiet sheet for restaurant and cafe owners. Opens from a button, so it never takes room on the page. ── */
+export function JoinSheet({ stats, href, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => { const k = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', k); ref.current?.focus(); return () => document.removeEventListener('keydown', k); }, [onClose]);
   const strong = stats && (stats.guestOpens7d >= 50 || stats.dealsClaimed30d >= 10);
   const nums = [];
-  if (stats) {
+  if (strong) {
     if (stats.places > 0) nums.push([stats.places, 'places listed']);
-    if (stats.guestOpens7d >= 50) nums.push([stats.guestOpens7d, 'guest visits to listings this week']);
-    if (stats.guestActions7d >= 10) nums.push([stats.guestActions7d, 'calls and direction taps this week']);
+    if (stats.guestOpens7d >= 50) nums.push([stats.guestOpens7d, 'visits this week']);
     if (stats.dealsClaimed30d >= 5) nums.push([stats.dealsClaimed30d, 'deals claimed this month']);
   }
+  const rows = [['Be found', 'Your photo, hours, area and what makes you special, in front of guests already looking for a place to eat.'], ['Win guests with deals', 'Post a deal. Guests claim it with their number, and you get a consented lead plus a code to honour at the counter.'], ['See what works', 'Views, taps, calls, directions, claims and redemptions for your place, in your owner dashboard.']];
   return (
-    <section className="pxg-owner" aria-label="For restaurant and cafe owners">
-      <div className="pxg-owner-in">
-        <div className="pxg-kick gold"><TrendingUp size={11} /> For restaurant and cafe owners</div>
-        <h2>Let hungry guests find <em>your</em> place first.</h2>
-        <p>Every guest on this page is already looking for somewhere to eat. Get listed and you also get the tools to turn a look into a table.</p>
-        <div className="pxg-owner-grid">
-          <div><Users size={18} /><b>Be found</b><span>A tile with your photo, hours, area and what makes you special, plus a Featured spot for launches.</span></div>
-          <div><Ticket size={18} /><b>Win guests with deals</b><span>Post a deal and guests claim it with their number. You get a consented lead and a code to honour at the counter.</span></div>
-          <div><BarChart3 size={18} /><b>See what works</b><span>Views, taps, calls, directions, claims and redemptions for your place only, in your owner dashboard.</span></div>
-        </div>
-        {nums.length > 0 && strong && <div className="pxg-owner-nums">{nums.map(([n, l]) => <div key={l}><b>{Number(n).toLocaleString('en-IN')}</b><span>{l}</span></div>)}</div>}
-        <a className="pxg-owner-cta" href={href} target="_blank" rel="noopener noreferrer">{ctaLabel} <ChevronRight size={16} /></a>
+    <div className="pxg-scrim" onClick={onClose} role="presentation">
+      <div className="pxg-sheet pxg-join" role="dialog" aria-modal="true" aria-label="Join Pratyeksha" tabIndex={-1} ref={ref} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="pxg-x" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        <div className="pxg-eyebrow">For restaurant and cafe owners</div>
+        <h3 className="pxg-jh">Let hungry guests find <em>your</em> place first.</h3>
+        <p className="pxg-jp">Every guest here is already deciding where to eat. Get listed, and turn a look into a table.</p>
+        <ul className="pxg-jl">{rows.map(([h, d]) => <li key={h}><b>{h}</b><span>{d}</span></li>)}</ul>
+        {nums.length > 0 && <div className="pxg-jn">{nums.map(([n, l]) => <div key={l}><b>{Number(n).toLocaleString('en-IN')}</b><span>{l}</span></div>)}</div>}
+        <a className="pxg-jcta" href={href} target="_blank" rel="noopener noreferrer">Book a private demo <ChevronRight size={16} /></a>
+        <div className="pxg-jfine">Opens our demo booking page.</div>
       </div>
-    </section>
+    </div>
   );
 }
-
